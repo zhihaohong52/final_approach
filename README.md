@@ -220,24 +220,24 @@ Method (`python3 -m atm.wave.benchmark --n 50 --arms <models>,formula --concurre
 - Engine-off ablation: the share of formula-arm final plans that are infeasible under the real rules when the rules engine is disabled.
 
 <!-- BENCHMARK -->
-Run: `python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (31 Oct 2026, live models, final rules). Same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50.
+Run: `python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (re-run 2 Nov 2026 after the runway-history fix, live models, final rules). Same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50.
 
 | Arm | Consensus (raw-number prompts → judgement-only) | Mean turns | Rule violations | Total delay, all wave arrivals (min) [95% CI] | Gap to optimiser (min) | Pax protected | Brier* | p50 / p95 ms | Errors | Same plan as formulas |
 |---|---|---|---|---|---|---|---|---|---|---|
-| typesafe/jev-1.14 | 94% → **98%** | 1.32 | 0 | 351.7 [305, 398] | 1.4 | 25.8% | 0.0060 | 480 / 602 | 0% | 74% |
-| liquid/d1-ultra | 82% → **96%** | 1.34 | 0 | 351.9 [305, 398] | 1.7 | 25.5% | 0.0016 | 622 / 822 | 0% | 86% |
-| baseten/elephant-1 | 68% → **98%** | 1.34 | 0 | 351.9 [305, 398] | 1.6 | 25.8% | 0.0135 | 557 / 647 | 0% | 72% |
-| formula | 98% | 1.32 | 0 | 351.7 [305, 398] | 1.4 | 25.5% | n/a | n/a / n/a | 0% | 100% |
-| centralised optimiser (beam search, no negotiation) | - | - | 0 infeasible | 350.3 [303, 397] | 0 | 25.8% | - | ~2.3 s/wave | - | - |
-| status quo (no negotiation) | - | - | breaks a rule on 16/50 waves | 343.5 | - | 26.5% | - | - | - | - |
+| typesafe/jev-1.14 | 94% → **98%** | 1.32 | 0 | 351.2 [305, 398] | 1.6 | 25.8% | 0.0063 | 446 / 598 | 0% | 66% |
+| liquid/d1-ultra | 82% → **96%** | 1.36 | 0 | 351.4 [305, 398] | 1.8 | 25.5% | 0.0016 | 568 / 668 | 0% | 84% |
+| baseten/elephant-1 | 68% → **98%** | 1.34 | 0 | 351.4 [305, 398] | 1.8 | 25.8% | 0.0155 | 493 / 579 | 0% | 74% |
+| formula | 98% | 1.32 | 0 | 351.2 [305, 398] | 1.6 | 25.5% | n/a | n/a / n/a | 0% | 100% |
+| centralised optimiser (beam search, no negotiation) | - | - | 0 infeasible | 349.6 [303, 396] | 0 | 26.1% | - | ~2.3 s/wave | - | - |
+| status quo (no negotiation) | - | - | breaks a rule on 16/50 waves | 343.2 | - | 26.5% | - | - | - | - |
 
 \* Brier is measured against the formula verdict (accept if utility >= reservation), not ground truth.
 
 - **Code does the maths, the model judges.** Following TypeSafe's System One guidance ("keep deterministic work in code"), the decision models never see raw utilities. Code pre-computes every comparison into words: per move, whether it fixes or adds rule breaches, whether it is better or worse for the agent, and the engine's rank; per vote, whether the plan meets the agent's minimum this turn, with explicit yes/no criteria. The model only makes the final pick and the accept/reject. A model vote counts only when it is confident (TypeSafe confidence routing): P(accept) >= 0.7 accepts, <= 0.3 rejects, and anything in between falls back to the formula verdict, marked `decided_by: formula` in the log. In the recorded jev-1.14 runs no vote landed in that band. The model is offered exactly the moves the formula may take (a Pilot may divert only for its own fuel problem or when every runway is closed).
-- **Result: the decision models now match the formulas.** jev-1.14 reaches 98% consensus in 1.32 turns with 351.7 min total delay, 1.4 min from the optimiser (formulas: 351.7, 1.4). With raw numbers in the prompt the same models reached 68-94% consensus and jev-1.14 carried 10 min more delay.
+- **Result: the decision models now match the formulas.** jev-1.14 reaches 98% consensus in 1.32 turns with 351.2 min total delay, 1.6 min from the optimiser (formulas: 351.2, 1.6). With raw numbers in the prompt the same models reached 68-94% consensus and jev-1.14 carried 10 min more delay.
 - **Selection: `typesafe/jev-1.14`** by the rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
-- **How good is "good"?** The centralised optimiser (the beam-search solver run on each wave with no negotiation) is the reference for what one coordinator would pick. Three self-interested agents negotiating land within about 1.5 min of it.
-- **Status quo:** it breaks at least one rule on 16 of 50 waves. On the 34 waves where it is legal, the negotiated plans are also faster: 337.2 min (formulas) and 337.5 min (jev-1.14) against 339.2 min for the status quo.
+- **How good is "good"?** The centralised optimiser (the beam-search solver run on each wave with no negotiation) is the reference for what one coordinator would pick. Three self-interested agents negotiating land within about 2 min of it.
+- **Status quo:** it breaks at least one rule on 16 of 50 waves. On the 34 waves where it is legal, the negotiated plans are also faster: 336.5 min (formulas) and 336.8 min (jev-1.14) against 338.8 min for the status quo.
 - **Safety:** 0 rule violations in any final plan, every arm. **Engine-off ablation:** 32% of the agents' final plans break a rule when the engine is disabled.
 - **Outage test:** primary model replaced by a dead endpoint on 20 waves; 20/20 resolved with a legal plan.
 - **100 rows with every reference (`eval/BENCHMARK_100.md`):** jev-1.14 reaches 99% consensus in 1.25 turns, 0 rule violations, 342.9 min total delay, 0.9 min from the optimiser (341.9); formulas 342.7, 0.7 min. The status quo breaks a rule on 28 of 100 waves; on the 72 where it is legal, the negotiated plans are faster (336.1 min jev-1.14, 335.7 formulas vs 338.1).

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Final Approach: radar and plan mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Mockup only: static, values from the recorded ORD 19 Aug 2015 run; the human edit is illustrative. */
+:root {
+  --ground: #0b0c0e; --panel: #111215; --raised: #1a1b1f; --line: #23252a;
+  --text: #f4f5f6; --soft: #c4c6cb; --muted: #8b8e95;
+  --hue: #4a8ad6; --fixed: #5fbf8f; --human: #e8b04b; --neg: #e5566f;
+  --mono: "IBM Plex Mono", ui-monospace, monospace; --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; }
+body { width: 1440px; height: 900px; overflow: hidden; background: var(--ground); color: var(--text); font: 14px/1.45 var(--sans); }
+.abs { position: absolute; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+svg text { font-family: var(--mono); }
+
+.top { left: 0; top: 0; width: 1440px; height: 52px; display: flex; align-items: center; gap: 20px; padding: 0 24px; border-bottom: 1px solid var(--line); background: var(--panel); white-space: nowrap; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; }
+.brand i { width: 20px; height: 20px; border-radius: 5px; background: #f4f5f6; }
+.sep { width: 1px; height: 22px; background: var(--line); }
+.clock { font: 600 20px var(--mono); }
+
+/* decision panel */
+.side { left: 1040px; top: 52px; width: 400px; height: 468px; background: var(--panel); border-left: 1px solid var(--line); padding: 16px 24px 20px; display: flex; flex-direction: column; gap: 10px; }
+.side h2 { font: 600 13px var(--sans); color: var(--muted); }
+.big { font: 600 20px/1.25 var(--sans); }
+.big .mono { font-weight: 500; }
+.line { font-size: 14px; color: var(--soft); }
+.kv { display: grid; grid-template-columns: 1fr auto; row-gap: 8px; font: 13px var(--mono); color: var(--soft); padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.kv b { font-weight: 500; color: var(--text); text-align: right; }
+.ok { color: var(--fixed); }
+.edit { border: 1px solid var(--human); border-radius: 8px; padding: 12px 14px; font-size: 13px; }
+.edit .h { color: var(--human); font-weight: 600; display: flex; justify-content: space-between; }
+.edit .r { font: 13px var(--mono); color: var(--soft); margin-top: 6px; }
+.acts { display: flex; gap: 8px; margin-top: auto; }
+.btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid #3a3c42; color: var(--text); font: 500 14px var(--sans); display: inline-flex; align-items: center; }
+.btn.sm { height: 30px; padding: 0 12px; font-size: 13px; }
+.btn.primary { background: #fff; color: #0b0c0e; border-color: #fff; flex: 1; justify-content: center; }
+
+/* gantt */
+.plan { left: 0; top: 520px; width: 1440px; height: 336px; background: var(--panel); border-top: 1px solid var(--line); }
+.plan-h { display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 52px; }
+.plan-h h2 { font: 600 15px var(--sans); }
+.seg { display: inline-flex; background: var(--raised); border-radius: 999px; padding: 3px; }
+.seg span { padding: 4px 14px; border-radius: 999px; font: 500 13px var(--sans); color: var(--muted); }
+.seg span.on { background: #2e3036; color: var(--text); }
+.chip { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+
+.alerts { display: flex; flex-direction: column; gap: 6px; }
+.al { white-space: nowrap; display: grid; grid-template-columns: 4px 1fr auto; gap: 10px; align-items: center; background: var(--raised); border-radius: 6px; padding: 8px 12px 8px 0; font-size: 13px; }
+.al::before { content: ""; align-self: stretch; border-radius: 6px 0 0 6px; }
+.al.red::before { background: var(--neg); } .al.amber::before { background: var(--human); }
+.al b { font-weight: 600; } .al.red b { color: var(--neg); } .al.amber b { color: var(--human); }
+.al .ack { font: 12px var(--sans); color: var(--muted); border: 1px solid #3a3c42; border-radius: 999px; padding: 2px 10px; }
+.radio { left: 0; top: 856px; width: 1440px; height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-top: 1px solid var(--line); font: 14px var(--mono); color: var(--soft); white-space: nowrap; }
+.radio b { color: var(--hue); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header class="abs top">
+  <div class="brand"><i></i>Final Approach</div>
+  <div class="sep"></div>
+  <div><b>ORD</b> <span class="muted">19 Aug 2015 · arrivals 08:00–09:00</span></div>
+  <div class="sep"></div>
+  <div class="clock">08:20</div>
+  <span class="muted">wind 200° 10 kt · 04L and 04R closed, tailwind</span>
+  <span style="font:600 12px var(--sans);color:#0b0c0e;background:var(--neg);border-radius:999px;padding:3px 10px">1 alert</span>
+  <span class="muted" style="margin-left:auto">Arrival wave&nbsp;&nbsp;&nbsp;Benchmark</span>
+</header>
+
+<!-- RADAR -->
+<section class="abs" style="left:0; top:52px; width:1040px; height:468px; background: radial-gradient(circle at 52% 55%, #0f1418 0, #0b0c0e 70%);">
+  <svg width="1040" height="468" viewBox="0 0 1040 468">
+    <defs><pattern id="hx" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#4a2a30" stroke-width="3"/></pattern></defs>
+    <g fill="none" stroke="#1c2329"><circle cx="560" cy="230" r="90"/><circle cx="560" cy="230" r="180"/><circle cx="560" cy="230" r="270"/></g>
+    <g stroke="#2a3640" stroke-dasharray="3 6"><line x1="60" y1="214" x2="490" y2="214"/><line x1="60" y1="240" x2="498" y2="240"/></g>
+    <!-- runways -->
+    <line x1="490" y1="214" x2="620" y2="214" stroke="#4a8ad6" stroke-width="6"/>
+    <line x1="498" y1="240" x2="650" y2="240" stroke="#e9eaec" stroke-width="6"/>
+    <line x1="560" y1="268" x2="650" y2="164" stroke="#e9eaec" stroke-width="6"/>
+    <g stroke="#3a3d43" stroke-width="5"><line x1="504" y1="256" x2="616" y2="256"/><line x1="520" y1="290" x2="660" y2="290"/><line x1="520" y1="303" x2="660" y2="303"/></g>
+    <line x1="530" y1="316" x2="612" y2="214" stroke="url(#hx)" stroke-width="7"/>
+    <g font-size="12"><text x="458" y="218" fill="#4a8ad6">09L</text><text x="466" y="244" fill="#e9eaec">09C</text><text x="656" y="160" fill="#e9eaec">22R</text><text x="616" y="330" fill="#e5566f">04L 04R closed</text></g>
+
+    <!-- fixed traffic: green, short label -->
+    <g fill="#5fbf8f" font-size="12">
+      <circle cx="880" cy="200" r="3.5"/><text x="890" y="204">UAL1182 040</text>
+      <circle cx="900" cy="38" r="3.5"/><text x="910" y="42">AAL2205 070</text>
+      <circle cx="160" cy="370" r="3.5"/><text x="170" y="374">SWA88 080</text>
+    </g>
+
+    <!-- ENY3318 on final 09C -->
+    <g font-size="13" fill="#f4f5f6">
+      <path d="M380 234 l6 6 l-6 6 l-6 -6z" fill="none" stroke="#f4f5f6" stroke-width="1.5"/>
+      <line x1="384" y1="235" x2="400" y2="200" stroke="#f4f5f6"/>
+      <text x="404" y="182" font-weight="600">ENY3318</text><text x="404" y="198" fill="#c4c6cb">09C B17</text>
+    </g>
+    <!-- SKW5559 disruption flight -->
+    <g font-size="13" fill="#4a8ad6">
+      <path d="M150 207 l7 7 l-7 7 l-7 -7z" fill="#4a8ad6"/>
+      <line x1="154" y1="208" x2="176" y2="164" stroke="#4a8ad6"/>
+      <text x="180" y="146" font-weight="600">SKW5559</text><text x="180" y="162">09L B18 09:02</text>
+    </g>
+    <circle cx="150" cy="214" r="14" fill="none" stroke="#e5566f" stroke-width="1.5"/>
+    <line x1="140" y1="226" x2="112" y2="268" stroke="#e5566f"/>
+    <g transform="translate(40 268)">
+      <rect width="200" height="46" rx="5" fill="#2a1418" stroke="#e5566f"/>
+      <text x="12" y="19" font-size="13" fill="#e5566f" font-weight="600">FUEL · SKW5559</text>
+      <text x="12" y="36" font-size="12" fill="#f4f5f6">22 min to reserve</text>
+    </g>
+    <!-- SKW5570 edited by the duty manager -->
+    <g font-size="13">
+      <path d="M720 120 C 560 118, 360 120, 230 170 L 200 240 L 380 240" fill="none" stroke="#e8b04b" stroke-dasharray="4 4" stroke-opacity=".6"/>
+      <path d="M720 114 l6 6 l-6 6 l-6 -6z" fill="none" stroke="#e8b04b" stroke-width="1.5"/>
+      <line x1="724" y1="116" x2="742" y2="96" stroke="#e8b04b"/>
+      <text x="746" y="80" fill="#e8b04b" font-weight="600">SKW5570</text><text x="746" y="96" fill="#e8b04b">09C B16 09:30 · your edit</text>
+    </g>
+    <text x="24" y="452" font-size="12" fill="#8b8e95">Runways to scale · rings every 5 NM · blue: the disrupted flight · white: re-planned · green: other traffic</text>
+  </svg>
+</section>
+
+<!-- DECISION -->
+<aside class="abs side">
+  <div class="alerts">
+    <div class="al red"><span><b>SKW5559 fuel</b> · 22 min to reserve</span><span class="ack">Seen</span></div>
+    <div class="al amber"><span><b>SKW5559</b> · 40 of 40 connections missed</span><span class="ack">Seen</span></div>
+  </div>
+  <h2>Agents agreed in turn 1 of 3 · re-checked after your edit</h2>
+  <div class="big">SKW5559 lands <span class="mono">09:02</span> on 09L, gate B18</div>
+  <div class="line">Gate delay 496 min, down from 524. All 12 rules pass.</div>
+  <div class="edit">
+    <div class="h"><span>Your edit · SKW5570</span><span class="mono">re-checked</span></div>
+    <div class="r">22R 09:46 → 09C 09:30 · gate 09:36</div>
+    <div class="r ok">rules pass · next departure on time</div>
+    <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">Revert</span><span class="btn sm">Re-negotiate around it</span></div>
+  </div>
+  <div class="acts"><span class="btn">Override</span><span class="btn primary">Approve plan with 1 edit</span></div>
+</aside>
+
+<!-- PLAN: BEFORE / COMPARE / AFTER, EDITABLE -->
+<section class="abs plan">
+  <div class="plan-h">
+    <h2>Runways and gates</h2>
+    <div class="seg"><span>Before</span><span class="on">Compare</span><span>After</span></div>
+    <span class="chip"><svg width="22" height="10"><rect x="1" y="1" width="20" height="8" rx="1.5" fill="none" stroke="#8b8e95" stroke-dasharray="3 2"/></svg>before</span>
+    <span class="chip"><svg width="22" height="10"><rect y="1" width="22" height="8" rx="1.5" fill="#e4e5e8"/></svg>agents' plan</span>
+    <span class="chip"><svg width="22" height="10"><rect y="1" width="22" height="8" rx="1.5" fill="#e8b04b"/></svg>your edit</span>
+    <span class="chip" style="margin-left:auto">Drag any bar to change its runway, time or gate</span>
+  </div>
+  <svg width="1440" height="284" viewBox="0 0 1440 284">
+    <!-- x = 110 + (min-465)*7.17, 07:45..10:45 -->
+    <g font-size="12" fill="#8b8e95" text-anchor="middle">
+      <text x="110" y="14" text-anchor="start">07:45</text><text x="218" y="14">08:00</text><text x="325" y="14">08:15</text><text x="433" y="14">08:30</text><text x="540" y="14">08:45</text><text x="648" y="14">09:00</text><text x="755" y="14">09:15</text><text x="863" y="14">09:30</text><text x="970" y="14">09:45</text><text x="1078" y="14">10:00</text><text x="1185" y="14">10:15</text><text x="1293" y="14">10:30</text><text x="1400" y="14" text-anchor="end">10:45</text>
+    </g>
+    <g stroke="#1b1d21"><line x1="218" y1="24" x2="218" y2="282"/><line x1="325" y1="24" x2="325" y2="282"/><line x1="433" y1="24" x2="433" y2="282"/><line x1="540" y1="24" x2="540" y2="282"/><line x1="648" y1="24" x2="648" y2="282"/><line x1="755" y1="24" x2="755" y2="282"/><line x1="863" y1="24" x2="863" y2="282"/><line x1="970" y1="24" x2="970" y2="282"/><line x1="1078" y1="24" x2="1078" y2="282"/><line x1="1185" y1="24" x2="1185" y2="282"/><line x1="1293" y1="24" x2="1293" y2="282"/></g>
+    <line x1="361" y1="20" x2="361" y2="282" stroke="#f4f5f6" stroke-opacity=".7"/><text x="365" y="16" font-size="12" fill="#f4f5f6" opacity="0">now</text>
+
+    <g font-size="13" fill="#c4c6cb"><text x="24" y="50">09C</text><text x="24" y="86">09L</text><text x="24" y="122">22R</text><text x="24" y="196">B18</text><text x="24" y="232">B17</text><text x="24" y="268">B16</text></g>
+    <text x="24" y="160" font-size="12" fill="#8b8e95" font-family="IBM Plex Sans">Gates</text>
+
+    <!-- runways: before (all on 22R), arrows to after -->
+    <g fill="none" stroke="#6b6e75" stroke-dasharray="3 2"><rect x="341" y="110" width="7" height="18" rx="1"/><rect x="655" y="110" width="7" height="18" rx="1"/></g>
+    <path d="M344 110 C 340 86, 332 62, 330 56" fill="none" stroke="#e4e5e8" stroke-opacity=".6"/>
+    <path d="M659 110 C 661 102, 663 98, 665 94" fill="none" stroke="#4a8ad6"/>
+    <g fill="#5fbf8f"><rect x="388" y="112" width="2" height="14"/><rect x="488" y="112" width="2" height="14"/><rect x="568" y="112" width="2" height="14"/><rect x="768" y="112" width="2" height="14"/></g>
+    <rect x="327" y="38" width="7" height="18" rx="1" fill="#e4e5e8"/><text x="340" y="52" font-size="13" fill="#f4f5f6">ENY3318 08:29</text>
+    <rect x="662" y="74" width="7" height="18" rx="1" fill="#4a8ad6"/><text x="675" y="88" font-size="13" fill="#4a8ad6">SKW5559 09:02</text>
+    <!-- agents had SKW5570 on 22R 09:46; the human moved it -->
+    <rect x="977" y="110" width="7" height="18" rx="1" fill="none" stroke="#e4e5e8" stroke-dasharray="3 2"/>
+    <text x="990" y="124" font-size="12" fill="#8b8e95">agents: 09:46</text>
+    <path d="M980 110 C 940 80, 900 60, 870 52" fill="none" stroke="#e8b04b" stroke-dasharray="3 3"/>
+    <rect x="860" y="38" width="7" height="18" rx="1" fill="#e8b04b"/>
+    <rect x="854" y="33" width="19" height="28" rx="3" fill="none" stroke="#e8b04b"/>
+    <text x="880" y="52" font-size="13" fill="#e8b04b">SKW5570 09:30</text>
+    <text x="1400" y="52" font-size="13" fill="#c4c6cb" text-anchor="end">ENY3327 → 13:01</text>
+
+    <!-- gates -->
+    <rect x="110" y="258" width="323" height="16" rx="2" fill="#24262b"/>
+    <g fill="none" stroke="#6b6e75" stroke-dasharray="3 2"><rect x="698" y="186" width="323" height="16" rx="2"/><rect x="384" y="222" width="323" height="16" rx="2"/></g>
+    <rect x="705" y="186" width="323" height="16" rx="2" fill="#4a8ad6"/><text x="713" y="198" font-size="12" fill="#fff">SKW5559 09:08 · +1 min</text>
+    <rect x="370" y="222" width="323" height="16" rx="2" fill="#e4e5e8"/><text x="378" y="234" font-size="12" fill="#0b0c0e">ENY3318 08:35 · −2 min</text>
+    <rect x="1048" y="258" width="323" height="16" rx="2" fill="none" stroke="#e4e5e8" stroke-dasharray="3 2"/>
+    <rect x="905" y="258" width="323" height="16" rx="2" fill="#e8b04b"/><text x="913" y="270" font-size="12" fill="#1b1404">SKW5570 09:36 · 20 min earlier</text>
+  </svg>
+</section>
+
+<footer class="abs radio">
+  <b>ATC</b><span>› SkyWest 5559, runway 09L, reduce speed, expect gate B18.</span>
+  <span class="muted">Pilot › accepts.&nbsp;&nbsp;Ground › B18 holds.</span>
+</footer>
+
+</body>
+</html>

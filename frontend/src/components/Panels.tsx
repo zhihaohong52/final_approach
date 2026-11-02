@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import type { JointPlan, Limit, PlanEvaluation, Provenance, Revision, RuleCheck, RuleId, WaveFlight, WaveScenario } from "../api/types";
+import { icao, icaoText } from "../callsign";
 import { clock, signed } from "../format";
 
 /* ---------- outcome strip: agreed plan against the status quo ---------- */
@@ -22,7 +23,7 @@ export function Outcome({ ev, base }: { ev: PlanEvaluation | null; base: PlanEva
       {cell("Gate delay", t ? t.delay_min : dash, " min", vs(t?.delay_min, b?.delay_min, " min"))}
       {cell("Pax protected", t ? t.pax_protected_pct.toFixed(1) : dash, "%", vs(t?.pax_protected_pct, b?.pax_protected_pct, "%", false, 1))}
       {cell("Hold fuel", t ? t.fuel_kg : dash, " kg", vs(t?.fuel_kg, b?.fuel_kg, " kg"))}
-      {cell("Rule breaches", ev ? breaches(ev) : dash, "", base ? <span>Status quo <span className={breaches(base) ? "neg" : ""}>{breaches(base)}</span></span> : <span className="muted">&nbsp;</span>)}
+      {cell("Rule breaches", ev ? breaches(ev) : dash, "", base ? <span>Status quo <span className={breaches(base) ? "breach" : ""}>{breaches(base)}</span></span> : <span className="muted">&nbsp;</span>)}
     </div>
   );
 }
@@ -33,7 +34,7 @@ const provShort = (p: Provenance[]) => {
   return sim.length ? `Simulated: ${sim.join(", ")}` : "All real";
 };
 
-export function PlanTable({ wave, plan, baseline }: { wave: WaveScenario; plan: JointPlan | null; baseline: JointPlan | null }) {
+export function PlanTable({ wave, plan, baseline, edited }: { wave: WaveScenario; plan: JointPlan | null; baseline: JointPlan | null; edited?: Set<string> }) {
   const focus = wave.focus;
   const c = (m: number | null | undefined) => (m == null ? "n/a" : clock(wave.window_start, m));
   return (
@@ -42,7 +43,7 @@ export function PlanTable({ wave, plan, baseline }: { wave: WaveScenario; plan: 
         <thead>
           <tr>
             <th>Flight</th><th>Runway</th><th>Gate</th><th className="num">In-block</th><th className="num">Delay</th>
-            <th className="num">Pax protected</th>
+            <th className="num">Connections</th>
           </tr>
         </thead>
         <tbody>
@@ -53,12 +54,12 @@ export function PlanTable({ wave, plan, baseline }: { wave: WaveScenario; plan: 
             const dPax = a && b ? a.metrics.pax_protected - b.metrics.pax_protected : null;
             return (
               <tr key={f.callsign} className={f.callsign === focus ? "focus" : undefined}>
-                <td title={provShort(f.provenance)}><span className="code">{f.callsign}</span>{f.callsign === focus && <span className="pill hue" style={{ marginLeft: 8, height: 20 }}>Disruption flight</span>}<span className="sub">{f.aircraft_type ? `${f.aircraft_type} from` : "From"} {f.origin}{f.disrupted ? ` · ${Math.max(f.delays.weather, f.delays.late_aircraft)} min ${f.delays.weather >= f.delays.late_aircraft ? "weather" : "late aircraft"}` : ""}</span></td>
+                <td title={`${f.callsign} · ${provShort(f.provenance)}`}><span className="code">{icao(f.callsign)}</span>{f.callsign === focus && <span className="pill hue" style={{ marginLeft: 8, height: 20 }}>Disrupted</span>}{edited?.has(f.callsign) && <span className="pill human" style={{ marginLeft: 8, height: 20 }}>Edited</span>}<span className="sub">{f.aircraft_type ? `${f.aircraft_type} from` : "From"} {f.origin}{f.disrupted ? ` · ${Math.max(f.delays.weather, f.delays.late_aircraft)} min ${f.delays.weather >= f.delays.late_aircraft ? "weather" : "late aircraft"}` : ""}</span></td>
                 <td>{a ? <><span className="code">{a.action === "divert" ? "Divert" : a.runway}</span><span className="sub">{c(a.slot_min)}{a.metrics.hold_min ? ` · hold ${a.metrics.hold_min} min` : ""}{a.ground_delay_min ? ` · ${a.ground_delay_min} min at ${f.origin}` : ""}</span></> : <span className="muted">n/a</span>}</td>
                 <td>{a ? <><span className="code">{a.gate}</span><span className="sub">{a.gate !== f.scheduled_gate ? `was ${f.scheduled_gate}` : "scheduled"}</span></> : <span className="code muted">{f.scheduled_gate}</span>}</td>
-                <td className="num">{a ? <>{c(a.metrics.in_block_min)}<span className="sub">{a.metrics.next_dep_delay_min ? `next dep ${a.metrics.next_dep_delay_min} min late` : "next dep on time"}</span></> : <span className="muted">sched {c(f.sched_min)}</span>}</td>
-                <td className="num">{a ? <>{a.metrics.delay_min} min{dDelay != null && <span className={`sub ${dDelay > 0 ? "neg" : dDelay < 0 ? "pos" : ""}`}>{signed(dDelay, " min")} vs status quo</span>}</> : <span className="muted">n/a</span>}</td>
-                <td className="num">{a ? <>{a.metrics.pax_total ? `${a.metrics.pax_protected} of ${a.metrics.pax_total}` : <span className="muted">no connections</span>}{dPax != null && a.metrics.pax_total > 0 && <span className={`sub ${dPax < 0 ? "neg" : dPax > 0 ? "pos" : ""}`}>{signed(dPax)} vs status quo</span>}</> : <span className="muted">n/a</span>}</td>
+                <td className="num">{a ? <>{c(a.metrics.in_block_min)}<span className="sub">{a.metrics.next_dep_delay_min ? `next dep +${a.metrics.next_dep_delay_min}` : "next dep on time"}</span></> : <span className="muted">sched {c(f.sched_min)}</span>}</td>
+                <td className="num">{a ? <>{a.metrics.delay_min} min{dDelay != null && <span className={`sub ${dDelay > 0 ? "neg" : dDelay < 0 ? "pos" : ""}`}>{Math.abs(dDelay) >= 0.05 ? `${signed(dDelay)} vs before` : "as before"}</span>}</> : <span className="muted">n/a</span>}</td>
+                <td className="num">{a ? <>{a.metrics.pax_total ? `${a.metrics.pax_protected} of ${a.metrics.pax_total}` : <span className="muted">none</span>}{dPax != null && a.metrics.pax_total > 0 && <span className={`sub ${dPax < 0 ? "neg" : dPax > 0 ? "pos" : ""}`}>{dPax ? `${signed(dPax)} vs before` : "as before"}</span>}</> : <span className="muted">n/a</span>}</td>
               </tr>
             );
           })}
@@ -72,8 +73,8 @@ export function PlanTable({ wave, plan, baseline }: { wave: WaveScenario; plan: 
 const RULES: { id: RuleId; name: string }[] = [
   { id: "ATC-RWY-OPEN", name: "Runway open" }, { id: "ATC-WAKE-SEP", name: "Wake separation" },
   { id: "ATC-TAXI-ROUTE", name: "Taxi route" }, { id: "ATC-WIND-LIMITS", name: "Wind limits" }, { id: "ATC-RWY-CAPACITY", name: "Runway capacity" },
-  { id: "PLT-EARLIEST-ETA", name: "Earliest ETA" }, { id: "PLT-FUEL-RESERVE", name: "Fuel reserve" },
-  { id: "GND-GATE-SIZE", name: "Gate size" }, { id: "GND-GATE-FREE", name: "Gate free" }, { id: "GND-GATE-NOTICE", name: "Gate change notice" }, { id: "GND-CREW-DUTY", name: "Crew duty" },
+  { id: "PLT-EARLIEST-ETA", name: "Earliest ETA" }, { id: "PLT-FUEL-RESERVE", name: "Fuel reserve" }, { id: "PLT-CREW-DUTY", name: "Flight crew duty" },
+  { id: "GND-GATE-SIZE", name: "Gate size" }, { id: "GND-GATE-FREE", name: "Gate free" }, { id: "GND-GATE-NOTICE", name: "Gate change notice" }, { id: "GND-CREW-DUTY", name: "Ground crew duty" },
 ];
 
 export function Checks({ wave, ev, base }: { wave: WaveScenario; ev: PlanEvaluation | null; base: PlanEvaluation | null }) {
@@ -90,21 +91,21 @@ export function Checks({ wave, ev, base }: { wave: WaveScenario; ev: PlanEvaluat
   return (
     <section>
       <div className="card-head">
-        <h3>{e ? `${e.checks.filter((c) => !c.passed).length ? `${e.checks.filter((c) => !c.passed).length} rule breach${e.checks.filter((c) => !c.passed).length === 1 ? "" : "es"}` : "Every rule passes"} ${which === "plan" ? "after" : "before"} negotiation` : "Twelve rules, every flight"}</h3>
+        <h3>{e ? `${e.checks.filter((c) => !c.passed).length ? `${e.checks.filter((c) => !c.passed).length} rule breach${e.checks.filter((c) => !c.passed).length === 1 ? "" : "es"}` : "Every rule passes"} ${which === "plan" ? "in the plan" : "in the status quo"}` : `${RULES.length} rules, every flight`}</h3>
         {ev && <div className="seg" role="group" aria-label="Plan to check">
           <button aria-pressed={which === "base"} onClick={() => { setWhich("base"); setSel(null); }} disabled={!base} title="Status quo: the schedule as it stood">Before</button>
           <button aria-pressed={which === "plan"} onClick={() => { setWhich("plan"); setSel(null); }} disabled={!ev} title="The plan the agents agreed">After</button>
         </div>}
       </div>
-      {!e ? <p className="empty">Every plan is checked against 11 deterministic rules for every flight. The checks appear once the agents have a plan.</p> : (
+      {!e ? <p className="empty">Every plan is checked against these deterministic rules for every flight. The checks appear once the agents have a plan.</p> : (
         <>
           <div className="table-wrap" tabIndex={0} role="region" aria-label="Safety rule checks">
             <table className="matrix" aria-label="Safety rule checks by flight">
-              <thead><tr><th>Rule</th>{wave.flights.map((f) => <th key={f.callsign} className="code">{f.callsign}</th>)}</tr></thead>
+              <thead><tr><th>Rule</th>{wave.flights.map((f) => <th key={f.callsign} className="code">{icao(f.callsign)}</th>)}</tr></thead>
               <tbody>
                 {RULES.map((r) => (
                   <tr key={r.id}>
-                    <td>{r.name} <span className="code muted" style={{ fontSize: 13 }}>{r.id}</span></td>
+                    <td>{r.name} <span className="code muted rule-id" style={{ fontSize: 13 }}>{r.id}</span></td>
                     {wave.flights.map((f) => {
                       const c = find(r.id, f.callsign);
                       const on = pick?.rule === r.id && pick.cs === f.callsign;
@@ -112,7 +113,7 @@ export function Checks({ wave, ev, base }: { wave: WaveScenario; ev: PlanEvaluat
                         <td key={f.callsign}>
                           {c ? (
                             <button className={`cell${c.passed ? "" : " fail"}`} aria-pressed={on} onClick={() => setSel({ rule: r.id, cs: f.callsign })}
-                              aria-label={`${r.name} for ${f.callsign}: ${c.passed ? "pass" : "fail"}`}>{c.passed ? "Pass" : "Fail"}</button>
+                              aria-label={`${r.name} for ${icao(f.callsign)}: ${c.passed ? "pass" : "fail"}`}>{c.passed ? "Pass" : "Fail"}</button>
                           ) : <span className="muted">n/a</span>}
                         </td>
                       );
@@ -125,14 +126,14 @@ export function Checks({ wave, ev, base }: { wave: WaveScenario; ev: PlanEvaluat
           <div className="evidence" aria-live="polite">
             {chosen ? (
               <>
-                <div><span className={`pill ${chosen.passed ? "pos" : "neg"}`}>{chosen.passed ? "Pass" : "Fail"}</span> <span className="code">{chosen.rule}</span> · <span className="code">{chosen.callsign ?? "all flights"}</span></div>
-                <p style={{ marginTop: 8, fontSize: 13 }}>{chosen.detail}{which === "plan" && chosen.passed && base?.checks.some((c) => !c.passed && c.rule === chosen.rule && c.callsign === chosen.callsign) ? <span className="muted"> · the status quo breaks this rule</span> : null}</p>
+                <div><span className={`pill ${chosen.passed ? "pos" : "neg"}`}>{chosen.passed ? "Pass" : "Fail"}</span> <span className="code">{chosen.rule}</span> · <span className="code">{chosen.callsign ? icao(chosen.callsign) : "all flights"}</span></div>
+                <p style={{ marginTop: 8, fontSize: 13 }}>{icaoText(chosen.detail)}{which === "plan" && chosen.passed && base?.checks.some((c) => !c.passed && c.rule === chosen.rule && c.callsign === chosen.callsign) ? <span className="muted"> · the status quo breaks this rule</span> : null}</p>
                 <dl>
                   <dt>Source</dt><dd style={{ fontFamily: "var(--font)" }}>{chosen.source}</dd>
                   {Object.entries(chosen.evidence).map(([k, v]) => <Fragment key={k}><dt>{k.replace(/_/g, " ")}</dt><dd>{String(v)}</dd></Fragment>)}
                 </dl>
               </>
-            ) : <span className="muted">{e.checks.length ? `All ${e.checks.length} checks pass. Choose a cell to see its evidence.` : "The engine returned no checks for this plan."}</span>}
+            ) : <span className="muted">{e.checks.length ? `All ${new Set(e.checks.map((c) => c.rule)).size} rules pass for every flight (${e.checks.length} checks). Choose a cell to see its evidence.` : "The engine returned no checks for this plan."}</span>}
           </div>
         </>
       )}

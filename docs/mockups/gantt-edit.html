@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Final Approach: editing the plan on the Gantt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Mockup only. SKW5570 and the ORD lanes come from the recorded run; DAL412 on 09C and the edit are illustrative. */
+:root {
+  --ground: #0b0c0e; --panel: #111215; --raised: #1d1e23; --line: #23252a;
+  --text: #f4f5f6; --soft: #c4c6cb; --muted: #8b8e95;
+  --hue: #4a8ad6; --fixed: #5fbf8f; --human: #e8b04b; --neg: #e5566f;
+  --mono: "IBM Plex Mono", ui-monospace, monospace; --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; }
+body { width: 1440px; background: var(--ground); color: var(--text); font: 14px/1.45 var(--sans); padding: 24px 24px 32px; }
+svg text { font-family: var(--mono); }
+h1 { font: 600 20px var(--sans); margin-bottom: 4px; }
+.lede { color: var(--soft); margin-bottom: 20px; }
+.state { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; padding-bottom: 8px; }
+.state-h { display: flex; align-items: baseline; gap: 12px; padding: 14px 20px 0; }
+.state-h .n { font: 600 13px var(--mono); color: var(--muted); }
+.state-h h2 { font: 600 15px var(--sans); }
+.state-h p { color: var(--muted); font-size: 13px; }
+.card { position: absolute; width: 372px; background: var(--raised); border: 1px solid #3a3c42; border-radius: 8px; padding: 14px 16px; box-shadow: 0 18px 40px rgba(0,0,0,.55); white-space: nowrap; }
+.card.amber { border-color: var(--human); } .card.red { border-color: var(--neg); }
+.card h3 { font: 600 13px var(--sans); display: flex; justify-content: space-between; }
+.card .row { display: flex; justify-content: space-between; font: 13px var(--mono); color: var(--soft); margin-top: 6px; }
+.ok { color: var(--fixed); } .bad { color: var(--neg); } .amb { color: var(--human); }
+.acts { display: flex; gap: 8px; margin-top: 12px; }
+.btn { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid #3a3c42; color: var(--text); font: 500 13px var(--sans); display: inline-flex; align-items: center; }
+.btn.primary { background: #fff; color: #0b0c0e; border-color: #fff; }
+.lock { display: inline-flex; gap: 8px; align-items: center; font: 500 13px var(--sans); color: var(--neg); margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Editing the plan: drag a bar on the Gantt</h1>
+<p class="lede">The duty manager moves SKW5570 from runway 22R at 09:46 to runway 09C. Three moments: while dragging, a drop that passes, a drop that breaks a rule.</p>
+
+<section class="state" id="s1">
+  <div class="state-h"><span class="n">1</span><h2>Dragging</h2><p>The old spot stays dashed. Quick checks run in the browser as the bar moves: closed runways refuse the drop, the gap to the landing ahead is shown live.</p></div>
+</section>
+
+<section class="state" id="s2">
+  <div class="state-h"><span class="n">2</span><h2>Dropped, passes</h2><p>The server re-checks the whole plan against all 12 rules. The edit turns amber everywhere it appears.</p></div>
+  <div class="card amber" style="left:1000px; top:46px;">
+    <h3><span class="amb">Your edit · SKW5570</span><span class="mono ok">12 of 12 rules pass</span></h3>
+    <div class="row"><span>runway</span><span>22R → 09C</span></div>
+    <div class="row"><span>landing</span><span>09:46 → 09:30</span></div>
+    <div class="row"><span>gap behind DAL412</span><span class="ok">2.0 min, needs 2.0</span></div>
+    <div class="row"><span>wave gate delay</span><span>512 → 496 min</span></div>
+    <div class="row"><span>next departure</span><span class="ok">on time, was 16 min late</span></div>
+    <div class="acts"><span class="btn">Revert</span><span class="btn">Re-negotiate around it</span></div>
+  </div>
+</section>
+
+<section class="state" id="s3">
+  <div class="state-h"><span class="n">3</span><h2>Dropped, breaks a rule</h2><p>The bar goes red and names the rule. Approve stays locked until it is fixed, reverted or re-negotiated.</p></div>
+  <div class="card red" style="left:1000px; top:46px;">
+    <h3><span class="bad">Wake separation · ATC-WAKE-SEP</span></h3>
+    <div class="row"><span>SKW5570 behind DAL412</span><span class="bad">1.0 min, needs 2.0</span></div>
+    <div class="row"><span>other 11 rules</span><span class="ok">pass</span></div>
+    <div class="acts"><span class="btn primary">Move to 09:30, nearest legal</span><span class="btn">Revert</span></div>
+    <div class="lock">Approve is locked until this is fixed</div>
+  </div>
+</section>
+
+<script>
+// x for a clock time in minutes; axis 07:45..10:45
+const X = m => 90 + (m - 465) * 6.4;
+const T = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const LANES = { "04L": 64, "09C": 94, "09L": 124, "22R": 154, B18: 214, B17: 244, B16: 274 };
+const GATE = 45, BAR = 16, RW = 7;
+
+function base() {
+  let s = "";
+  for (let m = 465; m <= 645; m += 15) {
+    s += `<text x="${X(m)}" y="34" font-size="12" fill="#8b8e95" text-anchor="middle">${T(m)}</text>`;
+    s += `<line x1="${X(m)}" y1="42" x2="${X(m)}" y2="290" stroke="#1b1d21"/>`;
+  }
+  for (const [k, y] of Object.entries(LANES)) s += `<text x="20" y="${y + 4}" font-size="13" fill="#c4c6cb">${k}</text>`;
+  s += `<text x="20" y="190" font-size="12" fill="#8b8e95" font-family="IBM Plex Sans">Gates</text>`;
+  // 04L closed
+  s += `<rect x="${X(465)}" y="${LANES["04L"] - 9}" width="${X(645) - X(465)}" height="18" fill="url(#hx)"/>`;
+  s += `<text x="${X(468)}" y="${LANES["04L"] + 4}" font-size="12" fill="#8b8e95">closed · tailwind 9.5 kt</text>`;
+  // fixed traffic
+  for (const m of [504, 518, 529, 557]) s += `<rect x="${X(m)}" y="${LANES["22R"] - 7}" width="2" height="14" fill="#5fbf8f"/>`;
+  s += `<rect x="${X(568)}" y="${LANES["09C"] - 7}" width="2" height="14" fill="#5fbf8f"/><text x="${X(568) - 6}" y="${LANES["09C"] - 12}" font-size="12" fill="#5fbf8f" text-anchor="end">DAL412 09:28</text>`;
+  // the other negotiated flights
+  s += bar("09C", 509, "#e4e5e8") + `<text x="${X(509) + 12}" y="${LANES["09C"] + 4}" font-size="13" fill="#f4f5f6">ENY3318 08:29</text>`;
+  s += bar("09L", 542, "#4a8ad6") + `<text x="${X(542) + 12}" y="${LANES["09L"] + 4}" font-size="13" fill="#4a8ad6">SKW5559 09:02</text>`;
+  s += gate("B17", 515, "#e4e5e8", "ENY3318", "#0b0c0e") + gate("B18", 548, "#4a8ad6", "SKW5559", "#fff");
+  s += `<rect x="${X(465)}" y="${LANES.B16 - 8}" width="${X(510) - X(465)}" height="${BAR}" rx="2" fill="#24262b"/>`;
+  return s;
+}
+const bar = (lane, m, fill, extra = "") => `<rect x="${X(m) - RW / 2}" y="${LANES[lane] - 9}" width="${RW}" height="18" rx="1" fill="${fill}" ${extra}/>`;
+const ghost = (lane, m, stroke = "#8b8e95") => `<rect x="${X(m) - RW / 2}" y="${LANES[lane] - 9}" width="${RW}" height="18" rx="1" fill="none" stroke="${stroke}" stroke-dasharray="3 2"/>`;
+const gate = (lane, m, fill, label, ink, extra = "") =>
+  `<rect x="${X(m)}" y="${LANES[lane] - 8}" width="${GATE * 6.4}" height="${BAR}" rx="2" fill="${fill}" ${extra}/>` +
+  (label ? `<text x="${X(m) + 8}" y="${LANES[lane] + 4}" font-size="12" fill="${ink}">${label} ${T(m)}</text>` : "");
+const gateGhost = (lane, m, stroke = "#8b8e95") => `<rect x="${X(m)}" y="${LANES[lane] - 8}" width="${GATE * 6.4}" height="${BAR}" rx="2" fill="none" stroke="${stroke}" stroke-dasharray="3 2"/>`;
+const gap = (a, b, y, col, label) =>
+  `<path d="M${X(a) + 1} ${y} v-6 M${X(a) + 1} ${y - 3} H${X(b) - 4} M${X(b) - 4} ${y} v-6" stroke="${col}" fill="none"/>` +
+  `<text x="${(X(a) + X(b)) / 2}" y="${y + 14}" font-size="12" fill="${col}" text-anchor="middle">${label}</text>`;
+const move = (m0, lane0, m1, lane1, col) =>
+  `<path d="M${X(m0)} ${LANES[lane0] - 9} C ${X(m0) - 20} ${LANES[lane1] + 30}, ${X(m1) + 30} ${LANES[lane1] + 20}, ${X(m1) + 6} ${LANES[lane1] + 9}" fill="none" stroke="${col}" stroke-dasharray="3 3"/>`;
+
+const svg = inner => `<svg width="1392" height="300" viewBox="0 0 1392 300">
+  <defs><pattern id="hx" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#2c2b30" stroke-width="3"/></pattern>
+  <filter id="lift" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000" flood-opacity=".7"/></filter></defs>
+  ${base()}${inner}</svg>`;
+
+// 1 · dragging, hovering 09C 09:30
+document.getElementById("s1").insertAdjacentHTML("beforeend", svg(
+  ghost("22R", 586) + `<text x="${X(586) + 10}" y="${LANES["22R"] + 4}" font-size="12" fill="#8b8e95">was 09:46</text>` +
+  gateGhost("B16", 592) +
+  `<line x1="${X(570)}" y1="42" x2="${X(570)}" y2="290" stroke="#e8b04b" stroke-dasharray="2 4"/>` +
+  `<rect x="${X(570) - 24}" y="20" width="48" height="20" rx="10" fill="#e8b04b"/><text x="${X(570)}" y="34" font-size="12" fill="#1b1404" text-anchor="middle" font-weight="600">09:30</text>` +
+  `<rect x="${X(570) - 9}" y="${LANES["09C"] - 13}" width="18" height="26" rx="3" fill="none" stroke="#e8b04b"/>` +
+  bar("09C", 570, "#e8b04b", 'filter="url(#lift)"') +
+  gap(568, 570, LANES["09C"] + 24, "#5fbf8f", "2.0 min ✓") +
+  `<text x="${X(570) + 16}" y="${LANES["09C"] + 4}" font-size="13" fill="#e8b04b" font-weight="600">SKW5570 → 09C 09:30</text>` +
+  gate("B16", 576, "#e8b04b", "", "", 'opacity=".45"') +
+  `<text x="${X(576) + 8}" y="${LANES.B16 + 4}" font-size="12" fill="#e8b04b">gate follows · 09:36</text>` +
+  `<text x="${X(600)}" y="${LANES["04L"] + 4}" font-size="12" fill="#e5566f">can't land here: closed</text>` +
+  // cursor
+  `<path d="M${X(570) + 4} ${LANES["09C"] + 2} l0 16 l4 -4 l3 7 l3 -1 l-3 -7 l6 0z" fill="#fff" stroke="#0b0c0e"/>`
+));
+
+// 2 · dropped and passes
+document.getElementById("s2").insertAdjacentHTML("beforeend", svg(
+  ghost("22R", 586) + `<text x="${X(586) + 10}" y="${LANES["22R"] + 4}" font-size="12" fill="#8b8e95">agents: 09:46</text>` +
+  move(586, "22R", 570, "09C", "#e8b04b") +
+  bar("09C", 570, "#e8b04b") +
+  `<text x="${X(570) + 12}" y="${LANES["09C"] + 4}" font-size="13" fill="#e8b04b">SKW5570 09:30 · you</text>` +
+  gap(568, 570, LANES["09C"] + 24, "#5fbf8f", "2.0 min") +
+  gateGhost("B16", 592) + gate("B16", 576, "#e8b04b", "SKW5570", "#1b1404")
+));
+
+// 3 · dropped one minute early: wake separation breaks
+document.getElementById("s3").insertAdjacentHTML("beforeend", svg(
+  ghost("22R", 586) + `<text x="${X(586) + 10}" y="${LANES["22R"] + 4}" font-size="12" fill="#8b8e95">agents: 09:46</text>` +
+  move(586, "22R", 569, "09C", "#e5566f") +
+  bar("09C", 569, "#e5566f") +
+  `<rect x="${X(569) - 9}" y="${LANES["09C"] - 13}" width="18" height="26" rx="3" fill="none" stroke="#e5566f"/>` +
+  `<text x="${X(569) + 16}" y="${LANES["09C"] + 4}" font-size="13" fill="#e5566f" font-weight="600">SKW5570 09:29</text>` +
+  gap(568, 569.6, LANES["09C"] + 24, "#e5566f", "1.0 < 2.0 min") +
+  ghost("09C", 570, "#5fbf8f") + `<text x="${X(570) + 6}" y="${LANES["09C"] - 14}" font-size="12" fill="#5fbf8f">09:30 legal</text>` +
+  gateGhost("B16", 592) + gate("B16", 575, "#e8b04b", "SKW5570", "#1b1404")
+));
+</script>
+</body>
+</html>

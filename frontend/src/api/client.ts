@@ -1,6 +1,6 @@
 import type {
-  BenchmarkReport, Config, DecisionRequest, FlightsResponse, NegotiateRequest, NegotiationEvent, NegotiationResult,
-  WaveScenario, WaveSummary,
+  BenchmarkReport, Config, DecisionRequest, EvaluateRequest, EvaluateResponse, FlightsResponse, NegotiateRequest,
+  NegotiationEvent, NegotiationResult, WaveScenario, WaveSummary,
 } from "./types";
 
 // ?mock=1 forces the offline demo (the backend's recorded sample run); otherwise the mock is used only when the API is unreachable.
@@ -57,6 +57,18 @@ export const api = {
   async decision(req: DecisionRequest): Promise<{ ok: true; recorded_at: string }> {
     if (offline) return { ok: true, recorded_at: new Date().toISOString() };
     const r = await fetch("/api/decision", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new ApiError(e?.error?.code ?? String(r.status), e?.error?.message ?? r.statusText, r.status);
+    }
+    return r.json();
+  },
+
+  /** Re-checks a plan the duty manager edited. Offline there is no rule engine, so this resolves to null. */
+  async evaluate(req: EvaluateRequest, signal?: AbortSignal): Promise<EvaluateResponse | null> {
+    if (offline) return null;
+    const r = await fetch("/api/evaluate", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
+    if (r.status === 404 && !(await r.clone().json().catch(() => ({})))?.error) return null;   // an older backend without the route
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       throw new ApiError(e?.error?.code ?? String(r.status), e?.error?.message ?? r.statusText, r.status);

@@ -30,13 +30,20 @@ export function Benchmark() {
   const reasons = rep?.selection.reasons ?? [];
   const isNote = (r: string) => /=|measured against|^outage test/i.test(r);
   const why = reasons.filter((r) => !isNote(r) && !/p95 all decisions/i.test(r));
-  const notes = reasons.filter((r) => isNote(r) && !/^outage test/i.test(r));
+  // the backend writes its footnotes with field names; say them in words
+  const noteText = (r: string) =>
+    /^Brier is measured/i.test(r) ? "Brier compares each model's accept probability with the formula's verdict, not with ground truth (lower is closer)."
+    : /^cost_usd_per_wave/i.test(r) ? "Cost: output tokens are free on this route and input cost isn't measured here, so it reads as not measured (the README estimates about $0.0005 a wave)."
+    : /^fallback_rate_pct/i.test(r) ? "Fallback: share of waves the deterministic solver had to finish. Errors: share of decisions answered by the next model after this one failed."
+    : r;
+  const notes = reasons.filter((r) => isNote(r) && !/^outage test/i.test(r)).map(noteText);
+  const symbols = (t: string) => t.replace(/>=/g, "≥").replace(/<=/g, "≤").replace(/->/g, "→");
   return (
     <main className="canvas">
       <header className="titlerow">
         <div>
           <h1>Benchmark</h1>
-          <p className="sub">{rep ? <>{rep.n_waves} real waves, seed {rep.seed}, every arm on the same waves. <b>Winner: {rep.selection.winner}</b> ({rep.selection.rule}).</> : "Each decision model against the formulas and the status quo on the same real waves."}</p>
+          <p className="sub">{rep ? <>{rep.n_waves} real waves, seed {rep.seed}, every arm on the same waves. <b>Winner: {rep.selection.winner}</b> ({symbols(rep.selection.rule)}).</> : "Each decision model against the formulas and the status quo on the same real waves."}</p>
         </div>
         {rep && <span className="muted" style={{ fontSize: 13 }}>Generated {dateLabel(rep.generated_at)}</span>}
       </header>
@@ -76,28 +83,37 @@ export function Benchmark() {
                         const v = a.summary[c.key];
                         if (v == null) return <td key={c.key} className="num muted" title={a.provider === "formula" ? "The formula makes no model calls" : "No data for this arm"}>{a.provider === "formula" ? "n/a" : "n/a"}</td>;
                         const bad = c.key === "rule_violations_in_agreed_plans" && v > 0;
-                        return <td key={c.key} className={`num${bad ? " neg" : ""}`}>{c.key === "cost_usd_per_wave" ? `$${v.toFixed(c.digits)}` : `${v.toFixed(c.digits)}${c.unit}`}</td>;
+                        if (c.key === "cost_usd_per_wave" && v === 0) return <td key={c.key} className="num muted" title={a.provider === "formula" ? "No model calls" : "Input cost not measured in this run"}>{a.provider === "formula" ? "$0" : "not measured"}</td>;
+                        return <td key={c.key} className={`num${bad ? " breach" : ""}`}>{c.key === "cost_usd_per_wave" ? `$${v.toFixed(4)}` : `${v.toFixed(c.digits)}${c.unit}`}</td>;
                       })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {(() => {
+              // the status quo looks faster only because it ignores the rules; say so where the numbers are
+              const b = rep.baseline, win = rep.arms.find((a) => a.model === rep.selection.winner);
+              const bad = b.infeasible_ids?.length, ok = b.n_feasible;
+              if (!bad || ok == null) return null;
+              return <p className="bench-frame">Why every arm shows more delay than the status quo: first come, first served breaks at least one safety rule on {bad} of {rep.n_waves} waves. It lands aircraft inside wake separation or onto occupied gates instead of holding them, which is also why its hold fuel is near zero.
+                {b.feasible_only && win?.delay_min_vs_feasible_status_quo != null && <> On the {ok} waves where it is legal, {win.label} averages {win.delay_min_vs_feasible_status_quo.toFixed(1)} min against {b.feasible_only.delay_min.toFixed(1)} min for the status quo.</>}</p>;
+            })()}
             {notes.length > 0 && <ul className="notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
           </section>
           <section className="card span-6">
             <div className="card-head"><h2>Why {rep.arms.find((a) => a.model === rep.selection.winner)?.label ?? rep.selection.winner}</h2></div>
-            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>{why.map((r) => <li key={r}>{r}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>{why.map((r) => <li key={r}>{symbols(r).replace(/(\d+\.\d{2,}) min/g, (_, n: string) => `${Number(n).toFixed(1)} min`)}</li>)}</ul>
             <dl className="kv" style={{ marginTop: 16 }}>
-              <dt>Engine switched off</dt><dd>{rep.ablation_no_engine_unsafe_pct == null ? <span className="muted">Not measured in this run</span> : <><span className="neg">{rep.ablation_no_engine_unsafe_pct.toFixed(1)}%</span> of agreed plans break a rule</>}</dd>
+              <dt>Engine switched off</dt><dd>{rep.ablation_no_engine_unsafe_pct == null ? <span className="muted">Not measured in this run</span> : <><span className="breach">{rep.ablation_no_engine_unsafe_pct.toFixed(1)}%</span> of agreed plans break a rule</>}</dd>
               <dt>Outage test</dt><dd>{rep.outage_test.waves === 0 ? <span className="muted">Skipped: no model arm beat the formula, so there was no primary model to disable</span>
-                : <>{rep.outage_test.primary_disabled} disabled: {rep.outage_test.resolved} of {rep.outage_test.waves} waves resolved{Object.keys(rep.outage_test.fallbacks_used).length ? ` (${Object.entries(rep.outage_test.fallbacks_used).map(([k, v]) => `${k} ${v}`).join(", ")})` : ""}</>}</dd>
+                : <>{rep.outage_test.primary_disabled} disabled: {rep.outage_test.resolved} of {rep.outage_test.waves} waves resolved{Object.keys(rep.outage_test.fallbacks_used).length ? `; ${Object.entries(rep.outage_test.fallbacks_used).map(([k, v]) => `${k} answered ${v} decisions instead`).join(", ")}` : ""}</>}</dd>
             </dl>
           </section>
           <section className="card span-6">
             <div className="card-head"><h2>Failures</h2><span className="meta">{rep.failures.length} listed</span></div>
             {rep.failures.length ? (
-              <div className="table-wrap" style={{ maxHeight: 360, overflowY: "auto" }} tabIndex={0} role="region" aria-label="Failures"><table><tbody>{rep.failures.map((f) => (
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Failures"><table><tbody>{rep.failures.map((f) => (
                 <tr key={f.wave_id + f.model}><td><a className="code" style={{ color: "var(--text)", textDecoration: "none" }} href={`#/wave/${f.wave_id}`}>{f.wave_id}</a><span className="sub">{f.model}</span></td><td style={{ whiteSpace: "normal" }}>{f.reason}</td></tr>
               ))}</tbody></table></div>
             ) : <p className="empty">No failures in this run.</p>}

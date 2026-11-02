@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { AgentTurnBody, Assignment, DecisionMeta, JointPlan, NegotiationMessage } from "../api/types";
-import { agentClass, agentName } from "../format";
+import { icao, icaoText } from "../callsign";
+import { agentClass, agentName as rawAgentName } from "../format";
+
+const agentName = (s: string) => icaoText(rawAgentName(s as never));
 
 const ROUND = ["Triage and opening plan", "Turn 1", "Turn 2", "Turn 3", "Fallback"];
 
@@ -75,7 +78,7 @@ function Changes({ d }: { d: StepDiff }) {
   if (!d.flights.length) return <div className="msg-diff muted">No change to the plan{br}</div>;
   return (
     <div className="msg-diff">
-      {d.flights.map((f) => <div key={f}>{f}</div>)}
+      {d.flights.map((f) => <div key={f}>{icaoText(f)}</div>)}
       <div className="msg-diff-total">
         Wave total delay {n1(d.delayBefore)} → {n1(d.delayAfter)} min
         {Math.abs(dd) >= 0.1 && <span className={dd < 0 ? "pos" : "neg"}> ({dd > 0 ? "+" : ""}{n1(dd)})</span>}
@@ -87,17 +90,53 @@ function Changes({ d }: { d: StepDiff }) {
 
 const meta = (d: DecisionMeta) => `${d.kind === "formula" ? "formula" : d.model}${d.confidence != null ? ` · p ${d.confidence.toFixed(2)}` : ""} · ${d.latency_ms} ms`;
 
+// The engine writes for a log file: plan hashes, "(s)" plurals, role tags, move chains. For the controller each
+// line is rewritten to what changed; the hashes and scores stay available behind "Show model, probability and latency".
+function plain(raw: string, details: boolean): string {
+  let s = icaoText(raw);
+  s = s.replace(/(\d+) (rule violation|plan|flight|move|check)\(s\)/g, (_, n: string, w: string) => `${n} ${w}${n === "1" ? "" : "s"}`);
+  s = s.replace(/\bPILOT:/g, "Pilot ").replace(/\bGROUND\b/g, "Ground");
+  // "Move X from A to runway B; Move X from B to runway C" -> net change per flight
+  if (s.includes("; ")) {
+    const parts = s.split(/;\s*/).map((p) => p.trim()).filter(Boolean);
+    const net = new Map<string, [string, string, number]>();   // flight -> first from, last to, position
+    const out: (string | null)[] = [];
+    for (const p of parts) {
+      const m = p.match(/^Move (\S+) from (\S+) to runway (\S+)$/);
+      if (!m) { out.push(p); continue; }
+      const prev = net.get(m[1]);
+      if (prev) net.set(m[1], [prev[0], m[3], prev[2]]);
+      else { net.set(m[1], [m[2], m[3], out.length]); out.push(null); }
+    }
+    for (const [cs, [a, b, i]] of net) out[i] = a === b ? "" : `Move ${cs} from ${a} to runway ${b}`;
+    s = out.filter(Boolean).join("; ");
+  }
+  if (details) return s;
+  return s
+    .replace(/\bPlan [0-9a-f]{10} from (\w+)/g, "$1's plan")
+    .replace(/ \(?[0-9a-f]{10}\)? \((\d\.\d+) < (\d\.\d+)\)/g, " a plan below its minimum")
+    .replace(/\b[Pp]lan [0-9a-f]{10}\b/g, (m) => (m[0] === "P" ? "The plan" : "the plan"))
+    .replace(/\b[0-9a-f]{10}\b/g, "the plan")
+    .replace(/; max-min utility [\d.]+ among (\d+) unanimous plans?/, "")
+    .replace(/ among 1 unanimous plan\(s\)/, "")
+    .replace(/the plan\(s\)/g, "the plan")
+    .replace(/no CHECK-passed plan/g, "no rule-clean plan")
+    .replace(/ \(the plan: [^)]*\)/g, "")
+    .replace(/^turn (\d)/, "Turn $1");
+}
+
 function Turn({ b, details, diff }: { b: AgentTurnBody; details: boolean; diff?: StepDiff }) {
   const acc = b.votes.filter((v) => v.vote === "ACCEPT").length;
   return (
     <>
       {diff && <Changes d={diff} />}
       {b.rejected.map((r) => (
-        <div key={r.move.id} className="msg-why neg">Vetoed: {r.move.label}. {r.violations[0]?.detail ?? r.reason}</div>
+        <div key={r.move.id} className="msg-why breach">Vetoed: {plain(r.move.label, details)}. {plain(r.violations[0]?.detail ?? r.reason, details)}</div>
       ))}
       <div className="msg-why">
         Own plan scores {b.proposal_utility.toFixed(2)} · accepts {acc} of {b.votes.length} plan{b.votes.length === 1 ? "" : "s"} on the table
-        {b.votes.filter((v) => v.vote === "REJECT").map((v) => ` · rejects ${v.plan_id} (${v.utility.toFixed(2)} < ${v.reservation.toFixed(2)})`).join("")}
+        {details ? b.votes.filter((v) => v.vote === "REJECT").map((v) => ` · rejects ${v.plan_id} (${v.utility.toFixed(2)} < ${v.reservation.toFixed(2)})`).join("")
+          : (() => { const n = b.votes.filter((v) => v.vote === "REJECT").length; return n ? ` · rejects ${n} below its minimum` : ""; })()}
       </div>
       {details && b.moves.map((x) => <div key={x.move.id} className="msg-dec">{x.move.label.split(" ").slice(0, 2).join(" ")} · {meta(x.decision)}</div>)}
       {details && b.decision && <div className="msg-dec">vote · {meta(b.decision)}{b.decision.fallback_from?.length ? <span style={{ color: "var(--warning)" }}> · after {b.decision.fallback_from.join(", ")} failed</span> : null}</div>}
@@ -112,7 +151,7 @@ export function Log({ messages, running, focus, details = false }: { messages: N
   if (!messages.length) {
     const roles: [string, string, string][] = [
       ["ATC", "atc", "Sees the runways, the queue and the wind. Sequences every flight: landing order, runway, slot, speed control or ground delay."],
-      [focus ? `Pilot ${focus}` : "Pilot", "pilot", `Flies the disruption flight${focus ? ` ${focus}` : ""} only: its fuel, ETA and connections. Slows down, takes a ground delay, asks to divert or accepts.`],
+      [focus ? `Pilot ${icao(focus)}` : "Pilot", "pilot", `Flies the disrupted flight${focus ? ` ${icao(focus)}` : ""} only: its fuel, ETA and connections. Slows down, takes a ground delay, asks to divert or accepts.`],
       ["Ground", "ground", "Sees gates, stands and crews. Reassigns a gate, sends a flight to a remote stand, swaps gates."],
       ["Engine", "engine", "Deterministic code, not a model. Checks 12 safety rules on every plan and vetoes any that breaks one."],
     ];
@@ -142,12 +181,12 @@ export function Log({ messages, running, focus, details = false }: { messages: N
               <article key={m.seq} className={`msg${rej ? " rej" : ""}${b.type === "AGENT_TURN" ? " turn" : ""}`}>
                 <div className="msg-top">
                   <span className={`who ${agentClass(m.sender)}`}>{agentName(m.sender)}</span>
-                  <div className="msg-body">{summary(m)}</div>
+                  <div className="msg-body">{plain(summary(m), details)}</div>
                 </div>
                 {b.type === "AGENT_TURN" && <Turn b={b} details={details} diff={diffs.get(m.seq)} />}
-                {(b.type === "NO_CONSENSUS" || b.type === "FALLBACK") && <div className="msg-why">{b.reason}</div>}
-                {b.type === "MOVE_REJECTED" && b.violations[0] && <div className="msg-why neg">{b.violations[0].detail} · {b.violations[0].source}</div>}
-                {b.type !== "AGENT_TURN" && b.type !== "TRIAGE" && m.rationale && <div className="msg-why">{m.rationale}</div>}
+                {(b.type === "NO_CONSENSUS" || b.type === "FALLBACK") && <div className="msg-why">{plain(b.reason, details)}</div>}
+                {b.type === "MOVE_REJECTED" && b.violations[0] && <div className="msg-why breach">{plain(b.violations[0].detail, details)} · {b.violations[0].source}</div>}
+                {b.type !== "AGENT_TURN" && b.type !== "TRIAGE" && m.rationale && <div className="msg-why">{plain(m.rationale, details)}</div>}
                 {d && (details || d.fallback_from?.length) && <div className="msg-dec">{meta(d)}{d.fallback_from?.length ? <span style={{ color: "var(--warning)" }}> · after {d.fallback_from.join(", ")} failed</span> : null}</div>}
               </article>
             );
