@@ -36,6 +36,7 @@ IEM_KEEP_BYTES = 30 * 1024 * 1024
 _UNSET = object()
 ARRIVALS_LRU = 16
 FLIGHTS_DAY_LRU = 64
+REPLAY_LRU = 8
 _DOTZERO = re.compile(r"\.0(?=;|$)")
 
 
@@ -59,6 +60,10 @@ class _LRU:
             while len(self._d) > self._size:
                 self._d.popitem(last=False)
 
+    def clear(self) -> None:
+        with self._lock:
+            self._d.clear()
+
 
 def _engine_version() -> str:
     try:
@@ -81,12 +86,15 @@ STORE_METHODS = (
 
 def make_pool(url: str) -> NullConnectionPool:
     # Neon's pooled endpoint is pgbouncer in transaction mode: no server-side prepared statements.
+    # TCP keepalives (libpq connect parameters, not SET) detect a dead peer during a long query instead of hanging;
+    # statement_timeout lives on the role (migration 0006), since SET does not survive transaction pooling.
     return NullConnectionPool(
         conninfo=url,
         max_size=4,
         timeout=10,
         open=False,
-        kwargs={"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach"},
+        kwargs={"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach",
+                "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3},
     )
 
 
@@ -122,6 +130,7 @@ class PgStore:
         self._workbook: dict = {}
         self._arrivals = _LRU(ARRIVALS_LRU)
         self._flights_day = _LRU(FLIGHTS_DAY_LRU)
+        self._replays = _LRU(REPLAY_LRU)              # replay bodies by wave id; cleared by put_replay
 
     def open(self) -> None:
         with self._open_lock:
@@ -486,20 +495,27 @@ class PgStore:
     # ------------------------------------------------------------ replays and evaluation
 
     def replay(self, wave_id: str) -> dict | None:
-        def go():
-            with self._conn() as conn:
-                return conn.execute("select body from eval.replays where wave_id = %s and engine_version = %s",
-                                    (wave_id, _engine_version())).fetchone()
-        row = go()
-        return None if row is None else row[0]
+        """The newest recording for the wave, preferring the current engine version. Like FileStore (one file per
+        wave, last write wins), an older-version body is still returned, so a version guard can read its
+        `engine_version` and refuse what it cannot replay."""
+        hit = self._replays.get(wave_id)
+        if hit is not _UNSET:
+            return copy.deepcopy(hit)
+        with self._conn() as conn:
+            row = conn.execute("select body from eval.replays where wave_id = %s "
+                               "order by (engine_version = %s) desc, recorded_at desc limit 1",
+                               (wave_id, _engine_version())).fetchone()
+        body = None if row is None else row[0]
+        self._replays.put(wave_id, body)
+        return copy.deepcopy(body)
 
     def replay_ids(self) -> set[str]:
+        """Waves with a recording of any engine version (the demo list), as FileStore."""
         cached = self._replay_ids
         if cached is None:
             def go():
                 with self._conn() as conn:
-                    return conn.execute("select wave_id from eval.replays where engine_version = %s",
-                                        (_engine_version(),)).fetchall()
+                    return conn.execute("select distinct wave_id from eval.replays").fetchall()
             cached = self._replay_ids = {r[0] for r in go()}
         return set(cached)
 
@@ -514,6 +530,7 @@ class PgStore:
                     (wave_id, engine_version, Jsonb(body)))
         go()
         self._replay_ids = None
+        self._replays.clear()
 
     def benchmark_current(self) -> dict | None:
         cached = self._benchmark

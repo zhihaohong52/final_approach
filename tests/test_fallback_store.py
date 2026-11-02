@@ -42,7 +42,8 @@ def test_pool_settings(monkeypatch):
     monkeypatch.setattr(pg, "NullConnectionPool", lambda *a, **k: seen.update(k) or object())
     pg.make_pool("postgresql://u:p@example-pooler.us-west-2.aws.neon.tech/db?sslmode=require")
     assert seen["max_size"] == 4 and seen["timeout"] == 10 and seen["open"] is False
-    assert seen["kwargs"] == {"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach"}
+    assert seen["kwargs"] == {"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach",
+                              "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3}
 
 
 # ---- review fixes ----
@@ -210,3 +211,131 @@ def test_no_retry_writes_attempted_once_reads_retried(monkeypatch, tmp_path):
     assert P.n["record_decision"] == 1
     fb.get_run("0123456789ab")
     assert P.n["get_run"] == 3
+
+
+# ---- final review fixes ----
+from atm.datastore.base import DataUnavailable
+
+
+def _tmp_files(tmp_path):
+    from atm.datastore.files import FilePaths
+    return FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "d.jsonl",
+                               replay_dir=tmp_path / "replay", benchmark_path=tmp_path / "b.json"))
+
+
+@pytest.mark.parametrize("exc", [psycopg.errors.IntegrityError, psycopg.errors.DataError,
+                                 psycopg.errors.UndefinedTable, psycopg.errors.InsufficientPrivilege])
+def test_rejected_writes_fall_back_without_breaker(monkeypatch, tmp_path, exc):
+    monkeypatch.setattr(pg.time, "sleep", lambda s: pytest.fail("a rejected write must not be retried"))
+
+    class P:
+        n = 0
+        def save_run(self, r):
+            P.n += 1; raise exc("rejected")
+        def record_decision(self, row):
+            P.n += 1; raise exc("rejected")
+
+    files = _tmp_files(tmp_path)
+    fb = FallbackStore(P(), files)
+    run = {"run_id": "0123456789ab", "wave_id": "W", "mode": "formulas"}
+    for _ in range(4):
+        assert fb.save_run(run) is True                                             # kept in the file store
+        assert fb.record_decision({"run_id": "0123456789ab", "decision": "APPROVE"}) is True
+    assert P.n == 8                                                                 # once each, no retry
+    assert files.get_run("0123456789ab")["run_id"] == "0123456789ab"
+    assert fb._failures == 0 and fb._opened_at is None                              # database is up: no breaker
+    s = fb.status()
+    assert s.degraded and not s.persistent and exc.__name__ in s.reason
+    assert fb.wrote_to_secondary("record_decision") and fb.wrote_to_secondary("save_run")
+
+
+def test_read_database_error_is_not_swallowed():
+    class P:
+        def get_run(self, run_id): raise psycopg.errors.UndefinedTable("no table")
+    fb = FallbackStore(P(), FileStore())
+    with pytest.raises(psycopg.errors.UndefinedTable):
+        fb.get_run("0123456789ab")
+    assert fb._failures == 0
+
+
+def test_operational_error_still_counts_for_writes(monkeypatch, tmp_path):
+    monkeypatch.setattr(pg.time, "sleep", lambda s: None)
+
+    class P:
+        def save_run(self, r): raise psycopg.OperationalError("down")
+    fb = FallbackStore(P(), _tmp_files(tmp_path))
+    for _ in range(3):
+        fb.save_run({"run_id": "0123456789ab", "wave_id": "W", "mode": "formulas"})
+    assert fb._opened_at is not None
+
+
+def test_data_unavailable_does_not_open_breaker():
+    class P:
+        n = 0
+        def wave_row(self, wave_id):
+            P.n += 1; raise DataUnavailable("ref.waves is empty")
+    fb = FallbackStore(P(), FileStore())
+    wid = FileStore().wave_rows(None, None, 1)[0]["wave_id"]
+    for _ in range(5):
+        assert fb.wave_row(wid)["wave_id"] == wid
+    assert P.n == 5                                    # primary tried every time: breaker never opened
+    assert fb._failures == 0 and fb._opened_at is None
+    assert fb.status().degraded and "DataUnavailable" in fb.status().reason
+
+
+def test_wrote_to_secondary_is_per_thread(monkeypatch, tmp_path):
+    monkeypatch.setattr(pg.time, "sleep", lambda s: None)
+
+    class P:
+        fail = True
+        def record_decision(self, row):
+            if P.fail: raise psycopg.errors.IntegrityError("x")
+            return True
+    fb = FallbackStore(P(), _tmp_files(tmp_path))
+    fb.record_decision({"run_id": "0123456789ab", "decision": "APPROVE"})          # this thread: secondary
+    P.fail = False
+    seen = {}
+    th = threading.Thread(target=lambda: (fb.record_decision({"run_id": "0123456789ab", "decision": "APPROVE"}),
+                                          seen.update(other=fb.wrote_to_secondary("record_decision"))))
+    th.start(); th.join()
+    assert seen["other"] is False                          # the other thread's own call reached the primary
+    assert fb.wrote_to_secondary("record_decision") is True
+    fb.record_decision({"run_id": "0123456789ab", "decision": "APPROVE"})
+    assert fb.wrote_to_secondary("record_decision") is False
+
+
+class _ReplayConn:
+    def __init__(self, log, body): self.log, self.body = log, body
+    def execute(self, sql, params=None):
+        self.log.append((sql, params))
+        return self
+    def fetchone(self): return None if self.body is None else (self.body,)
+    def fetchall(self): return [("W1",), ("W2",)]
+    def commit(self): pass
+
+
+def test_pg_replay_prefers_current_version_and_caches(monkeypatch):
+    from contextlib import contextmanager
+    s = pg.PgStore("postgresql://u:p@127.0.0.1:1/db")
+    log = []
+    body = {"engine_version": "v2", "messages": [], "result": {"x": 1}}
+
+    @contextmanager
+    def conn():
+        yield _ReplayConn(log, body)
+    monkeypatch.setattr(s, "_conn", conn)
+    got = s.replay("W1")
+    assert got == body
+    sql, params = log[0]
+    assert "order by (engine_version = %s) desc, recorded_at desc limit 1" in sql
+    assert "engine_version = %s and" not in sql and params[0] == "W1"
+    got["result"]["x"] = 2                                 # callers get a copy, the cache is not mutated
+    assert s.replay("W1")["result"]["x"] == 1 and len(log) == 1   # served from the LRU
+    for i in range(8):
+        s.replay(f"X{i}")
+    s.replay("W1"); assert len(log) == 10                 # evicted after 8 others
+    monkeypatch.setattr(s, "_conn", conn)
+    s.put_replay("W1", body)
+    s.replay("W1"); assert len(log) == 12                 # put_replay cleared the cache (insert + select)
+    assert s.replay_ids() == {"W1", "W2"}
+    assert "engine_version" not in log[-1][0]              # ids of any engine version
