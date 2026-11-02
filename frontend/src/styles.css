@@ -184,7 +184,6 @@ th.num, td.num { text-align: right; }
 td .sub { display: block; font: 13px/1.35 var(--font); color: var(--muted); }
 tbody tr { transition: background 120ms; }
 tbody tr:hover { background: #18171c; }
-tr.focus td:first-child { box-shadow: inset 2px 0 0 var(--hue); padding-left: 10px; }
 
 /* ---------- outcome strip ---------- */
 .outcome { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.8fr); gap: 0; padding: 0; }
