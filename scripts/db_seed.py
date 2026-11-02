@@ -740,13 +740,10 @@ def _files_coverage() -> list[Path]:
 
 
 def _load_coverage(conn) -> int:
-    try:
-        from scripts import geo_coverage
-    except ModuleNotFoundError as e:
-        if e.name not in ("scripts.geo_coverage", "geo_coverage"):
-            raise
-        print("coverage: no files yet")
+    if not (ROOT / "scripts/geo_coverage.py").exists():   # `from scripts import x` on a missing x is an ImportError,
+        print("coverage: no files yet")                      # not ModuleNotFoundError; test the file instead
         return 0
+    from scripts import geo_coverage   # any import error inside it propagates
     rows = geo_coverage.coverage()
     lines = [_pg_line([r["iata"], r.get("icao"), r.get("procedures_tier"), r.get("surface_tier"),
                        None if r.get("stands") is None else str(r["stands"]),
