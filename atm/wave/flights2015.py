@@ -377,7 +377,7 @@ def build_from_row(row_id: int) -> Wave:
     focus_cs = _callsign(row["carrier"], row["flight_no"])
 
     lim = constraints.airport(iata)
-    runways = B._runways(iata)
+    runways = B._runways(iata, date)
     start_local = datetime.strptime(date, "%Y-%m-%d") + timedelta(hours=hour)
     metar = _metar(iata, date, start_local)
     B._close_unsafe(runways, wind.runway_wind(metar, runways))

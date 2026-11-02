@@ -1,0 +1,79 @@
+airport,runway,event,date,until,old_id,heading_true,length_ft,le_lat,le_lon,he_lat,he_lon,reason,source
+ORD,09C,opened,2020-11-05,,,,,,,,,,https://www.hntb.com/projects/runway-9c-27c-at-ohare-airport/
+ORD,27C,opened,2020-11-05,,,,,,,,,,https://www.hntb.com/projects/runway-9c-27c-at-ohare-airport/
+ORD,10R,opened,2015-10-15,,,,,,,,,,https://www.faa.gov/airports/airport_development/omp/eis_re_eval
+ORD,28L,opened,2015-10-15,,,,,,,,,,https://www.faa.gov/airports/airport_development/omp/eis_re_eval
+ORD,14L,closed,2015-08-20,,,140.1,10005,42.002435,-87.915368,41.981405,-87.891713,,https://www.fox32chicago.com/news/ohare-runway-at-center-of-noise-complaints-is-closed ; https://www.flychicago.com/business/CDA/factsfigures/pages/facility.aspx
+ORD,32R,closed,2015-08-20,,,320.1,10005,41.981405,-87.891713,42.002435,-87.915368,,https://www.fox32chicago.com/news/ohare-runway-at-center-of-noise-complaints-is-closed ; https://www.flychicago.com/business/CDA/factsfigures/pages/facility.aspx
+ORD,14R,closed,2016-09-15,,,140.1,9686,41.990435,-87.93314,41.970083,-87.91023,,https://www.flychicago.com/business/CDA/factsfigures/pages/facility.aspx (FAA NASR dropped it in the 2016-09-15 cycle)
+ORD,32L,closed,2016-09-15,,,320.1,9686,41.970083,-87.91023,41.990435,-87.93314,,https://www.flychicago.com/business/CDA/factsfigures/pages/facility.aspx (FAA NASR dropped it in the 2016-09-15 cycle)
+DAL,18,closed,2017-06-22,,,185.5,6147,32.858662,-96.853218,32.841846,-96.855146,,https://nbaa.org/?p=25631
+DAL,36,closed,2017-06-22,,,5.5,6147,32.841846,-96.855146,32.858662,-96.853218,,https://nbaa.org/?p=25631
+HOU,17,closed,2021-10-07,,,178.9,6000,29.652361,-95.284666,29.635866,-95.284318,,https://www.faa.gov/aero_docs/acifp/NDBR/4BE8A82E27554E86A9AA06FE437F1FC2-HOU-NDBR/TX_HOUSTON_TAKEOFF_HOU.pdf (closed by this date; exact day unverified)
+HOU,35,closed,2021-10-07,,,358.9,6000,29.635866,-95.284318,29.652361,-95.284666,,https://www.faa.gov/aero_docs/acifp/NDBR/4BE8A82E27554E86A9AA06FE437F1FC2-HOU-NDBR/TX_HOUSTON_TAKEOFF_HOU.pdf (closed by this date; exact day unverified)
+MDW,13L,closed,2023-01-01,,,133.6,5141,41.792317,-87.757941,41.782601,-87.744274,,https://www.ainonline.com/aviation-news/air-transport/2025-06-02/chicago-midway-decommissioning-closed-runway-13l-31r (closed during 2023; month unverified)
+MDW,31R,closed,2023-01-01,,,313.6,5141,41.782601,-87.744274,41.792317,-87.757941,,https://www.ainonline.com/aviation-news/air-transport/2025-06-02/chicago-midway-decommissioning-closed-runway-13l-31r (closed during 2023; month unverified)
+CLT,05,closed,2023-06-15,,,48.3,7502,35.208952,-80.949946,35.222616,-80.931145,,https://www.faa.gov/aero_docs/acifp/A561715E0234426B998FFFCE714545EC-CLT/NC_KCLT_ILS%20OR%20LOC%20RWY%205_CANCEL_S.pdf (date estimated)
+CLT,23,closed,2023-06-15,,,228.3,7502,35.222616,-80.931145,35.208952,-80.949946,,https://www.faa.gov/aero_docs/acifp/A561715E0234426B998FFFCE714545EC-CLT/NC_KCLT_ILS%20OR%20LOC%20RWY%205_CANCEL_S.pdf (date estimated)
+ORD,09R,modified,2021-12-02,,,90.0,7967,41.983897,-87.918352,41.9839,-87.889051,,https://ops.group/blog/whats-happening-at-ohare/
+ORD,27L,modified,2021-12-02,,,270.0,7967,41.9839,-87.889051,41.983897,-87.918352,,https://ops.group/blog/whats-happening-at-ohare/
+JFK,04L,modified,2015-08-20,,,30.7,11351,40.622018,-73.785585,40.648791,-73.764667,,https://www.ny1.com/nyc/queens/news/2015/09/28/port-authority-reopens-runway-at-jfk-after-makeover
+JFK,22R,modified,2015-08-20,,,210.7,11351,40.648791,-73.764667,40.622018,-73.785585,,https://www.ny1.com/nyc/queens/news/2015/09/28/port-authority-reopens-runway-at-jfk-after-makeover
+PHL,09R,modified,2017-06-22,,,75.4,10506,39.86081,-75.275194,39.868042,-75.238964,,https://6abc.com/travel/phl-unveils-runway-expansion/5696597/
+PHL,27L,modified,2017-06-22,,,255.4,10506,39.868042,-75.238964,39.86081,-75.275194,,https://6abc.com/travel/phl-unveils-runway-expansion/5696597/
+MSY,02,renamed,2015-10-15,,01,,,,,,,,https://www.faa.gov/aero_docs/acifp/NDBR/2014071123400902001-MSY-NDBR/LA_NEW%20ORLEANS_MSY_TAKEOFF_AMDT%202.pdf
+MSY,20,renamed,2015-10-15,,19,,,,,,,,https://www.faa.gov/aero_docs/acifp/NDBR/2014071123400902001-MSY-NDBR/LA_NEW%20ORLEANS_MSY_TAKEOFF_AMDT%202.pdf
+MSY,11,renamed,2015-10-15,,10,,,,,,,,https://www.faa.gov/aero_docs/acifp/NDBR/2014071123400902001-MSY-NDBR/LA_NEW%20ORLEANS_MSY_TAKEOFF_AMDT%202.pdf
+MSY,29,renamed,2015-10-15,,28,,,,,,,,https://www.faa.gov/aero_docs/acifp/NDBR/2014071123400902001-MSY-NDBR/LA_NEW%20ORLEANS_MSY_TAKEOFF_AMDT%202.pdf
+HOU,13R,renamed,2016-12-08,,12R,,,,,,,,"FAA NASR, cycle 2016-11-10 or 2016-12-08 (Wayback AirNav 20161106 vs 20161214)"
+HOU,31L,renamed,2016-12-08,,30L,,,,,,,,"FAA NASR, cycle 2016-11-10 or 2016-12-08 (Wayback AirNav 20161106 vs 20161214)"
+HOU,13L,renamed,2016-12-08,,12L,,,,,,,,"FAA NASR, cycle 2016-11-10 or 2016-12-08 (Wayback AirNav 20161106 vs 20161214)"
+HOU,31R,renamed,2016-12-08,,30R,,,,,,,,"FAA NASR, cycle 2016-11-10 or 2016-12-08 (Wayback AirNav 20161106 vs 20161214)"
+SAT,13R,renamed,2017-03-30,,12R,,,,,,,,"FAA NASR, between cycles 2016-11-10 and 2017-03-30 (Wayback AirNav 20161223 vs 20170409)"
+SAT,31L,renamed,2017-03-30,,30L,,,,,,,,"FAA NASR, between cycles 2016-11-10 and 2017-03-30 (Wayback AirNav 20161223 vs 20170409)"
+SAT,13L,renamed,2017-03-30,,12L,,,,,,,,"FAA NASR, between cycles 2016-11-10 and 2017-03-30 (Wayback AirNav 20161223 vs 20170409)"
+SAT,31R,renamed,2017-03-30,,30R,,,,,,,,"FAA NASR, between cycles 2016-11-10 and 2017-03-30 (Wayback AirNav 20161223 vs 20170409)"
+LAS,08L,renamed,2017-08-16,,07L,,,,,,,,https://laartcc.org/airport/KLAS
+LAS,26R,renamed,2017-08-16,,25R,,,,,,,,https://laartcc.org/airport/KLAS
+LAS,08R,renamed,2017-08-16,,07R,,,,,,,,https://laartcc.org/airport/KLAS
+LAS,26L,renamed,2017-08-16,,25L,,,,,,,,https://laartcc.org/airport/KLAS
+SMF,17L,renamed,2020-05-21,,16L,,,,,,,,https://forums.radioreference.com/threads/smf-runway-heading-changes.407079/
+SMF,35R,renamed,2020-05-21,,34R,,,,,,,,https://forums.radioreference.com/threads/smf-runway-heading-changes.407079/
+SMF,17R,renamed,2020-05-21,,16R,,,,,,,,https://forums.radioreference.com/threads/smf-runway-heading-changes.407079/
+SMF,35L,renamed,2020-05-21,,34L,,,,,,,,https://forums.radioreference.com/threads/smf-runway-heading-changes.407079/
+AUS,18R,renamed,2021-04-22,,17R,,,,,,,,FAA NASR (Wayback AirNav 20210421 vs 20210515)
+AUS,36L,renamed,2021-04-22,,35L,,,,,,,,FAA NASR (Wayback AirNav 20210421 vs 20210515)
+AUS,18L,renamed,2021-07-15,,17L,,,,,,,,https://www.ainonline.com/aviation-news/business-aviation/2020-07-31/austin-bergstrom-intl-sees-secondary-runway-closure (day unverified)
+AUS,36R,renamed,2021-07-15,,35R,,,,,,,,https://www.ainonline.com/aviation-news/business-aviation/2020-07-31/austin-bergstrom-intl-sees-secondary-runway-closure (day unverified)
+MDW,13L,renamed,2025-06-12,,13C,,,,,,,,https://www.ainonline.com/aviation-news/air-transport/2025-06-02/chicago-midway-decommissioning-closed-runway-13l-31r
+MDW,31R,renamed,2025-06-12,,31C,,,,,,,,https://www.ainonline.com/aviation-news/air-transport/2025-06-02/chicago-midway-decommissioning-closed-runway-13l-31r
+CLT,01L,renamed,2026-05-14,,18R,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+CLT,19R,renamed,2026-05-14,,36L,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+CLT,01R,renamed,2026-07-09,,18C,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+CLT,19L,renamed,2026-07-09,,36C,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+CLT,18,renamed,2026-09-03,,18L,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+CLT,36,renamed,2026-09-03,,36R,,,,,,,,https://www.cltairport.com/news/stories/item/airfield-redesignation-continues/
+LAS,07L,temp_closed,2014-11-01,2015-04-22,,,,,,,,closed for construction,https://nbaa.org/?p=20059 (reopening day unverified)
+LAS,25R,temp_closed,2014-11-01,2015-04-22,,,,,,,,closed for construction,https://nbaa.org/?p=20059 (reopening day unverified)
+LAS,07L,temp_closed,2015-10-28,2016-04-22,,,,,,,,closed for construction,https://nbaa.org/?p=20128
+LAS,25R,temp_closed,2015-10-28,2016-04-22,,,,,,,,closed for construction,https://nbaa.org/?p=20128
+JFK,04L,temp_closed,2015-04-10,2015-09-28,,,,,,,,closed for construction,https://www.ny1.com/nyc/queens/news/2015/09/28/port-authority-reopens-runway-at-jfk-after-makeover
+JFK,22R,temp_closed,2015-04-10,2015-09-28,,,,,,,,closed for construction,https://www.ny1.com/nyc/queens/news/2015/09/28/port-authority-reopens-runway-at-jfk-after-makeover
+SEA,16C,temp_closed,2015-05-04,2015-11-15,,,,,,,,closed for construction,"https://www.portseattle.org/news/sea-tac-airports-center-runway-close-reconstruction (reopening mid-Nov, day unverified)"
+SEA,34C,temp_closed,2015-05-04,2015-11-15,,,,,,,,closed for construction,"https://www.portseattle.org/news/sea-tac-airports-center-runway-close-reconstruction (reopening mid-Nov, day unverified)"
+DEN,17L,temp_closed,2015-06-01,2015-09-15,,,,,,,,closed for construction,https://www.airport-technology.com/?p=14136 (planned dates)
+DEN,35R,temp_closed,2015-06-01,2015-09-15,,,,,,,,closed for construction,https://www.airport-technology.com/?p=14136 (planned dates)
+LAX,06L,temp_closed,2015-06-29,2015-10-19,,,,,,,,closed for construction,https://www.lawa.org/news-releases/2015/news-release-63 (planned dates)
+LAX,24R,temp_closed,2015-06-29,2015-10-19,,,,,,,,closed for construction,https://www.lawa.org/news-releases/2015/news-release-63 (planned dates)
+SAT,13L,temp_closed,2021-06-01,2024-06-10,,,,,,,,closed for construction,https://www.faasafety.gov/spans/noticeView.aspx?nid=13683 (closure start approximate)
+SAT,31R,temp_closed,2021-06-01,2024-06-10,,,,,,,,closed for construction,https://www.faasafety.gov/spans/noticeView.aspx?nid=13683 (closure start approximate)
+SFO,28L,temp_closed,2024-01-18,2024-06-21,,,,,,,,closed for construction,https://sfstandard.com/2024/06/04/sfo-airport-delays-soon-over-works-finish-early/
+HOU,04,temp_closed,2024-05-01,2024-12-23,,,,,,,,closed for construction,https://www.fly2houston.com/airport-business/newsroom/press-releases/item/runway-4-22-reopens-at-hobby-airport-as-safety-improvement-project-progresses/ (start month only)
+HOU,22,temp_closed,2024-05-01,2024-12-23,,,,,,,,closed for construction,https://www.fly2houston.com/airport-business/newsroom/press-releases/item/runway-4-22-reopens-at-hobby-airport-as-safety-improvement-project-progresses/ (start month only)
+MSP,12L,temp_closed,2024-06-03,2024-09-30,,,,,,,,closed for construction,https://metroairports.org/news/runway-construction-will-impact-msp-airport-flight-patterns (reopening late Sep)
+MSP,30R,temp_closed,2024-06-03,2024-09-30,,,,,,,,closed for construction,https://metroairports.org/news/runway-construction-will-impact-msp-airport-flight-patterns (reopening late Sep)
+MSP,04,temp_closed,2024-06-03,2024-09-30,,,,,,,,closed for construction,https://metroairports.org/news/runway-construction-will-impact-msp-airport-flight-patterns (reopening late Sep)
+MSP,22,temp_closed,2024-06-03,2024-09-30,,,,,,,,closed for construction,https://metroairports.org/news/runway-construction-will-impact-msp-airport-flight-patterns (reopening late Sep)
+DAL,13L,temp_closed,2024-08-05,2024-10-29,,,,,,,,closed for construction,https://www.fox4news.com/news/dallas-love-field-runway-closes-safety-upgrades
+DAL,31R,temp_closed,2024-08-05,2024-10-29,,,,,,,,closed for construction,https://www.fox4news.com/news/dallas-love-field-runway-closes-safety-upgrades
+ORD,32L,temp_closed,2000-01-01,2016-09-15,,,,,,,,closed to arrivals,FAA NASR 2015: RY 32L CLSD TO ARRIVALS

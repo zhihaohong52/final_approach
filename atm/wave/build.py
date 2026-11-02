@@ -284,19 +284,58 @@ def _weather_summary(m: Metar | None) -> str:
 
 # ---------------------------------------------------------------- runways / gates
 
-def _runways(iata: str) -> list[Runway]:
+def _runway_history() -> dict[str, list[dict]]:
+    """runway_history.csv: runway ends that opened or closed after the OurAirports snapshot's past.
+    `opened` hides an end before its date; `closed` adds an end (with its own geometry) before its date."""
+    def load():
+        p = REF / "runway_history.csv"
+        out: dict[str, list[dict]] = {}
+        if p.exists():
+            with open(p, newline="") as f:
+                for r in csv.DictReader(f):
+                    out.setdefault(r["airport"], []).append(r)
+        return out
+    return _cached("runway_history", load)
+
+
+_GEO = ("heading_true", "length_ft", "le_lat", "le_lon", "he_lat", "he_lon")
+
+
+def _runways(iata: str, date: str | None = None) -> list[Runway]:
+    """Runway ends at `iata` as they were on `date` (YYYY-MM-DD; None: today's layout).
+
+    runways.csv is today's layout; runway_history.csv winds it back: `opened` runways are removed
+    before their date, `closed` ones added back with their own geometry, `modified` ones get their
+    earlier geometry, `renamed` ones their earlier designator, and `temp_closed` ones are marked
+    closed between `date` and `until`."""
     df = _runways_by_airport().get(iata)
     out = []
     if df is None:
         return out
+    rows = df.to_dict("records")
+    shut: dict[str, str] = {}
+    if date:
+        hist = _runway_history().get(iata, [])
+        later = lambda e: [h for h in hist if h["event"] == e and date < h["date"]]
+        rid = lambda r: str(r["runway"]).strip()
+        not_yet = {h["runway"] for h in later("opened")}
+        rows = [r for r in rows if rid(r) not in not_yet]
+        for h in later("modified"):
+            rows = [{**r, **{k: h[k] for k in _GEO}} if rid(r) == h["runway"] else r for r in rows]
+        for h in sorted(later("renamed"), key=lambda h: h["date"], reverse=True):   # undo the newest first
+            rows = [{**r, "runway": h["old_id"]} if rid(r) == h["runway"] else r for r in rows]
+        rows += later("closed")
+        shut = {h["runway"]: h["reason"] or "closed" for h in hist
+                if h["event"] == "temp_closed" and h["date"] <= date < h["until"]}
     seen = set()
-    for r in df.to_dict("records"):
+    for r in rows:
         rid = str(r["runway"]).strip()
         if rid in seen:
             continue
         seen.add(rid)
         out.append(Runway(id=rid, heading_true=float(r["heading_true"]),
                           length_ft=int(_num(r.get("length_ft"), 0) or 0),
+                          open=rid not in shut, closed_reason=shut.get(rid),
                           le_lat=_num(r.get("le_lat")), le_lon=_num(r.get("le_lon")),
                           he_lat=_num(r.get("he_lat")), he_lon=_num(r.get("he_lon"))))
     return out
@@ -306,9 +345,9 @@ def _close_unsafe(runways: list[Runway], rwinds: list) -> None:
     """Close runways outside FAA 8400.9 limits for a LARGE jet (aircraft_type=None)."""
     by_id = {r.id: r for r in runways}
     for rw in rwinds:
-        if rw.within_limits:
-            continue
         r = by_id[rw.runway]
+        if rw.within_limits or not r.open:          # already closed (construction): keep that reason
+            continue
         r.open = False
         if rw.crosswind_kt > rw.limit_crosswind_kt:
             r.closed_reason = (f"crosswind {rw.crosswind_kt:g} kt > {rw.limit_crosswind_kt:g} kt "
@@ -465,7 +504,7 @@ def build_wave(wave_id: str) -> Wave:
     dis_cs = {c for c in str(row["disrupted_flights"]).split(";") if c}
     neg, rest = _select(w, dis_cs)
 
-    runways = _runways(iata)
+    runways = _runways(iata, date)
     metar = _metar_for(iata, date, hour)
     _close_unsafe(runways, wind.runway_wind(metar, runways))
     rwinds = wind.runway_wind(metar, runways)
