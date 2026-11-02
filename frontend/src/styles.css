@@ -307,6 +307,7 @@ tr.focus td:first-child { box-shadow: inset 2px 0 0 var(--hue); padding-left: 10
   :root { --pad: 16px; --card-pad: 16px; --gap: 16px; --fs-title: 21px; --fs-kpi: 18px; --fs-body: 14px; }
   .bar-inner { gap: 16px; }
   .brand span, .scope { display: none; }
+  .topnav { gap: 18px; }
   .titlerow { flex-direction: column; gap: 14px; }
   .actions { width: 100%; }
   .actions .btn { flex: 1; height: 44px; }
