@@ -47,3 +47,10 @@ def test_timings_percentiles():
     assert db_timings.pct([5.0], 95) == 5.0
     assert db_timings.pct(list(map(float, range(1, 21))), 50) == 10.0
     assert db_timings.pct(list(map(float, range(1, 21))), 95) == 19.0
+
+
+def test_geo_migration_tables():
+    sql = (M / "0005_geo.sql").read_text()
+    for t in ("procedures", "fixes", "surface", "stands", "osm_gates", "holding_positions", "movements2015_day", "coverage"):
+        assert f"create table geo.{t}" in sql
+    assert "using gist" in sql

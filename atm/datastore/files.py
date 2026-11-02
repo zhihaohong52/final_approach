@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import pack
 from .base import StoreStatus
 from .datasets import (ARRIVALS_KWARGS, DATASETS, FLIGHTS2015_DAY_KWARGS, WAVES, WORKBOOK, CH2)
 
@@ -57,6 +58,21 @@ def _arrivals(iata: str):
     for c in ("date", "carrier", "origin", "tail"):
         df[c] = df[c].astype("category")
     return df, df.groupby("date", observed=True).indices
+
+
+REF = ROOT / "data/ref"
+_MOVEMENT_DATE_COLS = ("date", "FL_DATE", "fl_date")
+
+
+@functools.lru_cache(maxsize=4)
+def _movements(iata: str) -> tuple[pd.DataFrame | None, str | None]:
+    """(all rows as text, date column name) of one airport's data/ref/movements2015 file."""
+    p = REF / "movements2015" / f"{iata}.csv.gz"
+    if not p.exists():
+        return None, None
+    df = pd.read_csv(p, dtype=str, keep_default_na=False)
+    col = next((c for c in _MOVEMENT_DATE_COLS if c in df.columns), None)
+    return df, col
 
 
 @functools.lru_cache(maxsize=2)
@@ -141,6 +157,26 @@ class FileStore:
         df, groups = _arrivals(iata)
         pos = groups.get(date)
         return None if pos is None else df.iloc[pos]
+
+    # ------------------------------------------------------------ geometry (empty until the flight-path M0)
+
+    def procedures(self, icao: str) -> bytes | None:
+        return self._ref_blob("procedures", icao)
+
+    def surface(self, icao: str) -> bytes | None:
+        return self._ref_blob("surface", icao)
+
+    @staticmethod
+    def _ref_blob(kind: str, icao: str) -> bytes | None:
+        p = REF / kind / f"{icao.upper()}.json.gz"
+        return p.read_bytes() if p.is_file() else None
+
+    def movements_day(self, iata: str, date: str) -> bytes | None:
+        df, col = _movements(iata.upper())
+        if df is None or col is None:
+            return None
+        sub = df[df[col] == date]
+        return None if sub.empty else pack.gzip_csv(sub)
 
     def metar_2024_rows(self, iata: str) -> list[dict[str, str]]:
         with open(DATASETS["metar_2024"].path, newline="") as f:

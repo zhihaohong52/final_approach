@@ -98,3 +98,8 @@ def test_iem_put_none_writes_nothing(tmp_path):
     s.iem_put("ORD", "2015-08-19", None)
     assert s.iem_get("ORD", "2015-08-19") is None
     assert not (tmp_path / "iem").exists()
+
+
+def test_geo_methods_none_before_m0():
+    s = FileStore()
+    assert s.procedures("KXXX") is None and s.surface("KXXX") is None and s.movements_day("XXX", "2015-01-01") is None

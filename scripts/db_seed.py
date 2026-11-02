@@ -563,6 +563,170 @@ def _load_raw(conn, budget_mb: int = 750) -> int:
                 raise OverBudget(f"database is {used / 1048576:.0f} MB, budget {budget_mb} MB")
     return total
 
+# ------------------------------------------------------------------ geometry (empty until the flight-path M0)
+
+REF = ROOT / "data/ref"
+_GIST = "create index on {t} using gist (geog)"
+_GEO_INDEXES: dict[str, list[str]] = {
+    "geo.procedures": ["alter table {t} add primary key (icao)"],
+    "geo.fixes": ["alter table {t} add primary key (icao, ident)"],
+    "geo.surface": ["alter table {t} add primary key (icao)"],
+    "geo.stands": ["alter table {t} add primary key (icao, id)", _GIST],
+    "geo.osm_gates": ["alter table {t} add primary key (icao, ref)", _GIST],
+    "geo.holding_positions": ["alter table {t} add primary key (icao, node)"],
+    "geo.movements2015_day": ["alter table {t} add primary key (airport, date)"],
+    "geo.coverage": ["alter table {t} add primary key (iata)"],
+}
+
+
+def _geo_swap(conn, table: str, columns: list[str], lines: Iterable[str]) -> int:
+    return swap_load(conn, table, columns, lines, [s.format(t=f"{table}__new") for s in _GEO_INDEXES[table]])
+
+
+def _point(lat, lon) -> str | None:
+    """EWKT for a geography point (lon first), or None when the coordinates are missing."""
+    if lat is None or lon is None:
+        return None
+    return f"SRID=4326;POINT({float(lon)!r} {float(lat)!r})"
+
+
+def _ref_docs(kind: str) -> list[Path]:
+    return sorted((REF / kind).glob("*.json.gz"))
+
+
+def _doc_lines(kind: str, make: Callable[[str, bytes, dict], Iterable[list]], text: list[bool]) -> Iterable[str]:
+    """For each committed doc: its ICAO (file stem), the gzip bytes as committed, and the decoded JSON."""
+    import gzip
+    for p in _ref_docs(kind):
+        blob = p.read_bytes()
+        icao = p.name.split(".")[0]
+        for vals in make(icao, blob, json.loads(gzip.decompress(blob))):
+            yield _pg_line(vals, text)
+
+
+def _hex(blob: bytes) -> str:
+    return "\\x" + blob.hex()
+
+
+def _procedure_row(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    h = doc.get("header", {})
+    yield [icao, str(h.get("cycle", "")), str(h.get("tier", "none")), _hex(blob), hashlib.sha256(blob).hexdigest()]
+
+
+def _fix_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    for ident, ll in sorted((doc.get("fixes") or {}).items()):
+        if ll:
+            yield [icao, ident, _point(ll[0], ll[1])]
+
+
+def _surface_row(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    reach = (doc.get("quality") or {}).get("reach_pct")
+    ts = (doc.get("header") or {}).get("osm_timestamp")
+    yield [icao, None if ts is None else str(ts), _hex(blob), hashlib.sha256(blob).hexdigest(),
+           None if reach is None else json.dumps(reach)]
+
+
+def _stand_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    seen = set()
+    for st in doc.get("stands") or []:
+        sid = str(st["id"])
+        if sid not in seen:
+            seen.add(sid)
+            yield [icao, sid, None if st.get("ref") is None else str(st["ref"]),
+                   None if st.get("node") is None else str(st["node"]), _point(st.get("lat"), st.get("lon"))]
+
+
+def _gate_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    seen = set()
+    for g in doc.get("gates") or []:
+        ref = g.get("ref")
+        if ref is not None and str(ref) not in seen:
+            seen.add(str(ref))
+            yield [icao, str(ref), _point(g.get("lat"), g.get("lon"))]
+
+
+def _hold_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
+    nodes = doc.get("nodes") or []
+    seen = set()
+    for h in doc.get("holding_positions") or []:
+        n = h.get("node")
+        if n is None or n in seen:
+            continue
+        seen.add(n)
+        ll = nodes[n] if 0 <= n < len(nodes) else None
+        yield [icao, str(n), h.get("strip"), None if ll is None else _point(ll[0], ll[1])]
+
+
+def _load_procedures(conn) -> int:
+    if not _ref_docs("procedures"):
+        print("procedures: no files yet")
+        return 0
+    n = _geo_swap(conn, "geo.procedures", ["icao", "cycle", "tier", "doc", "sha256"],
+                  _doc_lines("procedures", _procedure_row, [True, True, True, False, True]))
+    _geo_swap(conn, "geo.fixes", ["icao", "ident", "geog"], _doc_lines("procedures", _fix_rows, [True, True, False]))
+    return n
+
+
+def _load_surface(conn) -> int:
+    if not _ref_docs("surface"):
+        print("surface: no files yet")
+        return 0
+    n = _geo_swap(conn, "geo.surface", ["icao", "osm_timestamp", "doc", "sha256", "reach_pct"],
+                  _doc_lines("surface", _surface_row, [True, True, False, True, True]))
+    _geo_swap(conn, "geo.stands", ["icao", "id", "ref", "node", "geog"],
+              _doc_lines("surface", _stand_rows, [True, True, True, False, False]))
+    _geo_swap(conn, "geo.osm_gates", ["icao", "ref", "geog"], _doc_lines("surface", _gate_rows, [True, True, False]))
+    _geo_swap(conn, "geo.holding_positions", ["icao", "node", "strip", "geog"],
+              _doc_lines("surface", _hold_rows, [True, False, True, False]))
+    return n
+
+
+def _files_movements() -> list[Path]:
+    return sorted((REF / "movements2015").glob("*.csv.gz"))
+
+
+def _movements_lines() -> Iterable[str]:
+    """One gzip CSV per (airport, date), the file's rows and columns kept as text."""
+    import pandas as pd
+    for p in _files_movements():
+        airport = p.name.split(".")[0]
+        df = pd.read_csv(p, dtype=str, keep_default_na=False)
+        col = next((c for c in ("date", "FL_DATE", "fl_date") if c in df.columns), None)
+        if col is None:
+            raise ValueError(f"{p.name}: no date column")
+        for (date,), sub in pack.split_by(df, [col]):
+            blob = pack.gzip_csv(sub)
+            yield _pg_line([airport, date, str(len(sub)), _hex(blob), hashlib.sha256(blob).hexdigest()],
+                           [True, False, False, False, True])
+
+
+def _load_movements(conn) -> int:
+    if not _files_movements():
+        print("movements2015: no files yet")
+        return 0
+    return _geo_swap(conn, "geo.movements2015_day", ["airport", "date", "n_rows", "payload", "sha256"],
+                     _movements_lines())
+
+
+def _files_coverage() -> list[Path]:
+    p = ROOT / "scripts/geo_coverage.py"
+    return [p] if p.exists() else []
+
+
+def _load_coverage(conn) -> int:
+    try:
+        from scripts import geo_coverage
+    except ImportError:
+        print("coverage: no files yet")
+        return 0
+    rows = geo_coverage.coverage()
+    lines = [_pg_line([r["iata"], r.get("icao"), r.get("procedures_tier"), r.get("surface_tier"),
+                       None if r.get("stands") is None else str(r["stands"]),
+                       None if r.get("movements") is None else ("t" if r["movements"] else "f")],
+                      [True, True, True, True, False, False]) for r in rows]
+    return _geo_swap(conn, "geo.coverage", ["iata", "icao", "procedures_tier", "surface_tier", "stands", "movements"],
+                     lines)
+
 
 SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("small", _files_small, _load_small),
@@ -577,6 +741,10 @@ SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("runs_import", _run_files, _load_runs),
     Seeder("benchmark", _benchmark_files, _load_benchmark),
     Seeder("v1_eval", lambda: sorted(_V1.values()), _load_v1_eval),
+    Seeder("procedures", lambda: _ref_docs("procedures"), _load_procedures),
+    Seeder("surface", lambda: _ref_docs("surface"), _load_surface),
+    Seeder("movements2015", _files_movements, _load_movements),
+    Seeder("coverage", _files_coverage, _load_coverage),
     Seeder("raw", _files_raw, _load_raw, budget_aware=True),
 ]}
 

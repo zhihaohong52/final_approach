@@ -289,6 +289,21 @@ class PgStore:
         self._arrivals.put(key, df)
         return None if df is None else df.copy()
 
+    def procedures(self, icao: str) -> bytes | None:
+        return self._geo_blob("select doc from geo.procedures where icao = %s", (icao.upper(),))
+
+    def surface(self, icao: str) -> bytes | None:
+        return self._geo_blob("select doc from geo.surface where icao = %s", (icao.upper(),))
+
+    def movements_day(self, iata: str, date: str) -> bytes | None:
+        return self._geo_blob("select payload from geo.movements2015_day where airport = %s and date = %s::date",
+                              (iata.upper(), date))
+
+    def _geo_blob(self, sql: str, params: tuple) -> bytes | None:
+        with self._conn() as conn:
+            r = conn.execute(sql, params).fetchone()
+        return None if r is None else bytes(r[0])
+
     def metar_2024_rows(self, iata: str) -> list[dict[str, str]]:
         """Rows as strings. Real columns (drct, sknt, ...) are numerically equal to the file's text ("90" for
         "90.00"), not byte-identical; every reader parses them with float."""
