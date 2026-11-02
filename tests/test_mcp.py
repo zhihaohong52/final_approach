@@ -13,5 +13,5 @@ def test_tools_registered():
 def test_check_plan_tool_uses_engine(monkeypatch):
     w = fixtures.make_wave()
     monkeypatch.setattr(build, "build_wave", lambda wave_id: w)
-    res = mcp_server.check_plan(w.id, moves.fcfs_plan(w).to_dict())
+    res = asyncio.run(mcp_server.check_plan(w.id, moves.fcfs_plan(w).to_dict()))   # tools are async (thread-offloaded)
     assert "feasible" in res

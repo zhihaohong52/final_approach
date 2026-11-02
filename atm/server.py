@@ -60,6 +60,7 @@ async def _lifespan(_app: FastAPI):
     if isinstance(store, FileStore):   # under Postgres the warmer would query at startup (design 8.3)
         _warm()
     yield
+    await asyncio.to_thread(_wait_saves, SAVE_DRAIN_S)   # let in-flight run saves finish before the pool closes
     close = getattr(getattr(get_store(), "primary", None), "close", None)
     if close is not None:
         close()
@@ -142,9 +143,10 @@ def decision(body: dict = Body(...)):
             return _err(422, "note_required", "a note is required to OVERRIDE")
         now = datetime.now(timezone.utc).isoformat()
         edits = body.get("edits") if isinstance(body.get("edits"), list) else []
-        stored = get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
-                                              "edits": edits, "recorded_at": now, "ts": time.time()})
-        persisted = bool(stored) and get_store().status().persistent
+        store = get_store()
+        stored = store.record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
+                                        "edits": edits, "recorded_at": now, "ts": time.time()})
+        persisted = bool(stored) and _decision_persisted(store)
         if not stored:
             log.warning("decision for run %s was not persisted", body["run_id"])
         return {"ok": True, "recorded_at": now, "persisted": persisted}
@@ -152,9 +154,24 @@ def decision(body: dict = Body(...)):
         d = Decision(**body)
     except Exception as e:  # pydantic ValidationError -> same 422 shape FastAPI used
         raise HTTPException(422, detail=json.loads(e.json()) if hasattr(e, "json") else str(e))
+    # same rules as v2 (and the live.decisions check constraints): a bad body is a 422, never a database error
+    if d.decision not in ("APPROVE", "OVERRIDE"):
+        raise HTTPException(422, detail="decision must be APPROVE or OVERRIDE")
+    d.note = d.note.strip()
+    if d.decision == "OVERRIDE" and not d.note:
+        raise HTTPException(422, detail="a note is required to OVERRIDE")
     if not get_store().record_decision({**d.model_dump(), "ts": time.time()}):
         log.warning("v1 decision for flight %s was not persisted", d.flight_id)
     return {"ok": True}
+
+
+def _decision_persisted(store) -> bool:
+    """Whether THIS call's record_decision landed durably: a FallbackStore reports per thread where the last write
+    went (the global status may reflect another request); a plain store reports its own persistence."""
+    went_secondary = getattr(store, "wrote_to_secondary", None)
+    if went_secondary is not None:
+        return not went_secondary("record_decision")
+    return store.status().persistent
 
 
 @app.get("/api/eval")
@@ -361,6 +378,17 @@ def _rate_limited(ip: str) -> int | None:
     return None
 
 
+SAVE_DRAIN_S = 5.0
+_SAVES = {"n": 0}                       # save_run threads in flight
+_SAVES_CV = threading.Condition()
+
+
+def _wait_saves(timeout: float) -> bool:
+    """Block until no save_run thread is in flight, at most `timeout` s. True if drained."""
+    with _SAVES_CV:
+        return _SAVES_CV.wait_for(lambda: _SAVES["n"] == 0, timeout)
+
+
 def _save_run(result: dict) -> None:
     RUNS[result["run_id"]] = result
     RUNS.move_to_end(result["run_id"])
@@ -372,8 +400,14 @@ def _save_run(result: dict) -> None:
         except Exception:  # noqa: BLE001 - storage must never break finish()
             log.exception("run %s: save_run raised", result["run_id"])
             return
+        finally:
+            with _SAVES_CV:
+                _SAVES["n"] -= 1
+                _SAVES_CV.notify_all()
         if not ok:
             log.warning("run %s was not persisted", result["run_id"])
+    with _SAVES_CV:
+        _SAVES["n"] += 1
     threading.Thread(target=persist, daemon=True).start()
 
 
@@ -428,25 +462,36 @@ def _f2015_summary(w: dict, replay_available: bool = False) -> dict:
 
 
 _REPLAY_SUMMARIES: list[dict] | None = None
+_REPLAY_SUMMARIES_LOCK = threading.Lock()
 
 
 def _replay_summaries() -> list[dict]:
-    """flights.csv rows with a recorded run (the demo set), built once."""
+    """flights.csv rows with a recorded run (the demo set), built once (concurrent first requests wait for one
+    build), with one pooled connection for all of its store reads."""
     global _REPLAY_SUMMARIES
-    if _REPLAY_SUMMARIES is None:
-        out = []
-        for wid in sorted(i for i in _replay_ids(live=True) if i.startswith("F2015-")):
-            try:
-                out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
-            except (KeyError, ValueError):
-                continue
-        _REPLAY_SUMMARIES = out
+    if _REPLAY_SUMMARIES is not None:
+        return _REPLAY_SUMMARIES
+    with _REPLAY_SUMMARIES_LOCK:
+        if _REPLAY_SUMMARIES is None:
+            out = []
+            with get_store().session():
+                for wid in sorted(i for i in _replay_ids(live=True) if i.startswith("F2015-")):
+                    try:
+                        out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
+                    except (KeyError, ValueError):
+                        continue
+            _REPLAY_SUMMARIES = out
     return _REPLAY_SUMMARIES
 
 
 @app.get("/api/waves/random")
 def waves_random(airport: str | None = None, source: str = "flights2015"):
     """Random challenge input: a random flights.csv row (default), or a BTS 2024 wave with source=bts."""
+    with get_store().session():   # one pooled connection for the search and the wave builds
+        return _waves_random(airport, source)
+
+
+def _waves_random(airport: str | None, source: str):
     if source == "bts":
         try:
             return WB.random_wave(airport=airport)
@@ -531,7 +576,7 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
         try:
             if not re.fullmatch(r"[A-Za-z0-9_.-]+", wave_id):
                 raise FileNotFoundError(wave_id)
-            rec = replay.load(wave_id)
+            rec = await asyncio.to_thread(replay.load, wave_id)   # store I/O: never on the event loop
         except (FileNotFoundError, ValueError):
             rec = None  # no recording for this wave: negotiate it live instead of failing the demo
     if rec is not None:
@@ -568,7 +613,7 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
     if retry is not None:
         return _err(429, "rate_limited", f"limit of {RATE_LIMIT} live negotiations per {RATE_WINDOW_S // 60} min reached",
                     retry_after_s=retry)
-    chain = _model_chain(mode, model)
+    chain = await asyncio.to_thread(_model_chain, mode, model)   # reads the benchmark from the store
     meta = {"run_id": run_id, "wave_id": wave_id, "mode": mode, "model_chain": [_model_id(e) for e in chain],
             "started_at": started_at}
 
