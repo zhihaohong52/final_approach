@@ -5,7 +5,7 @@ one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -48,8 +48,9 @@ interface Provenance {
 | GET | `/api/flights?airport=ATL&q=DL123&limit=50&offset=0` | `{ flights: FlightRow[]; total: number }` (rows of the 2015 challenge flights.csv) |
 | GET | `/api/wave/{wave_id}` | `WaveScenario` (`wave_id` may be a BTS wave id or `"F2015-<row_id>"`) |
 | POST | `/api/negotiate-wave` | SSE stream of `NegotiationEvent` (or `NegotiationResult` with `stream:false`) |
+| GET | `/api/runs?wave_id=ATL-2024-07-15-16&limit=20` | `{ runs: RunListItem[] }` (v2.1.1; newest first, `limit` 1..100, 422 `invalid_request` without `wave_id`) |
 | GET | `/api/runs/{run_id}` | `NegotiationResult` (with full `log`) |
-| POST | `/api/decision` | `{ ok: true, recorded_at: string }` |
+| POST | `/api/decision` | `{ ok: true, recorded_at: string, persisted?: boolean }` |
 | GET | `/api/benchmark` | `BenchmarkReport` (404 until generated) |
 | GET | `/api/eval` | v1 single-flight eval (legacy shape; not used by the React app) |
 | GET | `/mcp` | MCP server (not used by the frontend) |
@@ -71,6 +72,13 @@ interface Config {
   llm_available: boolean;              // Claude narration available
   tracing: boolean;                    // LangSmith on
   replay_available: boolean;           // pre-recorded waves exist
+  store?: StoreStatus;                 // v2.1.1: where runs and decisions are kept
+}
+interface StoreStatus {
+  backend: "postgres" | "files";
+  degraded: boolean;                   // true when Postgres is configured but unreachable (files in use)
+  reason?: string | null;
+  persistent: boolean;                 // false: runs and decisions are only in memory or on ephemeral disk
 }
 type Mode = "formulas" | "decision" | "decision+claude";
 interface ModelInfo {
@@ -407,11 +415,22 @@ the same turn. Otherwise the best CHECK-passed plan of the turn becomes the next
 challenge workbook (`data/challenge2/challenge2_operational_constraints.xlsx`); every limit kept,
 changed or added is listed in `NegotiationResult.limits`.
 
+### GET /api/runs?wave_id=
+
+```ts
+interface RunListItem {
+  run_id: string; wave_id: string; mode: Mode; model: string; outcome: string; created_at: string;
+  decided: boolean;                    // a duty manager decision was recorded for this run
+}
+// response: { runs: RunListItem[] }
+```
+
 ### POST /api/decision
 
 ```ts
 interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string;  // note required for OVERRIDE
   edits?: Assignment[] }   // flights the duty manager moved before approving (logged with the decision)
+// response: { ok: true; recorded_at: string; persisted?: boolean }   // v2.1.1; false when the decision was not saved durably
 ```
 
 ### POST /api/evaluate

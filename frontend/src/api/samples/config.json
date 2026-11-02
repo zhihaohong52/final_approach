@@ -54,5 +54,11 @@
   "default_model": "typesafe/jev-1.14",
   "llm_available": true,
   "tracing": false,
-  "replay_available": true
+  "replay_available": true,
+  "store": {
+    "backend": "files",
+    "degraded": false,
+    "reason": null,
+    "persistent": false
+  }
 }

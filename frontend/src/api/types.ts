@@ -22,6 +22,13 @@ export interface Config {
   llm_available: boolean;              // Claude narration available
   tracing: boolean;                    // LangSmith on
   replay_available: boolean;           // pre-recorded waves exist
+  store?: StoreStatus;                 // v2.1.1: where runs and decisions are kept
+}
+export interface StoreStatus {
+  backend: "postgres" | "files";
+  degraded: boolean;                   // true when Postgres is configured but unreachable (files in use)
+  reason?: string | null;
+  persistent: boolean;                 // false: runs and decisions are only in memory or on ephemeral disk
 }
 export type Mode = "formulas" | "decision" | "decision+claude";
 export interface ModelInfo {
@@ -310,6 +317,13 @@ export interface Limit {
 
 export interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string;  // note required for OVERRIDE
   edits?: Assignment[] }   // flights the duty manager moved before approving (logged with the decision)
+
+export interface RunListItem {
+  run_id: string; wave_id: string; mode: Mode; model: string; outcome: string; created_at: string;
+  decided: boolean;                    // a duty manager decision was recorded for this run
+}
+
+export interface DecisionResponse { ok: true; recorded_at: string; persisted?: boolean }   // v2.1.1
 
 export interface BenchmarkReport {
   generated_at: string; n_waves: number; seed: number;

@@ -11,18 +11,8 @@ WID = "ATL-2024-07-15-16"
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    from atm import datastore
-    from atm.datastore.files import FileStore, FilePaths
-    monkeypatch.setattr(server, "WB", stub)
-    monkeypatch.setattr(server, "GR", stub)
-    datastore.set_store(FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "decisions.jsonl",
-                                            replay_dir=tmp_path / "replay", benchmark_path=tmp_path / "benchmark.json")))
-    monkeypatch.setattr(stub, "_REPLAY_DIR", tmp_path / "replay")
-    monkeypatch.setattr(server, "REPLAY_SPACING_S", 0)
-    server._RATE.clear(); server.RUNS.clear()
-    yield TestClient(server.app)
-    datastore.set_store(None)
+def client(api_client):
+    return api_client
 
 
 def _frames(text):

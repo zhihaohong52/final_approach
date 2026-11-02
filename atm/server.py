@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import baseline, decide, jev, negotiation, scenario
-from .datastore import get_store
+from .datastore import FileStore, get_store
 from .mcp_server import mcp_asgi_app
 from .wave import replay
 
@@ -38,17 +39,8 @@ WEB = ROOT / "web"
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="ATM disruption negotiation")
 
 
-def _summary(fid: int) -> dict:
-    f = scenario.disruptions().set_index("id").loc[fid]
-    return {"id": int(fid), "callsign": f"{f.carrier}{int(f.flight_no)}", "route": f"{f.origin}->{f.dest}",
-            "date": f"{int(f.year)}-{int(f.month):02d}-{int(f.day):02d}", "weather_delay": f.weather_delay,
-            "late_aircraft_delay": f.late_aircraft_delay}
-
-
-@app.on_event("startup")
 def _warm() -> None:
     """Load the flights.csv index and the demo list in the background so the first page load is fast."""
     def run():
@@ -62,26 +54,46 @@ def _warm() -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    store = get_store()   # opens the Postgres pool without waiting for a connection
+    if isinstance(store, FileStore):   # under Postgres the warmer would query at startup (design 8.3)
+        _warm()
+    yield
+    close = getattr(getattr(get_store(), "primary", None), "close", None)
+    if close is not None:
+        close()
+
+
+app = FastAPI(title="ATM disruption negotiation", lifespan=_lifespan)
+
+
+def _summary(fid: int) -> dict:
+    f = scenario.disruptions().set_index("id").loc[fid]
+    return {"id": int(fid), "callsign": f"{f.carrier}{int(f.flight_no)}", "route": f"{f.origin}->{f.dest}",
+            "date": f"{int(f.year)}-{int(f.month):02d}-{int(f.day):02d}", "weather_delay": f.weather_delay,
+            "late_aircraft_delay": f.late_aircraft_delay}
+
+
 @app.get("/api/config")
 def config():
-    # v1 keys (web/index.html) merged with the v2 Config contract.
-    try:  # v1 disruptions.csv is excluded from the Docker image (.dockerignore)
-        n_disruptions = len(scenario.disruptions())
-    except OSError:
-        n_disruptions = 0
+    # v1 keys (web/index.html) merged with the v2 Config contract. Unless the store is a FileStore this calls
+    # no store method except status(): the Render health check must never wake the database (design 8.3, 11).
     v1 = {"jev_available": jev.available(), "model": negotiation.MODEL,
-          "policies": ["rule", "jev", "jev+claude", "llm"], "n_disruptions": n_disruptions}
+          "policies": ["rule", "jev", "jev+claude", "llm"], "n_disruptions": _n_disruptions()}
     models, default_model = _models()
     return {**v1, "version": "2.0", "modes": MODES, "default_mode": _default_mode(), "models": models,
             "default_model": default_model,
             "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
             "tracing": bool(os.environ.get("LANGSMITH_API_KEY")),
-            "replay_available": bool(_file_view().replay_ids())}
+            "replay_available": bool(_replay_ids()),
+            "store": get_store().status().to_dict()}
 
 
 @app.get("/api/disruptions")
 def disruptions(q: str = "", limit: int = 50):
     df = scenario.disruptions()
+    _cache_put("n_disruptions", len(df))
     if q:
         q = q.upper()
         df = df[(df.dest == q) | (df.origin == q) | (df.carrier + df.flight_no.astype(str) == q)]
@@ -130,10 +142,12 @@ def decision(body: dict = Body(...)):
             return _err(422, "note_required", "a note is required to OVERRIDE")
         now = datetime.now(timezone.utc).isoformat()
         edits = body.get("edits") if isinstance(body.get("edits"), list) else []
-        if not get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
-                                            "edits": edits, "recorded_at": now, "ts": time.time()}):
+        stored = get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
+                                              "edits": edits, "recorded_at": now, "ts": time.time()})
+        persisted = bool(stored) and get_store().status().persistent
+        if not stored:
             log.warning("decision for run %s was not persisted", body["run_id"])
-        return {"ok": True, "recorded_at": now}
+        return {"ok": True, "recorded_at": now, "persisted": persisted}
     try:  # v1 behaviour, unchanged
         d = Decision(**body)
     except Exception as e:  # pydantic ValidationError -> same 422 shape FastAPI used
@@ -162,7 +176,7 @@ RUNS_MAX = 200
 RUNS: OrderedDict[str, dict] = OrderedDict()  # LRU; older runs are served from disk
 
 
-V2_PREFIXES = ("/api/waves", "/api/flights", "/api/wave/", "/api/negotiate-wave", "/api/runs/", "/api/benchmark")
+V2_PREFIXES = ("/api/waves", "/api/flights", "/api/wave/", "/api/negotiate-wave", "/api/runs", "/api/benchmark")
 
 
 @app.exception_handler(RequestValidationError)
@@ -208,8 +222,58 @@ def _file_view():
     return getattr(st, "secondary", st)
 
 
-def _benchmark() -> dict | None:
-    return _file_view().benchmark_current()
+# Store-derived values for /api/config, keyed by the store instance. Handlers that already read the store fill it;
+# until then config falls back to the file view. On a FileStore nothing is cached: values are re-read each call.
+_CACHE: dict = {"store": None, "vals": {}}
+_CACHE_LOCK = threading.Lock()
+
+
+def _cache_put(key: str, value) -> None:
+    st = get_store()
+    if isinstance(st, FileStore):
+        return
+    with _CACHE_LOCK:
+        if _CACHE["store"] is not st:
+            _CACHE["store"], _CACHE["vals"] = st, {}
+        _CACHE["vals"][key] = value
+
+
+def _cached(key: str, read_file_view):
+    """Config-side read: FileStore re-reads; any other store answers from the cache, else from its file view."""
+    st = get_store()
+    if isinstance(st, FileStore):
+        return read_file_view(st)
+    with _CACHE_LOCK:
+        if _CACHE["store"] is st and key in _CACHE["vals"]:
+            return _CACHE["vals"][key]
+    return read_file_view(_file_view())
+
+
+def _benchmark(live: bool = False) -> dict | None:
+    """live=True reads the store (handlers that already do) and remembers it; config uses the default."""
+    if live:
+        b = get_store().benchmark_current()
+        _cache_put("benchmark", b)
+        return b
+    return _cached("benchmark", lambda fv: fv.benchmark_current())
+
+
+def _replay_ids(live: bool = False) -> set[str]:
+    if live:
+        ids = get_store().replay_ids()
+        _cache_put("replay_ids", ids)
+        return ids
+    return _cached("replay_ids", lambda fv: fv.replay_ids())
+
+
+def _n_disruptions() -> int:
+    def read(fv) -> int:
+        try:  # v1 disruptions.csv is excluded from the Docker image (.dockerignore)
+            df = fv.frame("disruptions_v1")
+        except OSError:
+            return 0
+        return 0 if df is None else len(df)
+    return _cached("n_disruptions", read)
 
 
 def _models() -> tuple[list[dict], str]:
@@ -239,13 +303,13 @@ def _models() -> tuple[list[dict], str]:
     return out, _model_id(_default_chain()[0])
 
 
-def _ranked_models() -> list[str]:
+def _ranked_models(live: bool = False) -> list[str]:
     """Benchmark model arms, best first: arms passing every selection gate, then by consensus rate."""
     def ok(s: dict) -> bool:
         p95 = s.get("latency_p95_ms")
         return (s.get("error_rate_pct", 100) < 2 and p95 is not None and p95 < 1000
                 and s.get("consensus_rate_pct", 0) >= 90)
-    arms = [a for a in (_benchmark() or {}).get("arms", []) if a.get("model") != "formula"]
+    arms = [a for a in (_benchmark(live) or {}).get("arms", []) if a.get("model") != "formula"]
     arms.sort(key=lambda a: (ok(a.get("summary", {})), a.get("summary", {}).get("consensus_rate_pct", 0)), reverse=True)
     return [f'{a.get("provider") or "openrouter"}:{a["model"]}' for a in arms if a.get("model")]
 
@@ -256,11 +320,11 @@ def _default_mode() -> str:
     return "formulas" if winner == "formula" else "decision"
 
 
-def _default_chain() -> list[str]:
+def _default_chain(live: bool = False) -> list[str]:
     """Decision-mode chain: benchmark winner (if a model), then the other benchmark models best first,
     then the remaining DEFAULT_CHAIN entries (deduped), then formula (always terminal)."""
-    winner = ((_benchmark() or {}).get("selection") or {}).get("winner")
-    ranked = _ranked_models()
+    winner = ((_benchmark(live) or {}).get("selection") or {}).get("winner")
+    ranked = _ranked_models(live)
     head = []
     if winner and winner != "formula":
         head = [e for e in ranked if e.split(":", 1)[1] == winner] or [_norm_model(winner)]
@@ -371,7 +435,7 @@ def _replay_summaries() -> list[dict]:
     global _REPLAY_SUMMARIES
     if _REPLAY_SUMMARIES is None:
         out = []
-        for wid in sorted(i for i in get_store().replay_ids() if i.startswith("F2015-")):
+        for wid in sorted(i for i in _replay_ids(live=True) if i.startswith("F2015-")):
             try:
                 out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
             except (KeyError, ValueError):
@@ -428,9 +492,14 @@ def get_run(run_id: str):
     return _err(404, "unknown_run", f"unknown run id {run_id!r}")
 
 
+@app.get("/api/runs")
+def list_runs(wave_id: str, limit: int = 20):
+    return {"runs": get_store().list_runs(wave_id, max(1, min(limit, 100)))}
+
+
 @app.get("/api/benchmark")
 def benchmark():
-    b = _benchmark()
+    b = _benchmark(live=True)
     if b is None:
         return _err(404, "not_generated", "benchmark report not generated yet")
     return b
@@ -442,7 +511,7 @@ def _model_chain(mode: str, model: str | None) -> list[str]:
     if model:
         first = _norm_model(model)
         return [first] if first == "formula" else [first, "formula"]
-    return _default_chain()
+    return _default_chain(live=True)
 
 
 @app.post("/api/negotiate-wave")
