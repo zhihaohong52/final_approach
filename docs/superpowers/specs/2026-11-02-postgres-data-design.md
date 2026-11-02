@@ -521,7 +521,8 @@ the blob/text column) for `PgStore`.
   async: every handler that reads data is a sync `def` in FastAPI's threadpool, and the negotiation runs in a
   worker thread. An async driver would need a second code path for no gain.
 - **`NullConnectionPool(conninfo=DATABASE_URL, max_size=4, timeout=10, open=False, kwargs={"prepare_threshold": None,
-  "connect_timeout": 10, "application_name": "final-approach"})`.** No idle connections are held. The process
+  "connect_timeout": 10, "application_name": "final-approach", "keepalives_idle": 30, "keepalives_interval": 10,
+  "keepalives_count": 3})`.** No idle connections are held. The process
   therefore never keeps the Neon compute (or a PgBouncer server session) busy between requests, and scale-to-zero
   works. Connect overhead per request (one TLS handshake to the same-region pooler, roughly 20-60 ms) is
   accepted. A request that needs several queries (a wave build) uses one connection through

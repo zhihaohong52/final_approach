@@ -1191,7 +1191,7 @@ git commit -m "feat: hold move; path-aware move labels and agent views"
   - `NegotiationResult` gains `engine_version` and `trajectories: {final, baseline}`.
   - Replay files gain `engine_version`. `replay.load` returns it, defaulting to `"v2"` when absent.
   - On replay with a mismatch, the result is streamed without `trajectories`, and the run is marked `paths_unavailable: true`. `POST /api/trajectories` with `{run_id}` for such a run returns `409 engine_mismatch`.
-  - Datastore: `/geo` reads procedures through `store.load_procedures`, so it serves `get_store().procedures(icao)` (PgStore in production, FileStore offline) with no change to the response. The replay guard reads `engine_version` from the replay body that `get_store().replay(wave_id)` returns, defaulting to `"v2"`.
+  - Datastore: `/geo` reads procedures through `store.load_procedures`, so it serves `get_store().procedures(icao)` (PgStore in production, FileStore offline) with no change to the response. The replay guard reads `engine_version` from the replay body that `get_store().replay(wave_id)` returns, defaulting to `"v2"`. `PgStore.replay(wave_id)` returns the newest row for the wave, preferring the current `ENGINE_VERSION` (`order by (engine_version = current) desc, recorded_at desc limit 1`), so a wave recorded only under `v2` still returns its `v2` body and the guard sees the mismatch (the same as FileStore, which keeps one file per wave). `replay_ids()` lists waves recorded under any version, so older recordings stay in the demo list and replay without paths.
   - Compression: **no app-wide `GZipMiddleware`**. Starlette 0.40 (pinned via FastAPI 0.115.2) would buffer the SSE streams of `/api/negotiate-wave` and `/mcp`. The `/geo` handler compresses its own body with `gzip.compress` when `Accept-Encoding` contains `gzip`, setting `Content-Encoding: gzip` and `Vary: Accept-Encoding`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1230,7 +1230,11 @@ def test_replay_engine_mismatch_has_no_paths(tmp_path, monkeypatch):
     src = next(p for p in glob.glob("data/replay/*.json") if p.endswith(f"{ORD_REPLAY}.json"))
     d = json.load(open(src)); d.pop("engine_version", None)          # => treated as "v2"
     (tmp_path / f"{ORD_REPLAY}.json").write_text(json.dumps(d))
-    monkeypatch.setattr(server, "REPLAY_DIR", tmp_path)   # server.py:464 passes REPLAY_DIR to replay.load
+    from atm import datastore
+    from atm.datastore.files import FilePaths, FileStore
+    # replay.load reads get_store().replay(wave_id); monkeypatch restores the previous store after the test
+    monkeypatch.setattr(datastore, "_store", FileStore(FilePaths(replay_dir=tmp_path, runs_dir=tmp_path / "runs",
+                                                                 decisions_path=tmp_path / "decisions.jsonl")))
     r = c.post("/api/negotiate-wave", json={"wave_id": ORD_REPLAY, "mode": "decision", "replay": True, "stream": False}).json()
     assert "trajectories" not in r and r["paths_unavailable"] is True
     assert c.post("/api/trajectories", json={"run_id": r["run_id"]}).status_code == 409
@@ -1255,12 +1259,21 @@ import pytest
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the replay guard reads engine_version from the stored body
 def test_replay_guard_reads_engine_version_from_pg(live_db_url):
     from atm.datastore.pg import PgStore
+    wid = "TEST-REPLAY-GUARD"
     st = PgStore(live_db_url); st.open()
     try:
+        st.put_replay(wid, {"messages": [], "result": {}}, engine_version="v2")      # an older recording only
+        assert st.replay(wid).get("engine_version", "v2") == "v2"                     # still returned: guard -> 409
+        assert wid in st.replay_ids()                                                  # and still listed
+        st.put_replay(wid, {"engine_version": ENGINE_VERSION, "messages": [], "result": {}},
+                      engine_version=ENGINE_VERSION)
+        assert st.replay(wid)["engine_version"] == ENGINE_VERSION                     # the current version wins
         body = st.replay(ORD_REPLAY)
+        assert body is not None and body.get("engine_version", "v2") in ("v2", ENGINE_VERSION)
     finally:
+        with st._conn() as conn:
+            conn.execute("delete from eval.replays where wave_id = %s", (wid,))
         st.close()
-    assert body is not None and body.get("engine_version", "v2") in ("v2", ENGINE_VERSION)
 ```
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_api.py -q -m "not live_db"`. Expected: FAIL.
@@ -1333,7 +1346,7 @@ git commit -m "feat(ui): radar flies engine trajectories with holds, sparse fix 
 
 **Interfaces:**
 - Produces: `pick_replays.rank(hub: str, n: int = 20) -> list[tuple[str, float, int]]`. It returns `(wave_id, fcfs_total_hold_min, max_laps)` for flights2015 rows at the hub, sorted by `max_laps` desc then hold desc. CLI: `python3 scripts/pick_replays.py ORD MIA ATL DFW DEN`. It prints the top 3 per hub.
-- Datastore: `replay.record` writes the file **and** calls `get_store().put_replay(wave_id, body, engine_version=ENGINE_VERSION)`, so Postgres holds the re-recorded replay, keyed by `engine_version` (needs `DATABASE_URL`; skip the DB write when unset). The 409 guard reads `engine_version` from the stored body.
+- Datastore: `replay.record` writes the file **and** calls `get_store().put_replay(wave_id, body, engine_version=ENGINE_VERSION)`, so Postgres holds the re-recorded replay, keyed by `engine_version`. No skip logic: `get_store()` writes to Postgres only when `DATABASE_URL_POOLED` (or `ATM_STORE=pg`) is set, and otherwise to the files (FileStore). If a configured database does not take the write, `record` prints a `WARNING: ... written to files only` line (it checks `get_store().status().degraded` after the write). The 409 guard reads `engine_version` from the stored body.
 - Rule (spec §6.2): at least 3 of 5 replays have ≥ 1 lap in the status-quo or agreed plan. Keep the current wave per hub when it already qualifies; otherwise swap in the top-ranked wave.
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_geo_api.py`)
@@ -1396,7 +1409,7 @@ git commit -m "contract: samples regenerated for v3-air"
   - `attribution(prev: dict, cur: dict) -> dict`: `{"physics_delta": baseline_cur − baseline_prev, "negotiation_delta": {arm: arm_cur − baseline_cur}}` per metric.
   - `markdown(rep)` gains an "Engine history" section and an "Attribution" section, with headline claims taken from `negotiation_delta`.
   - `BenchmarkReport` gains `engine_version`, `lap_share_pct` (per arm and baseline) and `regressions: [{wave_id, arm, metric, v_prev, v_cur, cause}]`.
-  - Datastore: `benchmark.py` still writes `eval/benchmark.json` as today and also calls `get_store().put_benchmark(report, markdown, label)`; "freeze v2" keeps the v2 row with `current=False` (`is_current=false` in `eval.benchmark_reports`). Needs `DATABASE_URL`; skip the DB write when unset.
+  - Datastore: `benchmark.py` still writes `eval/benchmark.json` as today and also calls `get_store().put_benchmark(report, markdown, label)`; "freeze v2" keeps the v2 row with `current=False` (`is_current=false` in `eval.benchmark_reports`). No skip logic: `get_store()` writes to Postgres only when `DATABASE_URL_POOLED` (or `ATM_STORE=pg`) is set, and otherwise to the files; `benchmark.main` prints a `WARNING: ... written to files only` line when a configured database did not take the write.
   - Prompt budget (spec §6.7): each arm's summary gains `max_prompt_chars`, the largest `state + instructions + options` length any `Decider.choice` call received in that arm's runs (0 for `formula`). The T22, T27 and T33 benchmark runs record it automatically; `BENCHMARK.md` shows it next to the 32,000-char (8k-token) budget.
 
 - [ ] **Step 1: Write the failing tests** (append; use `--fixtures` small runs as the existing tests do)
