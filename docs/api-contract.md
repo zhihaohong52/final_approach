@@ -5,7 +5,7 @@ one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -134,6 +134,7 @@ interface WaveScenario {
   focus: string | null;                // v2.0: callsign of the disruption flight (its pilot is the PILOT agent);
                                        // null => the engine uses the most-delayed disrupted flight
   provenance: Provenance[];            // per layer for the whole wave
+  status_quo?: { plan: JointPlan; evaluation: PlanEvaluation };  // v2.1: first come, first served and its rule check, shown before negotiating
 }
 
 interface Triage { score: number; levels: string[]; probabilities: number[]; confidence?: number }  // 0-based score
@@ -230,9 +231,10 @@ interface RuleCheck {
 type RuleId = "ATC-RWY-OPEN" | "ATC-WAKE-SEP" | "ATC-TAXI-ROUTE" | "ATC-WIND-LIMITS"
   | "ATC-RWY-CAPACITY"                 // v2.0: landings per physical runway in the rolling 60 min <= workbook cap
   | "PLT-EARLIEST-ETA" | "PLT-FUEL-RESERVE" | "GND-GATE-SIZE" | "GND-GATE-FREE" | "GND-CREW-DUTY"
-  | "GND-GATE-NOTICE";                 // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
+  | "GND-GATE-NOTICE"                  // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
+  | "PLT-CREW-DUTY";                   // in-block (or alternate arrival) within the flight crew's duty end
 // v2.0: GND-CREW-DUTY never fails any more (workbook: overtime after the 8 h shift is allowed at 1.5x cost);
-// it reports overtime. PLT-CREW-DUTY (13 h) is not enforced: no crew report time in the data (see `limits`).
+// it reports overtime. PLT-CREW-DUTY can veto; crew report time is assumed (scheduled departure - 60 min, see `limits`).
 
 interface PlanEvaluation {
   plan_id: string;
@@ -408,8 +410,23 @@ changed or added is listed in `NegotiationResult.limits`.
 ### POST /api/decision
 
 ```ts
-interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string } // note required for OVERRIDE
+interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string;  // note required for OVERRIDE
+  edits?: Assignment[] }   // flights the duty manager moved before approving (logged with the decision)
 ```
+
+### POST /api/evaluate
+
+The duty manager's edit: re-check a whole plan against the same 12 rules and scores the negotiation uses.
+
+```ts
+interface EvaluateRequest { wave_id: string; assignments: Assignment[] }   // metrics ignored
+interface EvaluateResponse {
+  plan: JointPlan;                     // label "edited by the duty manager"
+  evaluation: PlanEvaluation;
+  suggestions: Record<string, number>; // callsign -> nearest slot_min (same runway, ±30 min) that makes the plan pass
+}
+```
+Errors: 422 `invalid_request` (empty or malformed assignments), 404 `unknown_wave`.
 
 ### GET /api/benchmark
 

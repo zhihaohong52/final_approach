@@ -69,6 +69,7 @@ export interface WaveScenario {
   severity?: Triage | null;                 // filled once a negotiation has triaged it
   focus: string | null;                // v2.0: callsign of the disruption flight (its pilot is the PILOT agent)
   provenance: Provenance[];            // per layer for the whole wave
+  status_quo?: { plan: JointPlan; evaluation: PlanEvaluation };  // v2.1: first come, first served and its rule check, shown before negotiating
 }
 
 export interface Airport {
@@ -159,7 +160,8 @@ export interface RuleCheck {
 export type RuleId = "ATC-RWY-OPEN" | "ATC-WAKE-SEP" | "ATC-TAXI-ROUTE" | "ATC-WIND-LIMITS"
   | "ATC-RWY-CAPACITY"                 // v2.0: landings per physical runway in the rolling 60 min <= workbook cap
   | "PLT-EARLIEST-ETA" | "PLT-FUEL-RESERVE" | "GND-GATE-SIZE" | "GND-GATE-FREE" | "GND-CREW-DUTY"
-  | "GND-GATE-NOTICE";                 // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
+  | "GND-GATE-NOTICE"                  // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
+  | "PLT-CREW-DUTY";                   // in-block (or alternate arrival) within the flight crew's duty end
 
 export interface PlanEvaluation {
   plan_id: string;
@@ -168,6 +170,12 @@ export interface PlanEvaluation {
   utilities: Record<AgentId, number>;  // 0..1 for the 3 negotiating agents (formula decision model)
   totals: { delay_min: number; fuel_kg: number; hold_min: number; pax_protected_pct: number;
             overtime_min: number; diversions: number };
+}
+export interface EvaluateRequest { wave_id: string; assignments: Assignment[] }
+export interface EvaluateResponse {
+  plan: JointPlan;
+  evaluation: PlanEvaluation;
+  suggestions: Record<string, number>; // callsign -> nearest legal slot_min on the same runway
 }
 export interface Move {
   id: string;
@@ -300,7 +308,8 @@ export interface Limit {
   note: string;
 }
 
-export interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string } // note required for OVERRIDE
+export interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; note?: string;  // note required for OVERRIDE
+  edits?: Assignment[] }   // flights the duty manager moved before approving (logged with the decision)
 
 export interface BenchmarkReport {
   generated_at: string; n_waves: number; seed: number;
