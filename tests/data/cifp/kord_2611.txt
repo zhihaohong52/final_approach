@@ -1,0 +1,37 @@
+SUSAP KORDK5AORD     0     130YHN41583699W087542934W003000680         1800018000C    MNAR    CHICAGO O'HARE INTL           788452112
+SUSAP KORDK5GRW10C   0108000930 N41575653W087555348         +0170400669000055200RISXH3                                     806022508
+SCANP PADLPACCFNPX PA0    A     N58523815W158474543                       E0106     NAR           CFNPX(CNF)               068522605
+SCANP PADLPACFISAX PA0    W     N58510238W158413114                       E0106     NAR           FISAX                    068582605
+SUSAD        CGT   K5011420VTLW N41303602W087341757    N41303602W087341757E0020006341     NARCHICAGO HEIGHTS               250362004
+SUSAEAENRT   BENKY K50    C   L N41304259W088423246                       W0033     NAR           BENKY                    287962403
+SUSAEAENRT   JORJO K50    W     N41530414W087591878                       W0039     NAR           JORJO                    403062403
+SUSAEAENRT   MONKZ K50    W     N41530359W087480647                       W0040     NAR           MONKZ                    446832304
+SUSAP KORDK5CAHSTN K50    W     N41424558W088212641                       W0036     NAR           AHSTN                    788492403
+SUSAP KORDK5CBFORD K50    W     N41093633W089351468                       W0026     NAR           BFORD                    788582403
+SUSAP KORDK5CBYLAW K50    W     N41171086W089163304                       W0029     NAR           BYLAW                    788702605
+SUSAP KORDK5CNEWRK K50    W     N41335805W088341603                       W0034     NAR           NEWRK                    789902508
+SUSAP KORDK5CPETAH K50    W     N41530786W088090021                       W0038     NAR           PETAH                    790052403
+SUSAP KORDK5CRAYYY K50    C     N41575561W088023139                       W0039     NAR           RAYYY                    790202605
+SUSAP KORDK5CRRUDA K50    C     N41575419W088094070                       W0038     NAR           RRUDA                    790302403
+SUSAP KORDK5CSHARN K50    C     N41575315W088135321                       W0037     NAR           SHARN                    790372304
+SUSAP KORDK5CTONIE K50    W     N41530137W087292675                       W0043     NAR           TONIE                    790512605
+SUSAP KORDK5EBENKY64BFORD 010BFORDK5PC0E       IF                                 + FL220     18000                        790882012
+SUSAP KORDK5EBENKY64BFORD 020BYLAWK5PC0E       TF                                 B FL230FL200                             790892012
+SUSAP KORDK5EBENKY64BFORD 030BENKYK5EA0EE      TF                                   12000                                  790902012
+SUSAP KORDK5EBENKY65      010BENKYK5EA0E       IF                                   12000     18000                        791192012
+SUSAP KORDK5EBENKY65      020NEWRKK5PC0E       TF                                                                          791202012
+SUSAP KORDK5EBENKY65      030AHSTNK5PC0E       TF                                                                          791212012
+SUSAP KORDK5EBENKY65      040PETAHK5PC0EE      TF                                                                          791222012
+SUSAP KORDK5EBENKY66RW04B 010PETAHK5PC0E       IF                                             18000                        791232012
+SUSAP KORDK5EBENKY66RW04B 020JORJOK5EA0E       TF                                                                          791242012
+SUSAP KORDK5EBENKY66RW04B 030MONKZK5EA0E       TF                                                                          791252012
+SUSAP KORDK5EBENKY66RW04B 040TONIEK5PC0EY      TF                                                                          791262012
+SUSAP KORDK5EBENKY66RW04B 050TONIEK5PC0EE      FM MZZ K5      319011700931    D                                            791272012
+SUSAP KORDK5FI10C  I      010SHARNK5PC0E  I    IF ISXHK5      27290156        PI  J 050000230018000                 0 NS   800051707
+SUSAP KORDK5FI10C  I      011RRUDAK5PC0E       CF ISXHK5      2729012509300031PI  + 04000                           0 NS   800061707
+SUSAP KORDK5FI10C  I      020RAYYYK5PC0E  F    CF ISXHK5      2729007109300053PI  H 0230002300            KORD  K5PA0 NS   800072107
+SUSAP KORDK5FI10C  I      030RW10CK5PG0GY M    CF ISXHK5      2729002209300050PI    00725             -300          0 NS   800081511
+SUSAP KORDK5FI10C  I      040         0  M     VI                     0929                                          0 NS   800091511
+SUSAP KORDK5FI10C  I      050CGT  K5D 0VY      CF CGT K5      0000000015600300D   + 04000                           0 NS   800101511
+SUSAP KORDK5FI10C  I      060CGT  K5D 0VE  R   HM                     3360T010    + 04000                           0 NS   800111511
+SCANP PADLPAFH01-Y ABROUS 030FISAXPAPC0EE BL010RF       0036101332    01530075    + 02800                 CFNPX PAPCA FS   068802409
