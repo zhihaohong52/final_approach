@@ -23,7 +23,8 @@
 - All of `frontend/` is in scope: the user said "now you build both back and frontend". There is no approval gate on the frontend tasks (T17, T26, T32).
 - No model decides legality. Every `RuleCheck` cites `rule`, `source` and `evidence`. Every new limit is a row in `rules.LIMITS` with `source: "workbook" | "real data" | "assumption"`.
 - Every trajectory point and taxi segment carries `src: "cifp" | "osm" | "synth"`. Synthesized parts are drawn dashed. Never draw a path the engine did not use.
-- Runtime never fetches CIFP/OSM/BTS. Raw downloads go to `.cache/` (gitignored and dockerignored); derived files go to `data/ref/`.
+- Runtime never fetches CIFP/OSM/BTS. Raw downloads go to `.cache/` (gitignored and dockerignored); derived files go to `data/ref/` (and are seeded into `geo.*`, see the Datastore line above).
+- Datastore (Postgres plan, design §15): derived files still go to `data/ref/` (seed and offline backend), but the runtime reads geometry through `atm.datastore` (`get_store().procedures(icao) / surface(icao) / movements_day(iata, date)` return gzipped bytes or `None`; PgStore in production, FileStore offline). `atm/geo/store.py` stays this plan's import surface: its loaders delegate to those methods and gunzip/parse. After generating files, run `python3 scripts/db_seed.py <dataset>` (datasets `procedures`, `surface`, `movements2015`, `coverage`; it needs `DATABASE_URL`, the direct owner URL; skip the step when it is unset). The runtime uses `DATABASE_URL_POOLED`. New tables come only via `migrations/`. `live_db` tests are opt-in: they need `DATABASE_TEST_URL` (a separate `atm_test` database) and `ATM_LIVE_DB=1`; the offline suite is `python3 -m pytest -q -m "not live_db"`.
 - CIFP: pinned cycle **2611**, `https://aeronav.faa.gov/Upload_313-d/cifp/CIFP_261029.zip`. UI string: "Procedures: FAA CIFP 2611, not for navigation". The FAA disclaimer goes next to the derived files.
 - OSM attribution "© OpenStreetMap contributors" is always visible on the surface map and in the README.
 - Pinned physics: holding IAS 200 KIAS ≤ 6,000 ft, 230 KIAS 6,001-14,000 ft, 265 KIAS above; inbound leg 1.0 min ≤ 14,000 ft, 1.5 min above; right turns unless published; TAS = IAS × (1 + 0.02 × alt_ft/1000); turn rate is the least-bank option among 3°/s, 30° and 25° bank; g = 9.80665.
@@ -119,6 +120,7 @@
 
 **Interfaces:**
 - Produces: `icao_for(iata: str) -> str` (raises `KeyError` if unknown) and `iata_for(icao: str) -> str | None`. The source is OpenFlights `data/challenge3/airports.dat` (columns 5 = IATA, 6 = ICAO), loaded once via `functools.cache`.
+  - Datastore: `icao_for` parses `get_store().rows("openflights")` (from `atm.datastore import get_store`), whose keys are `c1`..`c14` (so IATA = `c5`, ICAO = `c6`). FileStore reads `data/challenge3/airports.dat` as planned; Postgres serves the `ref.openflights` copy. `raw.ch3_airports_dat` is not used at runtime. No seed step: `openflights` is seeded by the Postgres plan's `small` dataset.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -140,6 +142,14 @@ def test_every_flights2015_destination_resolves():
 def test_iata_for_roundtrip():
     assert iata_for("KORD") == "ORD" and iata_for("ZZZZ") is None
 
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL (atm_test database), seeded with `ref.flights2015`
+def test_every_flights2015_destination_resolves_live(live_db_url):
+    import psycopg
+    with psycopg.connect(live_db_url) as c:
+        dests = [r[0] for r in c.execute("select distinct dest from ref.flights2015")]
+    assert len(dests) == 320
+    assert all(len(icao_for(d)) == 4 for d in dests)
+
 def test_flights2015_uses_lookup():
     from atm.wave import flights2015
     assert flights2015._icao("OGG") == "PHOG"
@@ -154,7 +164,7 @@ def test_bts_wave_uses_lookup(monkeypatch):
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_icao.py -q`. Expected: FAIL (`ModuleNotFoundError: atm.wave.icao`).
 - [ ] **Step 3: Implement** `icao_for` / `iata_for` in `atm/wave/icao.py`. Make `flights2015._icao(iata)` return `icao_for(iata)`, falling back to the old prefix rule only on `KeyError`. In `build.build_wave`, call `icao.icao_for` through the module (`from atm.wave import icao`), so the monkeypatch in the test takes effect.
-- [ ] **Step 4: Run** `python3 -m pytest tests/test_icao.py tests/test_flights2015.py tests/test_build.py -q`. Expected: PASS.
+- [ ] **Step 4: Run** `python3 -m pytest tests/test_icao.py tests/test_flights2015.py tests/test_build.py -q -m "not live_db"`. Expected: PASS. With `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` set, also run `python3 -m pytest tests/test_icao.py -q -m live_db`.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -284,6 +294,7 @@ git commit -m "feat(geo): ARINC 424-18 CIFP parser and per-airport extractor"
     - download to `.cache/cifp/CIFP_261029.zip`;
     - verify the SHA-256 constant `CIFP_SHA256` (recorded on the first run and pasted into the script) and the size 9,113,631 bytes;
     - extract one file per ICAO of: the 320 flights2015 destinations, plus `atm.wave.hubs.HUBS`.
+  - Datastore: `load_procedures` delegates to `get_store().procedures(icao)` (`from atm.datastore import get_store`), which returns the gzipped JSON document or `None`; the loader gunzips and parses it. `scripts/db_seed.py procedures` loads `data/ref/procedures/*.json.gz` into `geo.procedures` (doc blob) and `geo.fixes` (points), swapped atomically. The seeder reads only `header.cycle`, `header.tier` and `fixes` (a map of ident to `[lat, lon]`) from the document: keep the output of `fetch_cifp.py` in sync with `_procedure_row` and `_fix_rows` in `scripts/db_seed.py`, or update them.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -309,11 +320,22 @@ def test_coverage_counts():
 def test_procedures_size_cap():
     from pathlib import Path
     assert sum(p.stat().st_size for p in Path("data/ref/procedures").glob("*.json.gz")) <= 3_000_000
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py procedures` into atm_test
+def test_geo_procedures_match_files_by_sha256(live_db_url):
+    import hashlib, psycopg
+    from pathlib import Path
+    with psycopg.connect(live_db_url) as c:
+        db = dict(c.execute("select icao, sha256 from geo.procedures").fetchall())
+    files = {p.name.split(".")[0]: hashlib.sha256(p.read_bytes()).hexdigest()
+             for p in Path("data/ref/procedures").glob("*.json.gz")}
+    assert db == files
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_store.py -q`. Expected: FAIL.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_store.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Implement** `store.load_procedures` and `scripts/fetch_cifp.py`. Write `README.md` with the cycle, the URL, the SHA-256 and the FAA disclaimer items 6 and 7a-c verbatim, plus "not for navigation".
-- [ ] **Step 4: Run** `python3 scripts/fetch_cifp.py`, then `python3 -m pytest tests/test_geo_store.py -q`. Expected: PASS. If the 111/315 counts differ, stop: the coverage numbers in spec §4.1 are wrong, so report it rather than editing the test.
+- [ ] **Step 4: Run** `python3 scripts/fetch_cifp.py`, then `python3 -m pytest tests/test_geo_store.py -q -m "not live_db"`. Expected: PASS. If the 111/315 counts differ, stop: the coverage numbers in spec §4.1 are wrong, so report it rather than editing the test.
+- [ ] **Step 4b: Seed** `python3 scripts/db_seed.py procedures` (skip when `DATABASE_URL` is unset), then, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, run it against `atm_test` (`--url-env DATABASE_TEST_URL`) and `python3 -m pytest tests/test_geo_store.py -q -m live_db`. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -410,7 +432,8 @@ git commit -m "feat(geo): OSM taxiway graph builder with exits, crossings and pe
 **Interfaces:**
 - Consumes: `build_surface` (Task 4), `icao_for`.
 - Produces:
-  - `store.load_surface(icao: str) -> dict | None`.
+  - `store.load_surface(icao: str) -> dict | None`. It delegates to `get_store().surface(icao)` (`from atm.datastore import get_store`; gzipped JSON document or `None`) and gunzips/parses.
+  - `scripts/db_seed.py surface` loads `data/ref/surface/*.json.gz` into `geo.surface` (doc blob, `reach_pct`), `geo.stands`, `geo.osm_gates` and `geo.holding_positions` (PostGIS points), swapped atomically. The seeder reads only these keys of the surface document: `header.osm_timestamp`, `quality.reach_pct`, `stands` (`id`, `ref`, `node`, `lat`, `lon`), `gates` (`ref`, `lat`, `lon`), `holding_positions` (`node`, `strip`) and `nodes` (`[lat, lon]` by index). `build_surface` (Task 4) and `fetch_surface.py` must keep those output keys in sync with `_surface_row`, `_stand_rows`, `_gate_rows` and `_hold_rows` in `scripts/db_seed.py`, or update the builders.
   - `gates_geo.bind_gates(gate_ids: list[tuple[str, bool]], surface: dict) -> dict[str, dict]`. The input is `(gate_id, remote)` pairs. The output maps `gate_id → {"lat", "lon", "stand": str, "node": int, "geo_src": "osm-ref"|"osm-near"|"osm-gate"|"osm-generic"|"synth"}`. Order (spec §5 steps 1-4, then the generic fallbacks):
     1. a stand whose `ref` equals the id (`osm-ref`);
     2. normalised (`B12` ↔ `12`, case-insensitive, leading letters stripped, within the stands nearest gates whose ref starts with the same letters) (`osm-ref`);
@@ -461,11 +484,27 @@ def test_ord_replay_gates_bind_to_osm():
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     assert sum(v["geo_src"] in ("osm-ref", "osm-near") for v in b.values()) >= len(w.gates) - 3
-```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_gates_geo.py -q`. Expected: FAIL.
+import pytest
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py surface` into atm_test
+def test_bindings_agree_with_nearest_stand_query(live_db_url):
+    import psycopg
+    from atm.wave import build
+    w = build.build_wave("F2015-270287")
+    b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
+    with psycopg.connect(live_db_url) as c:
+        for gid, v in list(b.items())[:20]:
+            if v["geo_src"] not in ("osm-ref", "osm-near"):
+                continue
+            row = c.execute("select 1 from geo.stands where icao = 'KORD' and id = %s and "
+                            "ST_DWithin(geog, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 150)",
+                            (v["stand"], v["lon"], v["lat"])).fetchone()
+            assert row, gid
+
 - [ ] **Step 3: Implement** `bind_gates`, `load_surface` and `fetch_surface.py`. Then run `python3 scripts/fetch_surface.py` (long: about 320 × 5 s plus query time; run it in the background).
-- [ ] **Step 4: Run** `python3 -m pytest tests/test_gates_geo.py -q`. Expected: PASS. Record the total `data/ref/surface` size in the commit message. If the total is > 15 MB, stop and report (spec §5 estimates 5-12 MB).
+- [ ] **Step 4: Run** `python3 -m pytest tests/test_gates_geo.py -q -m "not live_db"`. Expected: PASS. Record the total `data/ref/surface` size in the commit message. If the total is > 15 MB, stop and report (spec §5 estimates 5-12 MB).
+- [ ] **Step 4b: Seed** `python3 scripts/db_seed.py surface` (skip when `DATABASE_URL` is unset), then, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_gates_geo.py -q -m live_db`. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -488,6 +527,7 @@ git commit -m "data: OSM surface graphs per airport (ODbL) and gate to stand bin
   - `store.TOP30: tuple[str, ...]` is a constant in `atm/geo/store.py`: the top 30 IATA codes by 2015 arrivals. `fetch_bts.py --movements2015` computes it once from the downloaded months and prints the tuple to paste in. It is also listed in `GEO_COVERAGE.md`.
   - `store.MOVEMENT_AIRPORTS: tuple[str, ...]` = sorted union of `TOP30` and the 30 benchmark airports (the `dest` of the `eval/benchmark.json` `wave_ids`). Movements are written for all of them if the total fits the 50 MB cap; otherwise for `TOP30` only, and `MOVEMENT_AIRPORTS = TOP30` (the rest are badged partial, spec §6.9).
   - flights2015 rows gain `wheels_on, taxi_in, wheels_off, taxi_out` (floats, NaN when missing).
+  - Datastore: `load_movements(iata, date, from_abs, to_abs)` keeps its signature but does one `get_store().movements_day(iata, date)` fetch (`from atm.datastore import get_store`; a gzipped CSV for that airport-day or `None`), gunzips, parses and filters to the window. `scripts/db_seed.py movements2015` repacks `data/ref/movements2015/{IATA}.csv.gz` per airport-day into `geo.movements2015_day`; it finds the day through the first of `atm.datastore.pack.MOVEMENT_DATE_COLS` present in the CSV, so the `date` column here must stay among those candidates. `scripts/db_seed.py flights2015` carries the new taxi columns into `ref.flights2015` (they exist from the Postgres plan's D2 and are null until then).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -517,11 +557,27 @@ def test_top30_and_movement_airports():
 def test_movements_size_cap():
     from pathlib import Path
     assert sum(p.stat().st_size for p in Path("data/ref/movements2015").glob("*.csv.gz")) <= 50_000_000
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py movements2015` into atm_test
+def test_movements_day_blob_matches_file(live_db_url):
+    import gzip, io
+    import pandas as pd
+    from atm.datastore.pg import PgStore
+    st = PgStore(live_db_url); st.open()
+    try:
+        blob = st.movements_day("ORD", "2015-08-19")
+    finally:
+        st.close()
+    assert blob is not None
+    day = pd.read_csv(io.BytesIO(gzip.decompress(blob)), dtype=str)
+    full = pd.read_csv("data/ref/movements2015/ORD.csv.gz", dtype=str)
+    assert len(day) > 0 and len(day) == (full["date"] == "2015-08-19").sum()
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_store.py -q -k "movements or taxi_in"`. Expected: FAIL.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_store.py -q -m "not live_db" -k "movements or taxi_in"`. Expected: FAIL.
 - [ ] **Step 3: Implement** `load_movements`, the movements step (12 PREZIP months for 2015, cached in `.cache/bts/2015_M/`) and the split columns. Re-run `scripts/split_flights2015.py`. If the size cap is exceeded, apply the spec §5 fallback: keep only ±2 h around hours that contain a flights.csv row.
-- [ ] **Step 4: Run** `python3 -m pytest tests/test_geo_store.py tests/test_flights2015.py -q`. Expected: PASS.
+- [ ] **Step 4: Run** `python3 -m pytest tests/test_geo_store.py tests/test_flights2015.py -q -m "not live_db"`. Expected: PASS.
+- [ ] **Step 4b: Seed** `python3 scripts/db_seed.py movements2015` and `python3 scripts/db_seed.py flights2015` (skip both when `DATABASE_URL` is unset), then, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_geo_store.py -q -m live_db`. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -538,6 +594,7 @@ git commit -m "data: BTS 2015 arrivals and departures (top-30 and benchmark airp
 - Produces:
   - `geo_coverage.coverage() -> list[dict]`, one row per flights2015 destination with `iata, icao, procedures_tier ("star+iap"|"iap"|"none"), surface_tier ("real"|"generic"|"none"; airport-level approximation: "real" when every end in `reach_pct` is ≥ 0.8 over all stands; the per-wave tier is decided in T24), stands, movements (bool)`.
   - The markdown table is written to `data/ref/GEO_COVERAGE.md`, with totals and the top 30 list.
+  - Datastore: `coverage()` is also what `scripts/db_seed.py coverage` loads into `geo.coverage` (the seeder imports `scripts/geo_coverage.py`, and prints "no files yet" until it exists). Its row keys `iata, icao, procedures_tier, surface_tier, stands, movements` must stay as listed, because `_load_coverage` in `scripts/db_seed.py` reads them.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -557,11 +614,25 @@ def test_ord_surface_rss_under_60mb():
             "a=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;print((a-b)/(1048576 if sys.platform=='darwin' else 1024))")
     mb = float(subprocess.check_output([sys.executable, "-c", code], text=True))
     assert mb <= 60
+
+import pytest
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; PgStore variant of the RSS check (needs surface and procedures seeded)
+def test_ord_surface_rss_under_60mb_pgstore(live_db_url):
+    import subprocess, sys
+    code = ("import resource,sys;from atm.datastore.pg import PgStore;"
+            "import os;st=PgStore(os.environ['DATABASE_TEST_URL']);st.open();"
+            "b=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;"
+            "import gzip,json;[json.loads(gzip.decompress(f(i))) for f,i in ((st.surface,'KORD'),(st.procedures,'KORD'))];"
+            "a=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;print((a-b)/(1048576 if sys.platform=='darwin' else 1024))")
+    mb = float(subprocess.check_output([sys.executable, "-c", code], text=True))
+    assert mb <= 60
 ```
 
-- [ ] **Step 2: Run** the tests. Expected: FAIL.
+- [ ] **Step 2: Run** the tests with `-m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Implement** `coverage()` and the markdown writer. Run it to generate `GEO_COVERAGE.md`.
-- [ ] **Step 4: Run** the tests. Expected: PASS.
+- [ ] **Step 4: Run** the tests with `-m "not live_db"`. Expected: PASS.
+- [ ] **Step 4b: Seed** `python3 scripts/db_seed.py coverage` (skip when `DATABASE_URL` is unset), then, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_perf.py -q -m live_db`. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -571,10 +642,13 @@ git commit -m "data: geo coverage report (procedures, surface, movements tiers)"
 
 ### Task 8: M0 verification
 
-- [ ] **Step 1:** `python3 -m pytest -q`. Expected: all pass (all existing tests, 130 at plan time, plus the new ones).
+- [ ] **Step 1:** `python3 -m pytest -q -m "not live_db"`. Expected: all pass (all existing tests, 130 at plan time, plus the new ones).
 - [ ] **Step 2:** `cd frontend && npx tsc --noEmit && npm run build`. Expected: exit 0.
 - [ ] **Step 3:** `PYTHONPATH=. python3 scripts/make_samples.py`, then `git diff --stat frontend/src/api/samples`. Expected: changes only where the ICAO fix changed a METAR station (none for the 5 hub replays). Note any change in the commit.
-- [ ] **Step 4:** `docker build -t dn-m0 .`, then `docker run --rm -e PORT=7860 -p 7860:7860 dn-m0` and `curl -s localhost:7860/api/config`. Expected: JSON with `"replay_available": true`. Record the image size delta vs before M0.
+- [ ] **Step 4:** `docker build -t dn-m0 .`, then `docker run --rm -e PORT=7860 -p 7860:7860 dn-m0` and `curl -s localhost:7860/api/config`. Expected: JSON with `"replay_available": true`. Record the image size delta vs before M0. Run it once with `DATABASE_URL_POOLED` set (add `-e DATABASE_URL_POOLED`, from the environment, never printed) and once without it; both must answer `/api/config` (PgStore and the file fallback).
+- [ ] **Step 4b:** `python3 scripts/db_seed.py --check`. Expected: exit 0 (nothing stale; needs `DATABASE_URL`, skip when unset).
+- [ ] **Step 4c:** `ATM_LIVE_DB=1 python3 -m pytest -q -m live_db`. Expected: all pass, including geo parity (needs `DATABASE_TEST_URL`, a separate `atm_test` database seeded with the geo datasets).
+- [ ] **Step 4d:** Record `select pg_database_size(current_database())` against the size estimate in the Postgres design §7, in the commit message or the handoff note (needs `DATABASE_URL`).
 - [ ] **Step 5:** No benchmark row (no runtime metric change). Only if the samples changed:
 
 ```bash
@@ -1113,6 +1187,7 @@ git commit -m "feat: hold move; path-aware move labels and agent views"
   - `NegotiationResult` gains `engine_version` and `trajectories: {final, baseline}`.
   - Replay files gain `engine_version`. `replay.load` returns it, defaulting to `"v2"` when absent.
   - On replay with a mismatch, the result is streamed without `trajectories`, and the run is marked `paths_unavailable: true`. `POST /api/trajectories` with `{run_id}` for such a run returns `409 engine_mismatch`.
+  - Datastore: `/geo` reads procedures through `store.load_procedures`, so it serves `get_store().procedures(icao)` (PgStore in production, FileStore offline) with no change to the response. The replay guard reads `engine_version` from the replay body that `get_store().replay(wave_id)` returns, defaulting to `"v2"`.
   - Compression: **no app-wide `GZipMiddleware`**. Starlette 0.40 (pinned via FastAPI 0.115.2) would buffer the SSE streams of `/api/negotiate-wave` and `/mcp`. The `/geo` handler compresses its own body with `gzip.compress` when `Accept-Encoding` contains `gzip`, setting `Content-Encoding: gzip` and `Vary: Accept-Encoding`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1170,11 +1245,21 @@ def test_evaluate_suggestion_respects_route_earliest():
         assert sug is None
     else:
         assert sug is not None and sug >= earliest - 1e-6
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the replay guard reads engine_version from the stored body
+def test_replay_guard_reads_engine_version_from_pg(live_db_url):
+    from atm.datastore.pg import PgStore
+    st = PgStore(live_db_url); st.open()
+    try:
+        body = st.replay(ORD_REPLAY)
+    finally:
+        st.close()
+    assert body is not None and body.get("engine_version", "v2") in ("v2", ENGINE_VERSION)
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_api.py -q`. Expected: FAIL.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_geo_api.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Implement** the endpoints, embedding and guard. Update the contract doc's endpoint table.
-- [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: PASS.
+- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1242,6 +1327,7 @@ git commit -m "feat(ui): radar flies engine trajectories with holds, sparse fix 
 
 **Interfaces:**
 - Produces: `pick_replays.rank(hub: str, n: int = 20) -> list[tuple[str, float, int]]`. It returns `(wave_id, fcfs_total_hold_min, max_laps)` for flights2015 rows at the hub, sorted by `max_laps` desc then hold desc. CLI: `python3 scripts/pick_replays.py ORD MIA ATL DFW DEN`. It prints the top 3 per hub.
+- Datastore: `replay.record` writes the file **and** calls `get_store().put_replay(wave_id, body, engine_version=ENGINE_VERSION)`, so Postgres holds the re-recorded replay, keyed by `engine_version` (needs `DATABASE_URL`; skip the DB write when unset). The 409 guard reads `engine_version` from the stored body.
 - Rule (spec §6.2): at least 3 of 5 replays have ≥ 1 lap in the status-quo or agreed plan. Keep the current wave per hub when it already qualifies; otherwise swap in the top-ranked wave.
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_geo_api.py`)
@@ -1261,11 +1347,24 @@ def test_replays_are_current_engine_and_show_laps():
         with_lap += any(any(t.laps >= 1 for t in trajectory.build(w, plan_from_dicts(p["assignments"])).air if t.wave)
                         for p in plans if p)
     assert with_lap >= 3
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the stored replays carry the current engine_version
+def test_replays_in_pg_are_current_engine(live_db_url):
+    import json, glob
+    from atm.datastore.pg import PgStore
+    from atm.wave.version import ENGINE_VERSION
+    st = PgStore(live_db_url); st.open()
+    try:
+        for f in sorted(glob.glob("data/replay/*.json")):
+            wid = json.load(open(f))["result"]["wave_id"]
+            assert (st.replay(wid) or {}).get("engine_version") == ENGINE_VERSION
+    finally:
+        st.close()
 ```
 
-- [ ] **Step 2: Run** it. Expected: FAIL.
+- [ ] **Step 2: Run** it with `-m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Implement** `pick_replays.py`, run it, then record with `PYTHONPATH=. python3 -c "from atm.wave import replay; replay.record([...], mode='decision')"` (keys from `.env` loaded by the app's usual path; never print them). If no keys are available, use `mode='formulas'` and note it in the commit. If a hub has no qualifying wave, report the counts and keep the old one. If the ORD replay id changes, update the default `WAVE_ID` in `scripts/make_samples.py` (Tasks 20/22/28/33 run it without an argument).
-- [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: PASS. `PYTHONPATH=. python3 scripts/make_samples.py <new ORD id if changed>`.
+- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. `PYTHONPATH=. python3 scripts/make_samples.py <new ORD id if changed>`. Then `python3 scripts/db_seed.py replays` (skip when `DATABASE_URL` is unset) so Postgres matches the files, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_geo_api.py -q -m live_db`.
 - [ ] **Step 5: Commit** (two commits)
 
 ```bash
@@ -1291,6 +1390,7 @@ git commit -m "contract: samples regenerated for v3-air"
   - `attribution(prev: dict, cur: dict) -> dict`: `{"physics_delta": baseline_cur − baseline_prev, "negotiation_delta": {arm: arm_cur − baseline_cur}}` per metric.
   - `markdown(rep)` gains an "Engine history" section and an "Attribution" section, with headline claims taken from `negotiation_delta`.
   - `BenchmarkReport` gains `engine_version`, `lap_share_pct` (per arm and baseline) and `regressions: [{wave_id, arm, metric, v_prev, v_cur, cause}]`.
+  - Datastore: `benchmark.py` still writes `eval/benchmark.json` as today and also calls `get_store().put_benchmark(report, markdown, label)`; "freeze v2" keeps the v2 row with `current=False` (`is_current=false` in `eval.benchmark_reports`). Needs `DATABASE_URL`; skip the DB write when unset.
   - Prompt budget (spec §6.7): each arm's summary gains `max_prompt_chars`, the largest `state + instructions + options` length any `Decider.choice` call received in that arm's runs (0 for `formula`). The T22, T27 and T33 benchmark runs record it automatically; `BENCHMARK.md` shows it next to the 32,000-char (8k-token) budget.
 
 - [ ] **Step 1: Write the failing tests** (append; use `--fixtures` small runs as the existing tests do)
@@ -1309,11 +1409,18 @@ def test_report_has_engine_version_and_lap_share(tmp_path):
     rep = B.main(["--fixtures", "--n", "3", "--arms", "formula", "--no-ablation", "--outage-n", "0",
                   "--concurrency", "2", "--out", str(tmp_path)])
     assert rep["engine_version"] == ENGINE_VERSION and "lap_share_pct" in rep["baseline"]
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the v2 row survives as non-current history
+def test_frozen_v2_row_is_not_current(live_db_url):
+    import psycopg
+    with psycopg.connect(live_db_url) as c:
+        cur = c.execute("select count(*) from eval.benchmark_reports where is_current").fetchone()[0]
+    assert cur == 1
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_benchmark_small.py -q`. Expected: FAIL.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_benchmark_small.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Copy** the frozen v2 files first, then implement.
-- [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: PASS. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`.
+- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. Then `python3 scripts/db_seed.py benchmark` (skip when `DATABASE_URL` is unset) so the frozen v2 row and the v3-air row are in Postgres, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, run `python3 -m pytest tests/test_benchmark_small.py -q -m live_db`. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1965,8 +2072,8 @@ git commit -m "feat: brief mentions holding laps and hold-shorts; MCP get_trajec
 - Modify: `README.md` (paths story, data sources with CIFP disclaimer and OSM attribution, cost, taxi validation bias statement), `eval/BENCHMARK.md` (narrative header), `docs/api-contract.md` (final v2.2 status line)
 - Create: `docs/screens/` screenshots (radar holding, surface hold-short)
 
-- [ ] **Step 1:** Write the README section. It must contain these exact strings, checked by `tests/test_api.py::test_readme_attributions` (add it): "Procedures: FAA CIFP 2611, not for navigation" and "© OpenStreetMap contributors".
-- [ ] **Step 2:** `python3 -m pytest -q`. Expected: PASS.
+- [ ] **Step 1:** Write the README section, including the subsection "Data: Postgres (Neon) with file fallback" (`atm.datastore`, `scripts/db_seed.py <dataset>`, `DATABASE_URL` / `DATABASE_URL_POOLED`, the opt-in `live_db` tests). It must contain these exact strings, checked by `tests/test_api.py::test_readme_attributions` (add it): "Procedures: FAA CIFP 2611, not for navigation" and "© OpenStreetMap contributors".
+- [ ] **Step 2:** `python3 -m pytest -q -m "not live_db"`. Expected: PASS.
 - [ ] **Step 3:** `cd frontend && npm test && npx tsc --noEmit && npm run build`, then `PYTHONPATH=. python3 scripts/make_samples.py`. Expected: exit 0 and no sample diff.
 - [ ] **Step 4:** Demo walkthrough of all 5 replays offline (no keys, `replay: true`). Each must show radar paths, at least 3 must show a holding lap, and the surface map must run on the same clock. Docker smoke test.
 - [ ] **Step 5: Commit**
