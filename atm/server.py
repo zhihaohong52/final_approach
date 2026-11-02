@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import logging
 import os
 import random
 import re
@@ -34,6 +35,8 @@ GR = _load("graph")
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(title="ATM disruption negotiation")
 
@@ -127,14 +130,16 @@ def decision(body: dict = Body(...)):
             return _err(422, "note_required", "a note is required to OVERRIDE")
         now = datetime.now(timezone.utc).isoformat()
         edits = body.get("edits") if isinstance(body.get("edits"), list) else []
-        get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
-                                     "edits": edits, "recorded_at": now, "ts": time.time()})
+        if not get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
+                                            "edits": edits, "recorded_at": now, "ts": time.time()}):
+            log.warning("decision for run %s was not persisted", body["run_id"])
         return {"ok": True, "recorded_at": now}
     try:  # v1 behaviour, unchanged
         d = Decision(**body)
     except Exception as e:  # pydantic ValidationError -> same 422 shape FastAPI used
         raise HTTPException(422, detail=json.loads(e.json()) if hasattr(e, "json") else str(e))
-    get_store().record_decision({**d.model_dump(), "ts": time.time()})
+    if not get_store().record_decision({**d.model_dump(), "ts": time.time()}):
+        log.warning("v1 decision for flight %s was not persisted", d.flight_id)
     return {"ok": True}
 
 
@@ -297,7 +302,15 @@ def _save_run(result: dict) -> None:
     RUNS.move_to_end(result["run_id"])
     while len(RUNS) > RUNS_MAX:
         RUNS.popitem(last=False)
-    threading.Thread(target=get_store().save_run, args=(result,), daemon=True).start()
+    def persist() -> None:
+        try:
+            ok = get_store().save_run(result)
+        except Exception:  # noqa: BLE001 - storage must never break finish()
+            log.exception("run %s: save_run raised", result["run_id"])
+            return
+        if not ok:
+            log.warning("run %s was not persisted", result["run_id"])
+    threading.Thread(target=persist, daemon=True).start()
 
 
 class _Cancelled(Exception):

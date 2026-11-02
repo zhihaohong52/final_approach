@@ -72,3 +72,29 @@ def test_iem_cache_roundtrip(tmp_path):
     assert s.iem_get("ORD", "2015-08-19") is None
     s.iem_put("ORD", "2015-08-19", "station,valid\nORD,2015-08-19 00:51\n")
     assert s.iem_get("ORD", "2015-08-19")[1].startswith("station,valid")
+
+
+def test_list_runs_decided_and_created_at(tmp_path):
+    from atm.datastore.files import FilePaths
+    s = FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "d.jsonl"))
+    s.save_run({"run_id": "abcdef012345", "wave_id": "W1"})
+    r = s.list_runs("W1", 5)[0]
+    assert r["decided"] is False and r["created_at"]
+    s.record_decision({"run_id": "abcdef012345", "decision": "APPROVE"})
+    assert s.list_runs("W1", 5)[0]["decided"] is True
+
+
+def test_put_benchmark_not_current_is_noop(tmp_path):
+    from atm.datastore.files import FilePaths
+    s = FileStore(FilePaths(benchmark_path=tmp_path / "b.json"))
+    s.put_benchmark({"a": 1}, "md", label="main", current=True)
+    s.put_benchmark({"a": 2}, "md", label="other", current=False)
+    assert s.benchmark_current() == {"a": 1}
+
+
+def test_iem_put_none_writes_nothing(tmp_path):
+    from atm.datastore.files import FilePaths
+    s = FileStore(FilePaths(iem_dir=tmp_path / "iem"))
+    s.iem_put("ORD", "2015-08-19", None)
+    assert s.iem_get("ORD", "2015-08-19") is None
+    assert not (tmp_path / "iem").exists()

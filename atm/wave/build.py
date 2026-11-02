@@ -514,7 +514,7 @@ def build_wave(wave_id: str) -> Wave:
                 flights=flights, gates=gates, provenance=prov, focus=focus.callsign if focus else None)
 
 
-def _summary(row: dict) -> dict:
+def _summary(row: dict, replay_ids: set[str] | None = None) -> dict:
     wid = row["wave_id"]
     iata, date, hour = _parse_id(wid)
     w = _window_rows(iata, date, hour)
@@ -531,12 +531,13 @@ def _summary(row: dict) -> dict:
         "callsigns": list(neg["callsign"]),
         "disrupted_callsigns": [c for c in neg["callsign"] if c in dis_cs],
         "weather_summary": _weather_summary(_metar_for(iata, date, hour)),
-        "replay_available": wid in get_store().replay_ids(),
+        "replay_available": wid in (get_store().replay_ids() if replay_ids is None else replay_ids),
     }
 
 
 def list_waves(airport: str | None = None, q: str | None = None, limit: int = 50) -> list[dict]:
-    return [_summary(r) for r in get_store().wave_rows(airport.upper() if airport else None, q, limit)]
+    ids = get_store().replay_ids()
+    return [_summary(r, ids) for r in get_store().wave_rows(airport.upper() if airport else None, q, limit)]
 
 
 def random_wave(airport: str | None = None, seed: int | None = None) -> dict:
