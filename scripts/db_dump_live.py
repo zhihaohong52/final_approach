@@ -54,8 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         with psycopg.connect(url) as conn:
             counts = dump(conn, Path(args.out))
     except psycopg.Error as e:   # never echo the URL
-        print(f"database error ({e.sqlstate or 'no sqlstate'}): {str(e).splitlines()[0] if str(e) else type(e).__name__}",
-              file=sys.stderr)
+        print(f"database error ({e.sqlstate or 'no sqlstate'}): {type(e).__name__}", file=sys.stderr)
         return 1
     for name, n in counts.items():
         print(f"{Path(args.out) / name}: {n} rows")

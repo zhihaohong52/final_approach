@@ -222,9 +222,23 @@ python3 scripts/db_dump_live.py          # back up live.runs and live.decisions 
 python3 scripts/db_timings.py            # p50/p95 per path against the design budgets (add --after-idle for a wake-up sample)
 ```
 
+First production seed, in order:
+
+1. `python3 scripts/db_migrate.py`
+2. `python3 scripts/db_seed.py`
+3. `python3 scripts/db_seed.py --check` (must report no mismatches)
+4. In the Render dashboard set `DATABASE_URL_POOLED` (the pooler URL). Never set `DATABASE_URL` there.
+5. Redeploy.
+6. Run one negotiation and approve it; note the run id.
+7. Redeploy again.
+8. Confirm `GET /api/runs/<id>` still returns that run, and `GET /api/config` shows `"backend": "postgres"` and `"degraded": false`.
+9. `python3 scripts/db_timings.py` from the dev machine.
+
+`DATABASE_TEST_URL` is a separate `atm_test` database in the same Neon project (a Neon `test` branch also works); the live tests never touch the production database.
+
 Measured sizes (1 GB free limit): `atm_test` with all reference data 152 MB; the raw datasets add an estimated ~158 MB.
 
-Fallback behaviour: every read and write goes through `FallbackStore`. A failed or timed-out call is retried (except `record_decision` and `put_benchmark`, which are not idempotent), then served from files; three consecutive failures open a breaker for 60 s. `GET /api/config` never queries the database. Read its `store` object: `{"backend": "postgres", "degraded": false, "persistent": true}` is healthy; `"backend": "files"` means no database is configured; `"degraded": true` with a `reason` means Postgres was configured but a call fell back to files (runs saved then are not persistent).
+Fallback behaviour: every read and write goes through `FallbackStore`. A failed or timed-out call is retried (except `record_decision` and `put_benchmark`, which are not idempotent), then served from files; three consecutive failures open a breaker for 60 s. `GET /api/config` never queries the database. Read its `store` object: `"backend": "postgres"` with `"degraded": false` is healthy. `"backend": "files"` with `"degraded": true` (and a `reason`) is the fallback: a database is configured but unreachable, and runs saved then are not persistent. `"backend": "files"` with `"degraded": false` means no database is configured.
 
 Compute hours: the free plan gives 100 CU-hours a month, which is 400 active hours at 0.25 CU. Compute suspends 5 minutes after the last query. Do not add a keep-alive, a timer query or a database call to the health check: a database that is never idle uses about 183 CU-hours a month and the budget is gone in about 16 days. If the budget runs out, the site keeps running on files (degraded).
 
