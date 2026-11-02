@@ -10,12 +10,12 @@ import { clock, dateLabel } from "./format";
 type Status = "idle" | "running" | "done" | "error";
 type Decision = { kind: "APPROVE" | "OVERRIDE"; at: string; note?: string; offline: boolean } | null;
 const MODE_LABEL: Record<Mode, string> = { formulas: "Formulas", decision: "Decision models", "decision+claude": "Decision models + Claude brief" };
-type Tab = "flights" | "rules" | "log" | "data";
+type Tab = "rules" | "data" | "limits" | "sources";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "flights", label: "Flights" }, { id: "rules", label: "Safety rules" }, { id: "log", label: "Negotiation log" }, { id: "data", label: "Weather and data" },
+  { id: "rules", label: "Safety rules" }, { id: "data", label: "Weather and wind" }, { id: "limits", label: "Limits used" }, { id: "sources", label: "Data sources" },
 ];
 
-export function WaveScreen() {
+export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [waves, setWaves] = useState<WaveSummary[]>([]);
   const [wave, setWave] = useState<WaveScenario | null>(null);
@@ -35,7 +35,7 @@ export function WaveScreen() {
   const [overriding, setOverriding] = useState(false);
   const [note, setNote] = useState("");
   const [deciding, setDeciding] = useState(false);
-  const [tab, setTab] = useState<Tab>("flights");
+  const [tab, setTab] = useState<Tab>("rules");
   const [opening, setOpening] = useState<{ plan: JointPlan; evaluation: PlanEvaluation } | null>(null);   // the status quo, known from OPEN
   const [details, setDetails] = useState(false);
   const abort = useRef<AbortController | null>(null);
@@ -67,7 +67,7 @@ export function WaveScreen() {
     if (!wave) return;
     abort.current?.abort();
     const ctl = new AbortController(); abort.current = ctl;
-    setStatus("running"); setMessages([]); showTable(null); setResult(null); setRejection(null); setRunErr(null); setDecision(null); setView("plan"); setTab("log"); setOpening(null);
+    setStatus("running"); setMessages([]); showTable(null); setResult(null); setRejection(null); setRunErr(null); setDecision(null); setView("plan"); setOpening(null);
     let ended = false;
     try {
       await api.negotiate({ wave_id: wave.id, mode, model: mode === "formulas" ? undefined : model, replay }, (ev) => {
@@ -91,7 +91,7 @@ export function WaveScreen() {
           }
         } else if (ev.event === "result") {
           ended = true;
-          setResult(ev.data); showTable(ev.data.final_plan); setRejection(null); setStatus("done"); setTab("flights");
+          setResult(ev.data); showTable(ev.data.final_plan); setRejection(null); setStatus("done");
           if (ev.data.log) setMessages(ev.data.log);
         } else if (ev.event === "error") {
           ended = true;
@@ -134,9 +134,9 @@ export function WaveScreen() {
   const speaker = (s: string) => (s.startsWith("PILOT:") ? `Pilot ${s.slice(6)}` : s === "GROUND" ? "Ground" : s);
   const proposalLabel = lastTurn ? `Proposal from ${speaker(lastTurn.sender)}, turn ${lastTurn.round}` : "Opening plan, first come first served";
   const next: Record<string, string> = { ATC: "Pilot", GROUND: "ATC" };
-  const progress = !messages.length ? "Starting…" : lastTurn
-    ? `Turn ${lastTurn.round} of 3 · ${speaker(lastTurn.sender)} proposed, ${lastTurn.sender.startsWith("PILOT") ? "Ground" : next[lastTurn.sender] ?? "next agent"} to speak`
-    : "Triage and opening plan…";
+  const progress = !messages.length ? "starting…" : lastTurn
+    ? `turn ${lastTurn.round} of 3 · ${lastTurn.sender.startsWith("PILOT") ? "Ground" : next[lastTurn.sender] ?? "next agent"} to speak`
+    : "triage and opening plan…";
   const triage = (() => {
     const t = messages.find((m) => m.body.type === "TRIAGE");
     if (!t || t.body.type !== "TRIAGE") return null;
@@ -148,6 +148,7 @@ export function WaveScreen() {
     const i = TABS.findIndex((t) => t.id === tab), n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length].id;
     setTab(n); document.getElementById(`tab-${n}`)?.focus();
   };
+  useEffect(() => { if (wave) onScope?.(`${wave.airport.iata} · ${wave.id}`); }, [wave, onScope]);
   const summary = useMemo(() => finding(wave, status, messages, result), [wave, status, messages, result]);
 
   if (!wave) {
@@ -161,12 +162,15 @@ export function WaveScreen() {
   }
   const last = messages[messages.length - 1];
   const round = last?.round ?? 0;
+  const turnsDone = result ? (result.turns ?? result.rounds ?? 0) : lastTurn?.round ?? 0;
+  const focusFlight = wave.flights.find((f) => f.callsign === wave.focus);
+  const [t0, t1] = [clock(wave.window_start, 0), clock(wave.window_start, 60)];
 
   return (
     <main className="canvas">
       <header className="titlerow">
         <div>
-          <h1>{wave.airport.iata} arrivals {clock(wave.window_start, 0)}–{clock(wave.window_start, 60)}, {dateLabel(wave.window_start)}</h1>
+          <h1>{wave.airport.iata} arrivals <span className="mono">{t0}–{t1}</span>, {dateLabel(wave.window_start)}</h1>
           <p className="sub">{summary}</p>
           <p className="sr-only" aria-live="polite">{status === "running" ? `Negotiating, turn ${round} of 3` : status === "done" ? "Negotiation finished. The plan is ready to approve or override." : status === "error" ? `Negotiation failed. ${runErr ?? ""}` : ""}</p>
         </div>
@@ -177,7 +181,6 @@ export function WaveScreen() {
             </span>
           ) : status === "done" || status === "running" ? (
             <>
-              {status === "running" && <span className="muted progress">{progress}</span>}
               <button className="btn" disabled={deciding || status !== "done"} onClick={() => setOverriding((o) => !o)} aria-expanded={overriding}>Override</button>
               <button className="btn primary" disabled={deciding || status !== "done"} onClick={() => decide("APPROVE")}>Approve plan</button>
             </>
@@ -236,87 +239,106 @@ export function WaveScreen() {
                 Replay the recorded run
               </label>
             )}
-            {mode === "decision+claude" && config && !config.llm_available && <p className="muted" style={{ fontSize: 13 }}>Claude is not configured, so the brief uses a template.</p>}
           </div>
         </details>
         {status === "done" && <button className="btn text" onClick={negotiate}>Run again</button>}
-        {isOffline() && <span className="pill end" title="The backend is not reachable; this replays the backend's recorded sample run">Offline demo (recorded run)</span>}
+        {isOffline() && <span className="pill end" title="The backend is not reachable; this replays the backend's recorded sample run">Offline demo, recorded run</span>}
       </div>
 
-      <div className="stack">
-        <section className="card" aria-label="Outcome against the status quo">
-          <RevisionLine r={result?.revision ?? null} plan={result?.final_plan ?? null} base={result?.baseline.plan ?? null} />
-          <Outcome ev={result?.evaluation ?? null} base={result?.baseline.evaluation ?? opening?.evaluation ?? null} />
-        </section>
-
-        <section className="card">
-          <div className="card-head">
-            <h2>Runways and gates</h2>
-            {result ? (
-              <div className="seg" role="group" aria-label="Plan shown">
-                <button aria-pressed={view === "base"} onClick={() => setView("base")} title="Status quo: the schedule as it stood">Before</button>
-                <button aria-pressed={view === "plan"} onClick={() => setView("plan")} title="The plan the agents agreed">After</button>
+      <div className="console">
+        <div className="lead">
+          <section className="card outcome" aria-label="Outcome against the status quo">
+            {result?.revision ? <RevisionLine r={result.revision} plan={result.final_plan} base={result.baseline.plan} /> : (
+              <div className="revision empty-rev">
+                <div className="label">{focusFlight ? <>Disruption flight <span className="code">{focusFlight.callsign}</span>, scheduled {clock(wave.window_start, focusFlight.sched_min)}</> : "Disrupted flights"}</div>
+                <div className="what">{status === "running" ? "The agents are negotiating its slot, runway and gate." : "Start the negotiation to revise its slot, runway and gate."}</div>
               </div>
-            ) : <span className="meta">{table ? proposalLabel : "Fixed traffic only, no plan yet"}</span>}
-          </div>
-          <Gantt wave={wave} plan={shown} other={view === "base" ? result?.final_plan : result?.baseline.plan ?? opening?.plan} turn={turn} rejection={view === "plan" ? rejection : null} />
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginTop: 12 }}>
-            <GanttLegend simulated={wave.gates.some((g) => g.busy.some((b) => /simulated/i.test(b.label)))} />
-            <span className="reject-note" aria-live="polite">
-              {rejection && status === "running" ? `Vetoed: ${rejection.move.label}. ${rejection.violations[0]?.detail ?? ""}` : ""}
-            </span>
-          </div>
-        </section>
+            )}
+            <Outcome ev={result?.evaluation ?? null} base={result?.baseline.evaluation ?? opening?.evaluation ?? null} />
+          </section>
 
-        <section className="card">
-          <div className="tabs" role="tablist" aria-label="Details" onKeyDown={onTabKey}>
-            {TABS.map((t) => (
-              <button key={t.id} id={`tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} tabIndex={tab === t.id ? 0 : -1} onClick={() => setTab(t.id)}>
-                {t.label}{t.id === "log" && messages.length ? <span className="count">{messages.length}</span> : null}
-              </button>
-            ))}
-          </div>
-          <div className="tabpanel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-            {tab === "flights" && <PlanTable wave={wave} plan={result ? result.final_plan : table} baseline={result?.baseline.plan ?? null} />}
-            {tab === "rules" && <Checks key={result?.run_id ?? "none"} wave={wave} ev={result?.evaluation ?? null} base={result?.baseline.evaluation ?? null} />}
-            {tab === "log" && (
-              <>
-                {(result?.narration || triage) && (
-                  <section style={{ marginBottom: 20 }}>
-                    {result?.narration && <p className="brief">{result.narration.brief}</p>}
-                    <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-                      {result?.narration ? (result.narration.source === "claude" ? `Brief written by ${result.narration.model ?? "Claude"} from the log; it decides nothing.` : "Brief from a template over the log; it decides nothing.") : ""}
-                      {triage ? ` Triage: severity ${triage}.` : ""}
-                      {result ? ` ${result.stats.model_calls} model calls, ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}.` : ""}
-                    </p>
-                    {result?.model_errors.length ? <p style={{ marginTop: 6, fontSize: 13, color: "var(--warning)" }}>{result.model_errors.join(" · ")}</p> : null}
-                  </section>
-                )}
-                {runErr && <p style={{ color: "var(--negative)", marginBottom: 10 }}>{runErr} <button className="btn text" onClick={negotiate}>Retry</button></p>}
-                {messages.length > 0 && (
-                  <label className="field" style={{ justifyContent: "flex-end", fontSize: 13, marginBottom: 4, cursor: "pointer" }}>
-                    <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
-                    Show model, probability and latency
-                  </label>
-                )}
-                <Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} />
-              </>
-            )}
-            {tab === "data" && (
-              <>
-                <div className="map-row">
-                  <section>
-                    <div className="card-head"><h3>{wave.airport.iata} runways and wind</h3><span className="meta">{result || table ? "Blue: runway ends the plan lands on" : "Before a plan"}</span></div>
-                    <AirportMap wave={wave} plan={view === "base" && result ? result.baseline.plan : table} />
-                  </section>
-                  <Weather wave={wave} />
+          <section className="card gantt-card">
+            <div className="card-head">
+              <h2>Runways and gates</h2>
+              {result ? (
+                <div className="seg" role="group" aria-label="Plan shown">
+                  <button aria-pressed={view === "base"} onClick={() => setView("base")} title="Status quo: the schedule as it stood">Before</button>
+                  <button aria-pressed={view === "plan"} onClick={() => setView("plan")} title="The plan the agents agreed">After</button>
                 </div>
-                <Limits limits={result?.limits ?? null} /><Sources wave={wave} />
-              </>
-            )}
-          </div>
+              ) : <span className="meta">{table ? proposalLabel : "Fixed traffic only, no plan yet"}</span>}
+            </div>
+            <Gantt wave={wave} plan={shown} other={view === "base" ? result?.final_plan : result?.baseline.plan ?? opening?.plan} turn={turn} rejection={view === "plan" ? rejection : null} />
+            <div className="gantt-foot">
+              <GanttLegend simulated={wave.gates.some((g) => g.busy.some((b) => /simulated/i.test(b.label)))} focus={wave.focus ?? undefined} />
+              <span className="reject-note" aria-live="polite">
+                {rejection && status === "running" ? `Vetoed: ${rejection.move.label}. ${rejection.violations[0]?.detail ?? ""}` : ""}
+              </span>
+            </div>
+          </section>
+        </div>
+
+        <aside className="rail" aria-label="Negotiation">
+          <section className="card">
+            <div className="feed-head">
+              <h2>Negotiation</h2>
+              <span className="meta">{status === "running" ? progress : result ? (result.outcome === "consensus" ? `agreed in turn ${turnsDone} of 3` : "solver decided") : "3 agents · 12 rules"}</span>
+            </div>
+            <div className="turns" aria-hidden="true">
+              {[1, 2, 3].map((i) => <span key={i} className={i < turnsDone || (result && i === turnsDone) ? "on" : i === turnsDone && status === "running" ? "now" : ""} />)}
+            </div>
+            <div className="feed">
+              {result?.narration && (
+                <div style={{ marginBottom: 14 }}>
+                  <p className="brief">{result.narration.brief}</p>
+                  <p className="brief-src">{result.narration.source === "claude" ? `Brief written by ${result.narration.model ?? "Claude"} from the log; it decides nothing.` : "Brief from a template over the log; it decides nothing."}</p>
+                </div>
+              )}
+              {result?.model_errors.length ? <p style={{ marginBottom: 10, fontSize: 12, color: "var(--warning)" }}>{result.model_errors.join(" · ")}</p> : null}
+              {runErr && <p style={{ color: "var(--negative)", marginBottom: 10 }}>{runErr} <button className="btn text" onClick={negotiate}>Retry</button></p>}
+              <Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} />
+            </div>
+            <div className="feed-foot">
+              {messages.length > 0 ? (
+                <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} style={{ accentColor: "var(--accent)" }} />
+                  Show model, probability and latency
+                </label>
+              ) : "If a decision model fails, the next model in the chain answers, then a formula."}
+              {(result || triage) && <div style={{ marginTop: 6, fontFamily: "var(--mono)" }}>{triage ? `triage ${triage}` : ""}{result ? `${triage ? " · " : ""}${result.stats.model_calls} model calls · ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}` : ""}</div>}
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <div className="row2">
+        <section className="card flights-card">
+          <div className="card-head"><h2>Flights in the plan</h2><span className="meta">{wave.flights.length} negotiated · {wave.queue.length} fixed arrivals</span></div>
+          <PlanTable wave={wave} plan={result ? result.final_plan : table} baseline={result?.baseline.plan ?? null} />
+          <p className="card-foot">{result
+            ? <>Wave total <span className="code">{result.evaluation.totals.delay_min} min</span> gate delay against <span className="code">{result.baseline.evaluation.totals.delay_min} min</span> in the status quo; <span className="code">{result.evaluation.totals.pax_protected_pct.toFixed(1)}%</span> of connecting passengers protected.</>
+            : "Runway, slot, gate and delay fill in as the agents put a plan on the table."}</p>
+        </section>
+        <section className="card">
+          <div className="card-head"><h2>{wave.airport.iata} to scale</h2><span className="meta">{result || table ? "Blue: runway ends the plan lands on" : wave.airport.name}</span></div>
+          <AirportMap wave={wave} plan={view === "base" && result ? result.baseline.plan : table} />
         </section>
       </div>
+
+      <section className="card below">
+        <div className="tabs" role="tablist" aria-label="Details" onKeyDown={onTabKey}>
+          {TABS.map((t) => (
+            <button key={t.id} id={`tab-${t.id}`} role="tab" aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} tabIndex={tab === t.id ? 0 : -1} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="tabpanel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+          {tab === "rules" && <Checks key={result?.run_id ?? "none"} wave={wave} ev={result?.evaluation ?? null} base={result?.baseline.evaluation ?? null} />}
+          {tab === "data" && <Weather wave={wave} />}
+          {tab === "limits" && <Limits limits={result?.limits ?? null} />}
+          {tab === "sources" && <Sources wave={wave} />}
+        </div>
+      </section>
     </main>
   );
 }

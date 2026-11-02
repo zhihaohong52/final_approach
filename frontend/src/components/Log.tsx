@@ -70,7 +70,7 @@ function stepDiffs(messages: NegotiationMessage[]): Map<number, StepDiff> {
 function Changes({ d }: { d: StepDiff }) {
   const dd = d.delayAfter - d.delayBefore;
   const br = d.breachesBefore != null && d.breachesAfter != null && d.breachesBefore !== d.breachesAfter
-    ? ` · rule breaches ${d.breachesBefore} → ${d.breachesAfter}${d.breachesAfter === 0 ? " ✓" : ""}`
+    ? ` · rule breaches ${d.breachesBefore} → ${d.breachesAfter}`
     : d.breachesAfter ? ` · ${d.breachesAfter} rule breach${d.breachesAfter === 1 ? "" : "es"} remain` : "";
   if (!d.flights.length) return <div className="msg-diff muted">No change to the plan{br}</div>;
   return (

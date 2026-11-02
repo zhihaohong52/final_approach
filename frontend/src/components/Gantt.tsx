@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import type { JointPlan, Move, RuleCheck, WaveScenario } from "../api/types";
 import { clock } from "../format";
 
-const W = 1158, LABEL = 64, RIGHT = 8, LANE = 22, BAR = 14, AXIS = 22, GAP = 16, NOTE = 20;
+const LABEL = 72, RIGHT = 8, LANE = 26, BAR = 16, AXIS = 28, GAP = 22, NOTE = 22;
 
 export interface Rejection { seq: number; move: Move; violations: RuleCheck[]; runway?: string }
 
@@ -25,6 +26,19 @@ function rows<T extends { from: number; to: number }>(items: T[]): (T & { row: n
 }
 
 export function Gantt({ wave, plan, other, turn, rejection }: Props) {
+  // drawn at the width it is shown, so 12px text stays 12px; below 720px it scrolls sideways instead of shrinking
+  const wrap = useRef<HTMLDivElement>(null);
+  const [W, setW] = useState(1100);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(720, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const focus = wave.focus;
+  const fill = (cs: string) => (cs === focus ? "var(--hue)" : "var(--flight)");
+  const ink = (cs: string) => (cs === focus ? "#ffffff" : "#0e0d11");
   const plans = [plan, other].filter(Boolean) as JointPlan[];
   const land = (p: JointPlan) => p.assignments.filter((a) => a.action === "land");
   const usedRwy = new Set([...wave.queue.map((q) => q.runway), ...plans.flatMap((p) => land(p).map((a) => a.runway ?? ""))]);
@@ -67,6 +81,7 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
   const H = y + (hiddenGates ? NOTE : 0) + 4;
   const ticks: number[] = [];
   for (let t = START; t <= END; t += 15) ticks.push(t);
+  const tickPx = x(START + 15) - x(START);           // edge labels only when there is room beside their neighbours
 
   let rejY: number | null = null;
   if (rejection) {
@@ -77,31 +92,47 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
     else if (rwy && runways.some((r) => r.id === rwy)) rejY = yRwy(rwy);
   }
   const real = (label: string) => !/simulated/i.test(label);
+  // when the chart scrolls (phones), open it at the first negotiated landing rather than at the axis start
+  const firstX = times.length ? x(Math.min(...times)) : 0;
+  useEffect(() => {
+    const el = wrap.current;
+    if (el && el.scrollWidth > el.clientWidth + 8) el.scrollLeft = Math.max(0, firstX - LABEL - 24);
+  }, [firstX]);
 
   return (
-    <div className="gantt-wrap" tabIndex={0} role="region" aria-label="Runway and gate timeline, scrolls sideways on small screens">
-      <svg className="gantt" viewBox={`0 0 ${W} ${H}`} width="100%" role="img"
+    <div className="gantt-wrap" ref={wrap} tabIndex={0} role="region" aria-label="Runway and gate timeline, scrolls sideways on small screens">
+      {/* the lane names stay pinned at the left while the chart scrolls sideways */}
+      <svg className="gantt gantt-labels" width={LABEL - 4} height={H} aria-hidden="true">
+        <text className="group" x={0} y={14}>Runways</text>
+        {runways.map((r) => <text key={r.id} className="lane-label" x={0} y={yRwy(r.id) + 17} style={r.open ? undefined : { fill: "var(--muted)" }}>{r.id}</text>)}
+        <text className="group" x={0} y={gatesTop - 6}>Gates</text>
+        {lanes.map(({ g }) => <text key={g.id} className="lane-label" x={0} y={gateY[g.id] + 17}>{g.id === "RS" ? "Remote" : g.id}</text>)}
+      </svg>
+      <svg className="gantt" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img"
         aria-label={`Runway and gate timeline, ${clock(wave.window_start, START)} to ${clock(wave.window_start, END)}`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={x(t)} x2={x(t)} y1={AXIS - 4} y2={H} stroke={t === 0 || t === 60 ? "var(--control)" : "var(--gridline)"} />
-            <text x={x(t)} y={12} textAnchor={t === START ? "start" : t === END ? "end" : "middle"}>{clock(wave.window_start, t)}</text>
+            {(tickPx >= 60 || (t !== START && t !== END)) && (tickPx >= 44 || ((t - START) / 15) % 2 === 0) && (
+              <text className="tick" x={x(t)} y={14} textAnchor={t === START ? "start" : t === END ? "end" : "middle"}>{clock(wave.window_start, t)}</text>
+            )}
           </g>
         ))}
 
+        <text className="group" x={0} y={14}>Runways</text>
         {runways.map((r) => {
           const ry = yRwy(r.id);
           return (
             <g key={r.id}>
-              <text className="lane-label" x={0} y={ry + 14} style={r.open ? undefined : { fill: "var(--muted)" }}>{r.id}</text>
+              <text className="lane-label" x={0} y={ry + 17} style={r.open ? undefined : { fill: "var(--muted)" }}>{r.id}</text>
               {!r.open && (
                 <>
-                  <rect x={x(START)} y={ry + 4} width={x(END) - x(START)} height={BAR} fill="url(#hatch)" rx={3} />
-                  <text x={x(START) + 8} y={ry + 15} style={{ fill: "var(--muted)" }}>Closed{r.closed_reason ? ` · ${r.closed_reason}` : ""}</text>
+                  <rect x={x(START)} y={ry + 5} width={x(END) - x(START)} height={BAR} fill="url(#hatch)" rx={2} />
+                  <text x={x(START) + 8} y={ry + 17} style={{ fill: "var(--soft)" }}>Closed{r.closed_reason ? ` · ${r.closed_reason}` : ""}</text>
                 </>
               )}
               {wave.queue.filter((q) => q.runway === r.id && inView(q.slot_min, q.slot_min)).map((q) => (
-                <rect key={q.callsign} x={x(q.slot_min)} y={ry + 4} width={4} height={BAR} rx={1} fill="var(--queue)">
+                <rect key={q.callsign} x={x(q.slot_min)} y={ry + 5} width={3} height={BAR} rx={1} fill="var(--queue)">
                   <title>{`${q.callsign} ${q.aircraft_type ?? ""} ${q.wake} · ${clock(wave.window_start, q.slot_min)} (fixed traffic)`}</title>
                 </rect>
               ))}
@@ -110,14 +141,14 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
         })}
         {hiddenRwy > 0 && <text x={LABEL} y={rwyEnd - 6} style={{ fontSize: 13 }}>{hiddenRwy} other runway{hiddenRwy === 1 ? "" : "s"} open, not used in this wave</text>}
 
-        <text x={0} y={gatesTop - 4} style={{ fontSize: 13 }}>Gates</text>
+        <text className="group" x={0} y={gatesTop - 6}>Gates</text>
         {lanes.map(({ g, items }) => (
           <g key={g.id}>
-            <text className="lane-label" x={0} y={gateY[g.id] + 14}>{g.id === "RS" ? "Remote" : g.id}</text>
+            <text className="lane-label" x={0} y={gateY[g.id] + 17}>{g.id === "RS" ? "Remote" : g.id}</text>
             {items.filter((i) => i.kind === "busy").map((b, i) => (
               <g key={i}>
-                <rect x={x(b.from)} y={gateY[g.id] + b.row * LANE + 4} width={Math.max(2, x(b.to) - x(b.from))} height={BAR} rx={3} fill="var(--busy)"><title>{b.label}</title></rect>
-                {real(b.label) && x(b.to) - x(b.from) > 110 && <text className="q-label" x={x(b.from) + 6} y={gateY[g.id] + b.row * LANE + 15}>{b.label}</text>}
+                <rect x={x(b.from)} y={gateY[g.id] + b.row * LANE + 5} width={Math.max(2, x(b.to) - x(b.from))} height={BAR} rx={2} fill="var(--busy)"><title>{b.label}</title></rect>
+                {real(b.label) && x(b.to) - x(b.from) > 110 && <text className="q-label" x={x(b.from) + 6} y={gateY[g.id] + b.row * LANE + 17}>{b.label}</text>}
               </g>
             ))}
           </g>
@@ -135,7 +166,7 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
           const after = land(plan).some((o) => near(o) && (o.slot_min ?? 0) > slot);
           const before = land(plan).some((o) => near(o) && (o.slot_min ?? 0) <= slot && o.callsign < a.callsign);
           const offAxis = (m: number, y: number) => (
-            <text x={x(END)} y={y + 15} textAnchor="end" style={{ font: "500 12px var(--mono)", fill: "var(--hue)" }}>
+            <text x={x(END)} y={y + 17} textAnchor="end" style={{ font: "500 12px var(--mono)", fill: a.callsign === focus ? "var(--hue)" : "var(--soft)" }}>
               {`${a.callsign} → ${clock(wave.window_start, m)}`}
             </text>
           );
@@ -149,14 +180,14 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
           return (
             <g key={a.callsign}>
               <g className="wave" style={{ transform: `translate(${x(slot)}px, ${ry}px)` }}>
-                {a.metrics.hold_min > 0 && <line x1={x(holdFrom) - x(slot)} x2={0} y1={11} y2={11} stroke="var(--hue)" strokeDasharray="2 3" />}
-                <rect x={0} y={4} width={6} height={BAR} rx={2} fill="var(--hue)" />
-                {!(after && before) && <text x={after ? -4 : 10} y={15} textAnchor={after ? "end" : "start"} style={{ font: "500 12px var(--mono)", fill: "var(--hue)" }}>{a.callsign}</text>}
+                {a.metrics.hold_min > 0 && <line x1={x(holdFrom) - x(slot)} x2={0} y1={13} y2={13} stroke={fill(a.callsign)} strokeDasharray="2 3" />}
+                <rect x={0} y={5} width={6} height={BAR} rx={1} fill={fill(a.callsign)} />
+                {!(after && before) && <text x={after ? -5 : 11} y={17} textAnchor={after ? "end" : "start"} style={{ font: "500 12px var(--mono)", fill: a.callsign === focus ? "var(--hue)" : "var(--text)" }}>{a.callsign}</text>}
               </g>
               {item && (
                 <g className="wave" style={{ transform: `translate(${x(inb)}px, ${gy}px)` }}>
-                  <rect x={0} y={4} width={Math.max(6, x(inb + turn) - x(inb))} height={BAR} rx={3} fill="var(--hue)" />
-                  <text className="bar-label" x={6} y={15}>{a.callsign}</text>
+                  <rect x={0} y={5} width={Math.max(6, x(inb + turn) - x(inb))} height={BAR} rx={2} fill={fill(a.callsign)} />
+                  <text className="bar-label" x={7} y={17} style={{ fill: ink(a.callsign) }}>{a.callsign}</text>
                 </g>
               )}
               <title>{`${a.callsign}: runway ${a.runway} ${clock(wave.window_start, slot)}, gate ${a.gate} ${clock(wave.window_start, inb)}–${clock(wave.window_start, inb + turn)}`}</title>
@@ -170,7 +201,7 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
         )}
         <defs>
           <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--hatch)" strokeWidth="3" />
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--hatch)" strokeWidth="2.5" />
           </pattern>
         </defs>
       </svg>
@@ -178,13 +209,16 @@ export function Gantt({ wave, plan, other, turn, rejection }: Props) {
   );
 }
 
-export function GanttLegend({ simulated }: { simulated?: boolean }) {
+// every swatch is the mark it explains, drawn small
+const Mark = ({ children, w = 18 }: { children: React.ReactNode; w?: number }) => <svg width={w} height={12} aria-hidden="true">{children}</svg>;
+export function GanttLegend({ simulated, focus }: { simulated?: boolean; focus?: string }) {
   return (
     <div className="legend">
-      <span><i style={{ background: "var(--hue)" }} />Negotiated flights</span>
-      <span><i style={{ background: "var(--queue)", width: 4, height: 12, verticalAlign: -2 }} />Fixed arrivals</span>
-      <span><i style={{ background: "var(--busy)" }} />Gate held by another flight{simulated ? " (simulated)" : ""}</span>
-      <span><i style={{ width: 14, height: 0, borderTop: "1.5px dashed var(--hue)", borderRadius: 0, verticalAlign: 2 }} />Airborne holding</span>
+      {focus && <span><Mark><rect y={2} width={18} height={8} rx={1.5} fill="var(--hue)" /></Mark>Disruption flight <span className="code">{focus}</span></span>}
+      <span><Mark><rect y={2} width={18} height={8} rx={1.5} fill="var(--flight)" /></Mark>{focus ? "Other negotiated flights" : "Negotiated flights"}</span>
+      <span><Mark w={6}><rect x={1.5} y={1} width={3} height={10} rx={1} fill="var(--queue)" /></Mark>Fixed arrivals</span>
+      <span><Mark><rect y={2} width={18} height={8} rx={1.5} fill="var(--busy)" /></Mark>Gate held by another flight{simulated ? " (simulated)" : ""}</span>
+      <span><Mark><line x1={0} x2={18} y1={6} y2={6} stroke="var(--soft)" strokeDasharray="2 3" /></Mark>Airborne holding</span>
     </div>
   );
 }

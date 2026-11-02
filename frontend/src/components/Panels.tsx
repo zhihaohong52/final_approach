@@ -6,12 +6,12 @@ import { clock, signed } from "../format";
 export function Outcome({ ev, base }: { ev: PlanEvaluation | null; base: PlanEvaluation | null }) {
   const t = ev?.totals, b = base?.totals;
   const breaches = (e: PlanEvaluation | null) => (e ? e.checks.filter((c) => !c.passed).length : null);
-  const dash = <span className="muted">n/a</span>;
+  const dash = <span className="pending">after the run</span>;
   const cell = (label: string, value: React.ReactNode, unit: string, delta: React.ReactNode) => (
     <div className="kpi"><div className="label">{label}</div><div className="value">{value}{value !== dash && <small>{unit}</small>}</div><div className="delta">{delta}</div></div>
   );
   const vs = (now: number | undefined, then: number | undefined, unit: string, goodDown = true, digits = 0) => {
-    if (then == null) return <span className="muted">Status quo n/a</span>;
+    if (then == null) return <span className="muted">&nbsp;</span>;
     if (now == null) return <span>Status quo {then.toFixed(digits)}{unit}</span>;
     const diff = +(now - then).toFixed(digits);
     const good = goodDown ? diff < 0 : diff > 0;
@@ -19,10 +19,10 @@ export function Outcome({ ev, base }: { ev: PlanEvaluation | null; base: PlanEva
   };
   return (
     <div className="kpis">
-      {cell("Total gate delay", t ? t.delay_min : dash, " min", vs(t?.delay_min, b?.delay_min, " min"))}
-      {cell("Connecting pax protected", t ? t.pax_protected_pct.toFixed(1) : dash, "%", vs(t?.pax_protected_pct, b?.pax_protected_pct, "%", false, 1))}
-      {cell("Holding fuel", t ? t.fuel_kg : dash, " kg", vs(t?.fuel_kg, b?.fuel_kg, " kg"))}
-      {cell("Safety rule breaches", ev ? breaches(ev) : dash, "", base ? <span>Status quo <span className={breaches(base) ? "neg" : ""}>{breaches(base)}</span></span> : <span className="muted">Status quo n/a</span>)}
+      {cell("Gate delay", t ? t.delay_min : dash, " min", vs(t?.delay_min, b?.delay_min, " min"))}
+      {cell("Pax protected", t ? t.pax_protected_pct.toFixed(1) : dash, "%", vs(t?.pax_protected_pct, b?.pax_protected_pct, "%", false, 1))}
+      {cell("Hold fuel", t ? t.fuel_kg : dash, " kg", vs(t?.fuel_kg, b?.fuel_kg, " kg"))}
+      {cell("Rule breaches", ev ? breaches(ev) : dash, "", base ? <span>Status quo <span className={breaches(base) ? "neg" : ""}>{breaches(base)}</span></span> : <span className="muted">&nbsp;</span>)}
     </div>
   );
 }
@@ -52,8 +52,8 @@ export function PlanTable({ wave, plan, baseline }: { wave: WaveScenario; plan: 
             const dDelay = a && b ? a.metrics.delay_min - b.metrics.delay_min : null;
             const dPax = a && b ? a.metrics.pax_protected - b.metrics.pax_protected : null;
             return (
-              <tr key={f.callsign}>
-                <td title={provShort(f.provenance)}><span className="code">{f.callsign}</span>{f.callsign === focus && <span className="pill" style={{ marginLeft: 8, height: 20 }}>Disruption flight</span>}<span className="sub">{f.aircraft_type ? `${f.aircraft_type} from` : "From"} {f.origin}{f.disrupted ? ` · ${Math.max(f.delays.weather, f.delays.late_aircraft)} min ${f.delays.weather >= f.delays.late_aircraft ? "weather" : "late aircraft"}` : ""}</span></td>
+              <tr key={f.callsign} className={f.callsign === focus ? "focus" : undefined}>
+                <td title={provShort(f.provenance)}><span className="code">{f.callsign}</span>{f.callsign === focus && <span className="pill hue" style={{ marginLeft: 8, height: 20 }}>Disruption flight</span>}<span className="sub">{f.aircraft_type ? `${f.aircraft_type} from` : "From"} {f.origin}{f.disrupted ? ` · ${Math.max(f.delays.weather, f.delays.late_aircraft)} min ${f.delays.weather >= f.delays.late_aircraft ? "weather" : "late aircraft"}` : ""}</span></td>
                 <td>{a ? <><span className="code">{a.action === "divert" ? "Divert" : a.runway}</span><span className="sub">{c(a.slot_min)}{a.metrics.hold_min ? ` · hold ${a.metrics.hold_min} min` : ""}{a.ground_delay_min ? ` · ${a.ground_delay_min} min at ${f.origin}` : ""}</span></> : <span className="muted">n/a</span>}</td>
                 <td>{a ? <><span className="code">{a.gate}</span><span className="sub">{a.gate !== f.scheduled_gate ? `was ${f.scheduled_gate}` : "scheduled"}</span></> : <span className="code muted">{f.scheduled_gate}</span>}</td>
                 <td className="num">{a ? <>{c(a.metrics.in_block_min)}<span className="sub">{a.metrics.next_dep_delay_min ? `next dep ${a.metrics.next_dep_delay_min} min late` : "next dep on time"}</span></> : <span className="muted">sched {c(f.sched_min)}</span>}</td>
@@ -146,7 +146,7 @@ export function Weather({ wave }: { wave: WaveScenario }) {
   return (
     <section>
       <div className="card-head"><h3>Weather and runways</h3><span className="meta">{m ? `METAR ${clock(m.observed_at, 0)}` : "No METAR"}</span></div>
-      {m ? <p className="code" style={{ fontSize: 13, color: "var(--soft)", marginBottom: 12, overflowWrap: "anywhere" }}>{m.raw}</p>
+      {m ? <p className="metar">{m.raw}</p>
         : <p className="empty" style={{ marginBottom: 12 }}>No METAR for this hour; wind limits use the generic model.</p>}
       {!wave.runway_wind.length ? <p className="empty">No wind components for this wave's runways.</p> : <table>
         <thead><tr><th>Runway</th><th className="num">Head</th><th className="num">Cross</th><th className="num">Limit</th><th>Status</th></tr></thead>

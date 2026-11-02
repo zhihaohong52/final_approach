@@ -52,7 +52,7 @@ export function AirportMap({ wave, plan }: { wave: WaveScenario; plan: JointPlan
         return (
           <g key={g.map((x) => x.id).join("/")}>
             <line x1={X(e.le_lon)} y1={Y(e.le_lat)} x2={X(e.he_lon)} y2={Y(e.he_lat)} strokeLinecap="butt" strokeWidth={width}
-              stroke={inUse ? "var(--hue)" : open ? "#9aa1ab" : "var(--busy)"} strokeDasharray={open ? undefined : "6 4"}>
+              stroke={inUse ? "var(--hue)" : open ? "#5c5e64" : "#2e2d33"} strokeDasharray={open ? undefined : "6 4"}>
               <title>{g.map((x) => `${x.id}: ${x.open ? "open" : `closed, ${x.closed_reason ?? ""}`}`).join("\n")}{e.length_ft ? `\n${e.length_ft.toLocaleString("en-US")} ft` : ""}</title>
             </line>
           </g>
@@ -78,7 +78,7 @@ export function AirportMap({ wave, plan }: { wave: WaveScenario; plan: JointPlan
       })}
 
       <g>
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--border)" />
+        <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--control)" />
         <text x={cx} y={cy - R - 6} textAnchor="middle" className="rose">N</text>
         {calm ? <text x={cx} y={cy + 4} textAnchor="middle" className="rose">Calm</text>
           : dir == null ? <text x={cx} y={cy + 4} textAnchor="middle" className="rose">Variable</text>

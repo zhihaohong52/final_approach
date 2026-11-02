@@ -86,7 +86,7 @@ export function Benchmark() {
             {notes.length > 0 && <ul className="notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>}
           </section>
           <section className="card span-6">
-            <div className="card-head"><h2>Why {rep.arms.find((a) => a.model === rep.selection.winner)?.label ?? rep.selection.winner}</h2><span className="meta">{rep.selection.rule}</span></div>
+            <div className="card-head"><h2>Why {rep.arms.find((a) => a.model === rep.selection.winner)?.label ?? rep.selection.winner}</h2></div>
             <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>{why.map((r) => <li key={r}>{r}</li>)}</ul>
             <dl className="kv" style={{ marginTop: 16 }}>
               <dt>Engine switched off</dt><dd>{rep.ablation_no_engine_unsafe_pct == null ? <span className="muted">Not measured in this run</span> : <><span className="neg">{rep.ablation_no_engine_unsafe_pct.toFixed(1)}%</span> of agreed plans break a rule</>}</dd>
@@ -98,7 +98,7 @@ export function Benchmark() {
             <div className="card-head"><h2>Failures</h2><span className="meta">{rep.failures.length} listed</span></div>
             {rep.failures.length ? (
               <div className="table-wrap" style={{ maxHeight: 360, overflowY: "auto" }} tabIndex={0} role="region" aria-label="Failures"><table><tbody>{rep.failures.map((f) => (
-                <tr key={f.wave_id + f.model}><td><a className="code" style={{ color: "var(--text)" }} href={`#/wave/${f.wave_id}`}>{f.wave_id}</a><span className="sub">{f.model}</span></td><td style={{ whiteSpace: "normal" }}>{f.reason}</td></tr>
+                <tr key={f.wave_id + f.model}><td><a className="code" style={{ color: "var(--text)", textDecoration: "none" }} href={`#/wave/${f.wave_id}`}>{f.wave_id}</a><span className="sub">{f.model}</span></td><td style={{ whiteSpace: "normal" }}>{f.reason}</td></tr>
               ))}</tbody></table></div>
             ) : <p className="empty">No failures in this run.</p>}
           </section>
