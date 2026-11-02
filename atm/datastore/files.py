@@ -61,7 +61,6 @@ def _arrivals(iata: str):
 
 
 REF = ROOT / "data/ref"
-_MOVEMENT_DATE_COLS = ("date", "FL_DATE", "fl_date")
 
 
 @functools.lru_cache(maxsize=4)
@@ -71,7 +70,7 @@ def _movements(iata: str) -> tuple[pd.DataFrame | None, str | None]:
     if not p.exists():
         return None, None
     df = pd.read_csv(p, dtype=str, keep_default_na=False)
-    col = next((c for c in _MOVEMENT_DATE_COLS if c in df.columns), None)
+    col = next((c for c in pack.MOVEMENT_DATE_COLS if c in df.columns), None)
     return df, col
 
 

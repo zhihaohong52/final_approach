@@ -55,11 +55,8 @@ def _copy_rows(cur, table: str, columns: list[str], rows: Iterable[str]) -> None
             cp.write(line)
 
 
-def swap_load(conn, table: str, columns: list[str], rows_csv: Iterable[str], index_sql: list[str]) -> int:
-    """Build <table>__new, COPY the rows in, verify the count, then drop/rename in one transaction. A failure rolls
-    everything back and leaves the old table. `index_sql` statements (primary key, unique, indexes) run against
-    <table>__new, since `like ... including constraints` copies neither; they run before the drop to keep the
-    window short. `table` and `columns` come only from the registry (identifiers are not parameterisable)."""
+def _swap_one(conn, cur, table: str, columns: list[str], rows_csv: Iterable[str], index_sql: list[str]) -> int:
+    """The body of a swap (inside a transaction): build <table>__new, COPY, verify the count, index, drop, rename."""
     new = f"{table}__new"
     n = 0
 
@@ -69,20 +66,34 @@ def swap_load(conn, table: str, columns: list[str], rows_csv: Iterable[str], ind
             n += 1
             yield line
 
+    cur.execute(f"drop table if exists {new}")   # a previous failed load may have left one
+    cur.execute(f"create table {new} (like {table} including defaults including constraints "
+                f"including generated including storage)")
+    _copy_rows(cur, new, columns, counted(rows_csv))
+    got = cur.execute(f"select count(*) from {new}").fetchone()[0]
+    if got != n:
+        raise RuntimeError(f"{table}: copied {got} rows, expected {n}")
+    for stmt in index_sql:
+        cur.execute(stmt)
+    cur.execute(f"drop table {table}")
+    cur.execute(f"alter table {new} rename to {table.split('.', 1)[-1]}")
+    return n
+
+
+def swap_load(conn, table: str, columns: list[str], rows_csv: Iterable[str], index_sql: list[str]) -> int:
+    """Build <table>__new, COPY the rows in, verify the count, then drop/rename in one transaction. A failure rolls
+    everything back and leaves the old table. `index_sql` statements (primary key, unique, indexes) run against
+    <table>__new, since `like ... including constraints` copies neither; they run before the drop to keep the
+    window short. `table` and `columns` come only from the registry (identifiers are not parameterisable)."""
+    return swap_many(conn, [(table, columns, rows_csv, index_sql)])[0]
+
+
+def swap_many(conn, specs: list[tuple[str, list[str], Iterable[str], list[str]]]) -> list[int]:
+    """Several swaps (table, columns, rows_csv, index_sql) in ONE transaction: readers see all old tables or all new
+    ones, and a failure on any table leaves every table as it was."""
     with conn.transaction():
         with conn.cursor() as cur:
-            cur.execute(f"drop table if exists {new}")   # a previous failed load may have left one
-            cur.execute(f"create table {new} (like {table} including defaults including constraints "
-                        f"including generated including storage)")
-            _copy_rows(cur, new, columns, counted(rows_csv))
-            got = cur.execute(f"select count(*) from {new}").fetchone()[0]
-            if got != n:
-                raise RuntimeError(f"{table}: copied {got} rows, expected {n}")
-            for stmt in index_sql:
-                cur.execute(stmt)
-            cur.execute(f"drop table {table}")
-            cur.execute(f"alter table {new} rename to {table.split('.', 1)[-1]}")
-    return n
+            return [_swap_one(conn, cur, *spec) for spec in specs]
 
 
 def _csv_line(*vals) -> str:
@@ -579,8 +590,12 @@ _GEO_INDEXES: dict[str, list[str]] = {
 }
 
 
+def _geo_spec(table: str, columns: list[str], lines: Iterable[str]):
+    return table, columns, lines, [s.format(t=f"{table}__new") for s in _GEO_INDEXES[table]]
+
+
 def _geo_swap(conn, table: str, columns: list[str], lines: Iterable[str]) -> int:
-    return swap_load(conn, table, columns, lines, [s.format(t=f"{table}__new") for s in _GEO_INDEXES[table]])
+    return swap_many(conn, [_geo_spec(table, columns, lines)])[0]
 
 
 def _point(lat, lon) -> str | None:
@@ -661,24 +676,26 @@ def _load_procedures(conn) -> int:
     if not _ref_docs("procedures"):
         print("procedures: no files yet")
         return 0
-    n = _geo_swap(conn, "geo.procedures", ["icao", "cycle", "tier", "doc", "sha256"],
-                  _doc_lines("procedures", _procedure_row, [True, True, True, False, True]))
-    _geo_swap(conn, "geo.fixes", ["icao", "ident", "geog"], _doc_lines("procedures", _fix_rows, [True, True, False]))
-    return n
+    return swap_many(conn, [
+        _geo_spec("geo.procedures", ["icao", "cycle", "tier", "doc", "sha256"],
+                  _doc_lines("procedures", _procedure_row, [True, True, True, False, True])),
+        _geo_spec("geo.fixes", ["icao", "ident", "geog"], _doc_lines("procedures", _fix_rows, [True, True, False])),
+    ])[0]
 
 
 def _load_surface(conn) -> int:
     if not _ref_docs("surface"):
         print("surface: no files yet")
         return 0
-    n = _geo_swap(conn, "geo.surface", ["icao", "osm_timestamp", "doc", "sha256", "reach_pct"],
-                  _doc_lines("surface", _surface_row, [True, True, False, True, True]))
-    _geo_swap(conn, "geo.stands", ["icao", "id", "ref", "node", "geog"],
-              _doc_lines("surface", _stand_rows, [True, True, True, False, False]))
-    _geo_swap(conn, "geo.osm_gates", ["icao", "ref", "geog"], _doc_lines("surface", _gate_rows, [True, True, False]))
-    _geo_swap(conn, "geo.holding_positions", ["icao", "node", "strip", "geog"],
-              _doc_lines("surface", _hold_rows, [True, False, True, False]))
-    return n
+    return swap_many(conn, [
+        _geo_spec("geo.surface", ["icao", "osm_timestamp", "doc", "sha256", "reach_pct"],
+                  _doc_lines("surface", _surface_row, [True, True, False, True, True])),
+        _geo_spec("geo.stands", ["icao", "id", "ref", "node", "geog"],
+                  _doc_lines("surface", _stand_rows, [True, True, True, False, False])),
+        _geo_spec("geo.osm_gates", ["icao", "ref", "geog"], _doc_lines("surface", _gate_rows, [True, True, False])),
+        _geo_spec("geo.holding_positions", ["icao", "node", "strip", "geog"],
+                  _doc_lines("surface", _hold_rows, [True, False, True, False])),
+    ])[0]
 
 
 def _files_movements() -> list[Path]:
@@ -691,7 +708,7 @@ def _movements_lines() -> Iterable[str]:
     for p in _files_movements():
         airport = p.name.split(".")[0]
         df = pd.read_csv(p, dtype=str, keep_default_na=False)
-        col = next((c for c in ("date", "FL_DATE", "fl_date") if c in df.columns), None)
+        col = next((c for c in pack.MOVEMENT_DATE_COLS if c in df.columns), None)
         if col is None:
             raise ValueError(f"{p.name}: no date column")
         for (date,), sub in pack.split_by(df, [col]):
@@ -716,7 +733,9 @@ def _files_coverage() -> list[Path]:
 def _load_coverage(conn) -> int:
     try:
         from scripts import geo_coverage
-    except ImportError:
+    except ModuleNotFoundError as e:
+        if e.name not in ("scripts.geo_coverage", "geo_coverage"):
+            raise
         print("coverage: no files yet")
         return 0
     rows = geo_coverage.coverage()

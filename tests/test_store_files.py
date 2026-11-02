@@ -103,3 +103,21 @@ def test_iem_put_none_writes_nothing(tmp_path):
 def test_geo_methods_none_before_m0():
     s = FileStore()
     assert s.procedures("KXXX") is None and s.surface("KXXX") is None and s.movements_day("XXX", "2015-01-01") is None
+
+
+def test_movements_day_rows_for_date(tmp_path, monkeypatch):
+    import gzip, io
+    import pandas as pd
+    from atm.datastore import files
+    d = tmp_path / "movements2015"
+    d.mkdir()
+    (d / "XXX.csv.gz").write_bytes(gzip.compress(b"date,tail\n2015-01-01,N1\n2015-01-02,N2\n2015-01-01,N3\n"))
+    monkeypatch.setattr(files, "REF", tmp_path)
+    files._movements.cache_clear()
+    try:
+        got = FileStore().movements_day("XXX", "2015-01-01")
+        df = pd.read_csv(io.BytesIO(gzip.decompress(got)), dtype=str)
+        assert list(df["tail"]) == ["N1", "N3"]
+        assert FileStore().movements_day("XXX", "2015-02-01") is None
+    finally:
+        files._movements.cache_clear()

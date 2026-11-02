@@ -10,6 +10,9 @@ from pathlib import Path
 
 import pandas as pd
 
+# date column of a movements2015 file (the one place to change once the M0 file format is fixed)
+MOVEMENT_DATE_COLS = ("date", "FL_DATE", "fl_date")
+
 
 def source_sha256(paths: list[Path], script_version: str) -> str:
     """sha256 over the sorted paths' bytes plus the script version (what `meta.seed_manifest` records)."""
