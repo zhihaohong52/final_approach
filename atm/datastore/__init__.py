@@ -19,7 +19,10 @@ def _build() -> Store:
         from .fallback import FallbackStore
         from .pg import PgStore
 
-        primary = PgStore(os.environ["DATABASE_URL_POOLED"])
+        url = os.environ.get("DATABASE_URL_POOLED")
+        if not url:
+            raise RuntimeError("ATM_STORE=pg requires DATABASE_URL_POOLED to be set")
+        primary = PgStore(url)
         primary.open()
         return FallbackStore(primary, FileStore())
     return FileStore()

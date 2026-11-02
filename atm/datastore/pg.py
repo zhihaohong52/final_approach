@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from typing import TypeVar
 
 import psycopg
-from psycopg_pool import NullConnectionPool
+from psycopg_pool import NullConnectionPool, PoolTimeout
 
 T = TypeVar("T")
 
@@ -47,6 +47,8 @@ def with_retry(fn: Callable[[], T], *, delays=(0.5, 2.0), jitter=0.3, sleep=None
     for delay in delays:
         try:
             return fn()
+        except PoolTimeout:
+            raise  # already waited the pool timeout; retrying would stall the request further
         except psycopg.OperationalError:
             sleep(delay + random.uniform(0, jitter * delay))
     return fn()
@@ -94,7 +96,21 @@ class PgStore:
         if getattr(self._local, "active", False):
             if self._local.conn is None:
                 self._local.conn = self._pool.getconn()
-            yield self._local.conn
+            conn = self._local.conn
+            try:
+                yield conn
+                conn.commit()
+            except psycopg.OperationalError:
+                # broken connection: hand it back (the pool discards it) so a retry gets a fresh one
+                self._local.conn = None
+                self._pool.putconn(conn)
+                raise
+            except BaseException:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                raise
             return
         with self._pool.connection() as conn:
             yield conn
