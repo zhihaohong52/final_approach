@@ -59,17 +59,16 @@ def _load() -> tuple[dict, dict]:
     """({iata: (size_class, runways, gates, ops, turnaround, spare)}, {(leader, follower): (nm, s)})"""
     airports, wake = _fallback_airports(), dict(_WAKE)
     try:
-        import openpyxl
-        wb = openpyxl.load_workbook(XLSX, read_only=True, data_only=True)
+        from atm.datastore import get_store
+        store = get_store()
         parsed = {}
-        for r in wb["airport_capacity"].iter_rows(min_row=4, values_only=True):
+        for r in store.workbook_rows("airport_capacity"):
             if r[0] and r[5] and r[6] is not None:
                 parsed[str(r[0])] = (str(r[5]), int(r[6]), int(r[7]), int(r[8]), int(r[9]), int(r[10]))
         pw = {}
-        for r in wb["wake_separation"].iter_rows(min_row=4, values_only=True):
+        for r in store.workbook_rows("wake_separation"):
             if r[0] and r[1] and r[2] is not None:
                 pw[(str(r[0]).split()[0], str(r[1]).split()[0])] = (float(r[2]), int(r[3]))
-        wb.close()
         if parsed:
             airports = parsed
         if pw:

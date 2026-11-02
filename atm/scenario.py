@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from atm.datastore import get_store
+
 DATA = Path(__file__).resolve().parent.parent / "data" / "challenge2"
 
 # Wake categories (ICAO-style, simplified) and minimum time separation in minutes,
@@ -81,19 +83,29 @@ class Scenario:
         return asdict(self)
 
 
+def _frame(name: str) -> pd.DataFrame:
+    df = get_store().frame(name)
+    if df is None:
+        raise FileNotFoundError(name)
+    return df
+
+
 @lru_cache(maxsize=1)
 def disruptions() -> pd.DataFrame:
-    return pd.read_csv(DATA / "disruptions.csv")
+    df = get_store().frame("disruptions_v1")
+    if df is None:   # disruptions.csv is dockerignored; server.config relies on `except OSError`
+        raise FileNotFoundError("disruptions_v1")
+    return df
 
 
 @lru_cache(maxsize=1)
 def airports() -> pd.DataFrame:
-    return pd.read_csv(DATA / "airports.csv").set_index("IATA_CODE")
+    return _frame("airports").set_index("IATA_CODE")
 
 
 @lru_cache(maxsize=1)
 def airlines() -> dict[str, str]:
-    return pd.read_csv(DATA / "airlines.csv").set_index("IATA_CODE")["AIRLINE"].to_dict()
+    return _frame("airlines").set_index("IATA_CODE")["AIRLINE"].to_dict()
 
 
 def _nearest_alternate(dest: str) -> tuple[str, float]:

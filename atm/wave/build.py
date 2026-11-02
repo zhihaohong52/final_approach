@@ -3,7 +3,6 @@ OurAirports / FAA data, plus seeded simulation of the layers no public source ha
 (fuel, crew, connections, gate occupancy). Deterministic: same wave_id -> same Wave."""
 from __future__ import annotations
 
-import csv
 import functools
 import hashlib
 import math
@@ -13,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from atm.datastore import files as _files, get_store
 from atm.wave import constraints, wind
 from atm.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
 from atm.wave.model import (Airport, Gate, Metar, Provenance, QueueArrival, Runway, Wave,
@@ -38,37 +38,26 @@ def _cached(key, fn):
 
 
 def _index() -> pd.DataFrame:
-    def load():
-        df = pd.read_csv(WAVES / "index.csv", dtype={"date": str, "airport": "category", "hour": "int8",
-                                                    "n_arrivals": "int16", "n_disrupted": "int16"})
-        # index.csv writes flight numbers as floats ("AA807.0"); normalise to callsigns
-        df["disrupted_flights"] = df["disrupted_flights"].fillna("").str.replace(r"\.0(?=;|$)", "", regex=True)
-        return df
-    return _cached("index", load)
+    """The FileStore's 2024 wave index frame (callsigns normalised). Tests and warm-up only: builders go
+    through `get_store().wave_row/wave_rows`."""
+    return _files._waves_index()
 
 
-@functools.lru_cache(maxsize=4)
-def _arrivals(iata: str):
-    """(frame, {date: row positions}) for one destination hub, from the per-airport files written by
-    scripts/split_arrivals.py (the 1.2M-row arrivals.csv.gz is never loaded at runtime: 512 MB host)."""
-    p = WAVES / "arrivals" / f"{iata}.csv.gz"
-    if not p.exists():
-        return None, {}
-    # streamed in chunks (low parse peak), then categoricals rebuilt over the whole airport
-    df = pd.concat(pd.read_csv(p, chunksize=20000, dtype={
-        "date": str, "carrier": str, "origin": str, "tail": str,
-        "flight_no": "int32", "sched_arr": "int32", "sched_dep": "float32",
-        "weather_delay": "float32", "nas_delay": "float32", "late_aircraft_delay": "float32",
-        "carrier_delay": "float32", "arr_delay": "float32", "cancelled": "bool"}),
-        ignore_index=True)
-    for c in ("date", "carrier", "origin", "tail"):
-        df[c] = df[c].astype("category")
-    return df, df.groupby("date", observed=True).indices
+def _arrivals_cache_clear() -> None:
+    """Drop the FileStore's per-airport arrivals cache (tests only)."""
+    _files._arrivals.cache_clear()
+
+
+def _frame(name: str) -> pd.DataFrame:
+    df = get_store().frame(name)
+    if df is None:
+        raise FileNotFoundError(name)
+    return df
 
 
 def _runways_by_airport() -> dict[str, pd.DataFrame]:
     def load():
-        df = pd.read_csv(REF / "runways.csv", dtype={"runway": str})
+        df = _frame("runways")
         df = df.dropna(subset=["heading_true"])
         return {k: g for k, g in df.groupby("airport")}
     return _cached("runways", load)
@@ -79,29 +68,25 @@ def _metar_table(iata: str) -> dict:
     """{(airport, local_hour_key): last observation row (dict)} for one airport. metar.csv is streamed
     row by row and filtered, so only that airport's rows are ever resident."""
     out: dict = {}
-    with open(REF / "metar.csv", newline="") as f:
-        for r in csv.DictReader(f):
-            if r["airport"] != iata:
-                continue
-            k = (iata, r["local_hour_key"])
-            if k not in out or r["valid_utc"] >= out[k]["valid_utc"]:  # latest observation wins
-                out[k] = r
+    for r in get_store().metar_2024_rows(iata):
+        k = (iata, r["local_hour_key"])
+        if k not in out or r["valid_utc"] >= out[k]["valid_utc"]:  # latest observation wins
+            out[k] = r
     return out
 
 
 def _aircraft_table() -> dict:
     def load():
-        df = pd.read_csv(REF / "aircraft.csv", dtype=str)
+        df = _frame("aircraft")
         return {r["tail"]: r for r in df.to_dict("records")}
     return _cached("aircraft", load)
 
 
 def _gates_table() -> dict[str, list[dict]]:
     def load():
-        p = REF / "gates.csv"
-        if not p.exists():
+        df = get_store().frame("gates")
+        if df is None:
             return {}
-        df = pd.read_csv(p, dtype=str)
         out: dict[str, list[dict]] = {}
         for r in df.to_dict("records"):
             out.setdefault(r["airport"], []).append(r)
@@ -111,14 +96,14 @@ def _gates_table() -> dict[str, list[dict]]:
 
 def _airlines() -> dict[str, str]:
     def load():
-        df = pd.read_csv(CH2 / "airlines.csv")
+        df = _frame("airlines")
         return dict(zip(df["IATA_CODE"], df["AIRLINE"]))
     return _cached("airlines", load)
 
 
 def _airports() -> dict[str, dict]:
     def load():
-        df = pd.read_csv(CH2 / "airports.csv")
+        df = _frame("airports")
         return {r["IATA_CODE"]: r for r in df.to_dict("records")}
     return _cached("airports", load)
 
@@ -152,11 +137,10 @@ def _parse_id(wave_id: str) -> tuple[str, str, int]:
 
 
 def _index_row(wave_id: str) -> dict:
-    idx = _index()
-    hit = idx[idx["wave_id"] == wave_id]
-    if hit.empty:
+    row = get_store().wave_row(wave_id)
+    if row is None:
         raise KeyError(wave_id)
-    return hit.iloc[0].to_dict()
+    return row
 
 
 def _haversine_nm(lat1, lon1, lat2, lon2) -> float:
@@ -210,12 +194,10 @@ def _nearest_alternate(iata: str) -> tuple[str, float]:
 def _window_rows(iata: str, date: str, hour: int) -> pd.DataFrame:
     """Non-cancelled arrivals at `iata` scheduled inside [hour:00, hour+1:00) local,
     one row per callsign, with `callsign`, `sched_min` (minutes vs T0) columns."""
-    df, groups = _arrivals(iata)
-    pos = groups.get(date)
-    if pos is None:
+    day = get_store().arrivals_day(iata, date)
+    if day is None:
         return pd.DataFrame(columns=_ARR_COLS + ["callsign", "sched_min"])
-    w = df.iloc[pos]
-    w = w[~w["cancelled"]]
+    w = day[~day["cancelled"]]
     mins = w["sched_arr"].map(_hhmm_min)
     w = w[(mins >= hour * 60) & (mins < hour * 60 + 60)].copy()
     for c in ("carrier", "origin", "tail", "date"):  # small slice: plain str, not category
@@ -288,12 +270,9 @@ def _runway_history() -> dict[str, list[dict]]:
     """runway_history.csv: runway ends that opened or closed after the OurAirports snapshot's past.
     `opened` hides an end before its date; `closed` adds an end (with its own geometry) before its date."""
     def load():
-        p = REF / "runway_history.csv"
         out: dict[str, list[dict]] = {}
-        if p.exists():
-            with open(p, newline="") as f:
-                for r in csv.DictReader(f):
-                    out.setdefault(r["airport"], []).append(r)
+        for r in get_store().rows("runway_history") or []:
+            out.setdefault(r["airport"], []).append(r)
         return out
     return _cached("runway_history", load)
 
@@ -558,21 +537,14 @@ def _summary(row: dict) -> dict:
 
 
 def list_waves(airport: str | None = None, q: str | None = None, limit: int = 50) -> list[dict]:
-    idx = _index()
-    if airport:
-        idx = idx[idx["airport"] == airport.upper()]
-    if q:
-        qq = q.strip().upper()
-        idx = idx[idx["wave_id"].str.upper().str.contains(qq, regex=False)
-                  | idx["disrupted_flights"].str.upper().str.contains(qq, regex=False)]
-    return [_summary(r) for r in idx.head(limit).to_dict("records")]
+    return [_summary(r) for r in get_store().wave_rows(airport.upper() if airport else None, q, limit)]
 
 
 def random_wave(airport: str | None = None, seed: int | None = None) -> dict:
-    idx = _index()
-    if airport:
-        idx = idx[idx["airport"] == airport.upper()]
-    if idx.empty:
+    store = get_store()
+    ap = airport.upper() if airport else None
+    n = store.wave_count(ap)
+    if n == 0:
         raise KeyError(airport)
     rng = random.Random(seed)
-    return _summary(idx.iloc[rng.randrange(len(idx))].to_dict())
+    return _summary(store.wave_rows(ap, None, 1, rng.randrange(n))[0])

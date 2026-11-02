@@ -8,7 +8,6 @@ The full flights.csv is never loaded: scripts/split_flights2015.py writes one fi
 from __future__ import annotations
 
 import csv
-import functools
 import subprocess
 import time
 import urllib.request
@@ -16,9 +15,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import pandas as pd
 
+from atm.datastore import files as _files, get_store
 from atm.wave import build as B
 from atm.wave import constraints, wind
 from atm.wave.model import (Airport, Gate, Metar, Provenance, Runway, Wave, WaveFlight)
@@ -67,46 +66,23 @@ def _int(v) -> int:
         return 0
 
 
-@functools.lru_cache(maxsize=1)
 def _index() -> pd.DataFrame:
-    """The whole flights.csv index, loaded once with compact dtypes (~15 MB), cancelled rows dropped."""
-    cat = "category"
-    df = pd.read_csv(INDEX, dtype={"row_id": "int32", "date": cat, "carrier": cat, "flight_no": "int32",
-                                   "tail": cat, "origin": cat, "dest": cat, "sched_arr": "float32",
-                                   "arr_delay": "float32", "weather_delay": "float32",
-                                   "late_aircraft_delay": "float32", "diverted": "float32",
-                                   "cancelled": "float32", "arr_date": cat})
-    df = df[df["cancelled"] != 1].reset_index(drop=True)
-    df["callsign"] = (df["carrier"].astype(str) + df["flight_no"].astype(str)).astype(cat)
-    df["supported"] = df["dest"].isin(set(B._runways_by_airport()))
-    return df
+    """The FileStore's flights.csv index frame (compact dtypes, cancelled rows dropped). Warm-up only:
+    lookups and search go through `get_store()`."""
+    return _files._flights2015_index()
 
 
 def _locate(row_id: int) -> dict:
     """Index row for `row_id` (raw strings, as the CSV has them)."""
-    df = _index()
-    hit = df[df["row_id"] == row_id]
-    if hit.empty:
+    r = get_store().flight2015_row(row_id)
+    if r is None:
         raise KeyError(f"{PREFIX}{row_id}")
-    r = hit.iloc[0]
-    return {k: ("" if pd.isna(r[k]) else str(int(r[k])) if isinstance(r[k], (float, np.floating)) else str(r[k]))
-            for k in ("row_id", "date", "carrier", "flight_no", "tail", "origin", "dest", "sched_arr", "arr_delay",
-                      "weather_delay", "late_aircraft_delay", "diverted", "cancelled", "arr_date")}
+    return r
 
 
 def _cat_match(col: pd.Series, qq: str) -> pd.Series:
     cats = [c for c in col.cat.categories if qq in str(c).upper()]
     return col.isin(cats)
-
-
-@functools.lru_cache(maxsize=2)
-def _dest_frame(dest: str) -> pd.DataFrame:
-    p = FLIGHTS / f"{dest}.csv.gz"
-    if not p.exists():
-        raise KeyError(dest)
-    return pd.read_csv(p, dtype={"date": str, "arr_date": str, "carrier": str, "tail": str, "origin": str,
-                                 "row_id": "int32", "flight_no": "int32", "sched_dep": "int32",
-                                 "sched_arr": "int32", "diverted": "int8", "cancelled": "int8"})
 
 
 def _supported(dest: str) -> bool:
@@ -121,24 +97,15 @@ def list_rows(airport: str | None = None, q: str | None = None, limit: int = 50,
 def search(airport: str | None = None, q: str | None = None, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
     """Rows of flights.csv (cancelled and unsupported airports skipped) filtered by destination and free text,
     as (page, total)."""
-    df = _index()
-    df = df[df["supported"]]
-    if airport and airport.strip():
-        df = df[df["dest"] == airport.strip().upper()]
-    if q and q.strip():
-        qq = q.strip().upper()
-        m = (_cat_match(df["callsign"], qq) | _cat_match(df["tail"], qq) | _cat_match(df["origin"], qq)
-             | _cat_match(df["dest"], qq))
-        digits = qq[len(PREFIX):] if qq.startswith(PREFIX) else qq
-        if digits.isdigit():
-            m |= df["row_id"].astype(str).str.contains(digits, regex=False)
-        df = df[m]
-    out = [{"row_id": int(r["row_id"]), "wave_id": f"{PREFIX}{r['row_id']}", "date": str(r["date"]),
+    return get_store().search_flights2015(airport, q, limit, offset)
+
+
+def flight_row(r: dict) -> dict:
+    """One index row (as a dict) in the API's FlightRow shape."""
+    return {"row_id": int(r["row_id"]), "wave_id": f"{PREFIX}{r['row_id']}", "date": str(r["date"]),
             "carrier": str(r["carrier"]), "flight": str(r["callsign"]), "origin": str(r["origin"]),
             "dest": str(r["dest"]), "sched_arr": _hhmm(r["sched_arr"]), "arr_delay": _int(r["arr_delay"]),
             "weather_delay": _int(r["weather_delay"]), "late_aircraft_delay": _int(r["late_aircraft_delay"])}
-           for r in df.iloc[offset:offset + limit].to_dict("records")]
-    return out, len(df)
 
 
 # ---------------------------------------------------------------- weather (IEM, on demand)
@@ -353,8 +320,10 @@ def build_from_row(row_id: int) -> Wave:
     iata, date = row["dest"], row["arr_date"]
     if not _supported(iata):
         raise KeyError("unsupported airport")
-    df = _dest_frame(iata)
-    df = df[(df["arr_date"] == date) & (df["cancelled"] == 0)]
+    df = get_store().flights2015_day(iata, date)
+    if df is None:
+        raise KeyError(iata)
+    df = df[df["cancelled"] == 0]
     focus_abs = B._hhmm_min(row["sched_arr"])
     hour = focus_abs // 60
     mins = df["sched_arr"].map(B._hhmm_min)
