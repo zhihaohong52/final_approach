@@ -184,3 +184,24 @@ def test_bound_session_drops_conn_after_operational_error():
         with s._conn() as c2: pass
         assert c2 is not c
     assert s._pool.put == [c, c2]
+
+
+def test_no_retry_writes_attempted_once_reads_retried(monkeypatch, tmp_path):
+    from atm.datastore.files import FilePaths
+    monkeypatch.setattr(pg.time, "sleep", lambda s: None)
+
+    class P:
+        n = {"record_decision": 0, "get_run": 0}
+        def record_decision(self, row):
+            P.n["record_decision"] += 1
+            raise psycopg.OperationalError("down")
+        def get_run(self, run_id):
+            P.n["get_run"] += 1
+            raise psycopg.OperationalError("down")
+
+    paths = FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "d.jsonl")
+    fb = FallbackStore(P(), FileStore(paths))
+    assert fb.record_decision({"run_id": "0123456789ab", "decision": "APPROVE"}) is True   # fell back to file
+    assert P.n["record_decision"] == 1
+    fb.get_run("0123456789ab")
+    assert P.n["get_run"] == 3

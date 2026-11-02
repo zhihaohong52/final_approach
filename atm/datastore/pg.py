@@ -5,6 +5,7 @@ FallbackStore serves the file backend.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import random
 import threading
@@ -146,7 +147,7 @@ class PgStore:
             with self._conn() as conn:
                 return conn.execute("select fetched_at, body from live.iem_cache where station = %s and date = %s::date",
                                     (station, date)).fetchone()
-        row = with_retry(go)
+        row = go()
         return None if row is None else (row[0].timestamp(), row[1])
 
     def iem_put(self, station: str, date: str, body: str | None) -> None:
@@ -159,7 +160,7 @@ class PgStore:
                     "insert into live.iem_cache (station, date, body) values (%s, %s::date, %s) "
                     "on conflict (station, date) do update set body = excluded.body, fetched_at = now()",
                     (station, date, body))
-        with_retry(go)
+        go()
         try:
             self._trim_iem()
         except Exception:
@@ -173,10 +174,11 @@ class PgStore:
                 return 0
             self._last_iem_check = now
         with self._conn() as conn:
-            size = conn.execute("select pg_total_relation_size('live.iem_cache')").fetchone()[0]
+            # live data size, not relation size: bloat persists until vacuum and would erode the cache
+            size, n = conn.execute(
+                "select coalesce(sum(octet_length(body)), 0), count(*) from live.iem_cache").fetchone()
             if size <= IEM_MAX_BYTES:
                 return 0
-            n = conn.execute("select count(*) from live.iem_cache").fetchone()[0]
             keep = int(n * IEM_KEEP_BYTES / size)
             return conn.execute(
                 "delete from live.iem_cache where (station, date) in "
@@ -194,7 +196,7 @@ class PgStore:
                     "on conflict (run_id) do update set result = excluded.result",
                     (result["run_id"], result["wave_id"], result["mode"], result.get("model"), result.get("outcome"),
                      result.get("engine_version") or "v2", Jsonb(result)))
-        with_retry(go)
+        go()
         try:
             self._prune_runs()
         except Exception:
@@ -218,7 +220,7 @@ class PgStore:
         def go():
             with self._conn() as conn:
                 return conn.execute("select result from live.runs where run_id = %s", (run_id,)).fetchone()
-        row = with_retry(go)
+        row = go()
         return None if row is None else row[0]
 
     def list_runs(self, wave_id: str, limit: int) -> list[dict]:
@@ -232,7 +234,7 @@ class PgStore:
                     "from live.runs r where r.wave_id = %s order by r.created_at desc, r.run_id limit %s",
                     (wave_id, limit)).fetchall()
         return [{"run_id": r[0], "wave_id": r[1], "mode": r[2], "model": r[3], "outcome": r[4],
-                 "created_at": r[5].isoformat(), "decided": r[6]} for r in with_retry(go)]
+                 "created_at": r[5].isoformat(), "decided": r[6]} for r in go()]
 
     def record_decision(self, row: dict) -> bool:
         with self._conn() as conn:    # one transaction: insert the decision, pin its run
@@ -252,7 +254,7 @@ class PgStore:
             with self._conn() as conn:
                 return conn.execute("select body from eval.replays where wave_id = %s and engine_version = %s",
                                     (wave_id, _engine_version())).fetchone()
-        row = with_retry(go)
+        row = go()
         return None if row is None else row[0]
 
     def replay_ids(self) -> set[str]:
@@ -262,17 +264,19 @@ class PgStore:
                 with self._conn() as conn:
                     return conn.execute("select wave_id from eval.replays where engine_version = %s",
                                         (_engine_version(),)).fetchall()
-            cached = self._replay_ids = {r[0] for r in with_retry(go)}
+            cached = self._replay_ids = {r[0] for r in go()}
         return set(cached)
 
-    def put_replay(self, wave_id: str, body: dict, engine_version: str = "v2") -> None:
+    def put_replay(self, wave_id: str, body: dict, engine_version: str | None = None) -> None:
+        engine_version = engine_version or _engine_version()
+
         def go():
             with self._conn() as conn:
                 conn.execute(
                     "insert into eval.replays (wave_id, engine_version, body) values (%s, %s, %s) "
                     "on conflict (wave_id, engine_version) do update set body = excluded.body, recorded_at = now()",
                     (wave_id, engine_version, Jsonb(body)))
-        with_retry(go)
+        go()
         self._replay_ids = None
 
     def benchmark_current(self) -> dict | None:
@@ -281,9 +285,9 @@ class PgStore:
             def go():
                 with self._conn() as conn:
                     return conn.execute("select report from eval.benchmark_reports where is_current").fetchone()
-            row = with_retry(go)
+            row = go()
             cached = self._benchmark = None if row is None else row[0]
-        return cached
+        return copy.deepcopy(cached)
 
     def put_benchmark(self, report: dict, markdown: str | None, label: str, current: bool = True) -> None:
         with self._conn() as conn:    # one transaction: the previous current row is cleared with the insert
@@ -298,7 +302,7 @@ class PgStore:
         def go():
             with self._conn() as conn:
                 return conn.execute("select body from eval.v1_eval where name = %s", (name,)).fetchone()
-        row = with_retry(go)
+        row = go()
         return None if row is None else row[0]
 
 

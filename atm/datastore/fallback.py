@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 _FALLBACK_ERRORS = (psycopg.OperationalError, PoolTimeout, DataUnavailable, NotImplementedError)
 _WRITES = ("save_run", "record_decision", "put_replay", "put_benchmark", "iem_put")
 
+NO_RETRY = {"record_decision", "put_benchmark"}   # not idempotent: attempted once, still fall back on error
+
 
 class FallbackStore:
     def __init__(self, primary: Store, secondary: FileStore, *, threshold: int = 3,
@@ -55,7 +57,8 @@ class FallbackStore:
             return getattr(self.secondary, name)(*args, **kwargs)
         trial = route == "trial"
         try:
-            result = pg.with_retry(lambda: getattr(self.primary, name)(*args, **kwargs))
+            call = lambda: getattr(self.primary, name)(*args, **kwargs)  # noqa: E731
+            result = call() if name in NO_RETRY else pg.with_retry(call)
         except NotImplementedError:
             # not built yet: serve files, but this is not an outage (no breaker, no degraded status)
             return getattr(self.secondary, name)(*args, **kwargs)
