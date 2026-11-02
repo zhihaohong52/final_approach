@@ -20,6 +20,7 @@ import pandas as pd
 from atm.datastore import files as _files, get_store
 from atm.wave import build as B
 from atm.wave import constraints, wind
+from atm.wave.icao import icao_for
 from atm.wave.model import (Airport, Gate, Metar, Provenance, Runway, Wave, WaveFlight)
 from atm.wave.utility import TYPICAL_TAXI_MIN
 
@@ -115,6 +116,10 @@ def _local_tz(iata: str) -> ZoneInfo:
 
 
 def _icao(iata: str) -> str:
+    try:
+        return icao_for(iata)
+    except KeyError:
+        pass
     st = str(B._airports().get(iata, {}).get("STATE", ""))
     if st in _ICAO_REGION:
         return _ICAO_REGION[st] + iata[1:]   # approximate outside the contiguous US

@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from atm.datastore import files as _files, get_store
-from atm.wave import constraints, wind
+from atm.wave import constraints, icao, wind
 from atm.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
 from atm.wave.model import (Airport, Gate, Metar, Provenance, QueueArrival, Runway, Wave,
                             WaveFlight)
@@ -513,7 +513,11 @@ def _build_wave(wave_id: str) -> Wave:
 
     ap = _airports().get(iata, {})
     coords = _airport_coords(iata) or (0.0, 0.0)
-    airport = Airport(iata=iata, icao="K" + iata, name=str(ap.get("AIRPORT", iata)),
+    try:
+        icao_code = icao.icao_for(iata)
+    except KeyError:
+        icao_code = "K" + iata
+    airport = Airport(iata=iata, icao=icao_code, name=str(ap.get("AIRPORT", iata)),
                       lat=coords[0], lon=coords[1], runways=runways)
     month = date[:7]
     prov = [
