@@ -56,3 +56,8 @@ def test_runs_list_for_wave(api_client):
 def test_runs_list_requires_wave_id(api_client):
     r = api_client.get("/api/runs")
     assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request"
+
+
+def test_v1_decision_rejects_out_of_range_flight_id(api_client):
+    r = api_client.post("/api/decision", json={"flight_id": 2**40, "plan_id": "p", "decision": "APPROVE"})
+    assert r.status_code == 422

@@ -107,6 +107,8 @@ def with_retry(fn: Callable[[], T], *, delays=(0.5, 2.0), jitter=0.3, sleep=None
             return fn()
         except PoolTimeout:
             raise  # already waited the pool timeout; retrying would stall the request further
+        except psycopg.errors.QueryCanceled:
+            raise  # hit statement_timeout: the same query would time out again
         except psycopg.OperationalError:
             sleep(delay + random.uniform(0, jitter * delay))
     return fn()

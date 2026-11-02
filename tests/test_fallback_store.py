@@ -339,3 +339,16 @@ def test_pg_replay_prefers_current_version_and_caches(monkeypatch):
     s.replay("W1"); assert len(log) == 12                 # put_replay cleared the cache (insert + select)
     assert s.replay_ids() == {"W1", "W2"}
     assert "engine_version" not in log[-1][0]              # ids of any engine version
+
+
+def test_query_canceled_is_not_retried(monkeypatch):
+    import psycopg
+    from atm.datastore import pg as pgmod
+    monkeypatch.setattr(pgmod.time, "sleep", lambda s: (_ for _ in ()).throw(AssertionError("retried")))
+    calls = []
+    def boom():
+        calls.append(1)
+        raise psycopg.errors.QueryCanceled("canceling statement due to statement timeout")
+    with pytest.raises(psycopg.errors.QueryCanceled):
+        pgmod.with_retry(boom)
+    assert len(calls) == 1

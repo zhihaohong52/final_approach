@@ -52,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     import psycopg
     try:
         with psycopg.connect(url) as conn:
+            from scripts.db_migrate import lift_statement_timeout
+            lift_statement_timeout(conn)   # a full live.runs export streams far longer than the app's 5 s
             counts = dump(conn, Path(args.out))
     except psycopg.Error as e:   # never echo the URL
         print(f"database error ({e.sqlstate or 'no sqlstate'}): {type(e).__name__}", file=sys.stderr)

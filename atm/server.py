@@ -157,6 +157,8 @@ def decision(body: dict = Body(...)):
     # same rules as v2 (and the live.decisions check constraints): a bad body is a 422, never a database error
     if d.decision not in ("APPROVE", "OVERRIDE"):
         raise HTTPException(422, detail="decision must be APPROVE or OVERRIDE")
+    if not 0 <= d.flight_id < 2**31:   # live.decisions.flight_id is int4
+        raise HTTPException(422, detail="flight_id out of range")
     d.note = d.note.strip()
     if d.decision == "OVERRIDE" and not d.note:
         raise HTTPException(422, detail="a note is required to OVERRIDE")
