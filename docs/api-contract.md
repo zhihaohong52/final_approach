@@ -419,7 +419,7 @@ changed or added is listed in `NegotiationResult.limits`.
 
 ```ts
 interface RunListItem {
-  run_id: string; wave_id: string; mode: Mode; model: string; outcome: string; created_at: string;
+  run_id: string; wave_id: string; mode: Mode; model: string | null; outcome: string; created_at: string;
   decided: boolean;                    // a duty manager decision was recorded for this run
 }
 // response: { runs: RunListItem[] }

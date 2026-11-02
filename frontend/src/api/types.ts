@@ -319,7 +319,7 @@ export interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRI
   edits?: Assignment[] }   // flights the duty manager moved before approving (logged with the decision)
 
 export interface RunListItem {
-  run_id: string; wave_id: string; mode: Mode; model: string; outcome: string; created_at: string;
+  run_id: string; wave_id: string; mode: Mode; model: string | null; outcome: string; created_at: string;
   decided: boolean;                    // a duty manager decision was recorded for this run
 }
 
