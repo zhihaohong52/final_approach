@@ -143,7 +143,7 @@ def test_iata_for_roundtrip():
     assert iata_for("KORD") == "ORD" and iata_for("ZZZZ") is None
 
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL (atm_test database), seeded with `ref.flights2015`
-def test_every_flights2015_destination_resolves_live(live_db_url):
+def test_db_flights2015_destinations_resolve_via_file_lookup(live_db_url):
     import psycopg
     with psycopg.connect(live_db_url) as c:
         dests = [r[0] for r in c.execute("select distinct dest from ref.flights2015")]
@@ -320,6 +320,8 @@ def test_coverage_counts():
 def test_procedures_size_cap():
     from pathlib import Path
     assert sum(p.stat().st_size for p in Path("data/ref/procedures").glob("*.json.gz")) <= 3_000_000
+
+import pytest
 
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py procedures` into atm_test
 def test_geo_procedures_match_files_by_sha256(live_db_url):
@@ -501,7 +503,9 @@ def test_bindings_agree_with_nearest_stand_query(live_db_url):
                             "ST_DWithin(geog, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 150)",
                             (v["stand"], v["lon"], v["lat"])).fetchone()
             assert row, gid
+```
 
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_gates_geo.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Implement** `bind_gates`, `load_surface` and `fetch_surface.py`. Then run `python3 scripts/fetch_surface.py` (long: about 320 × 5 s plus query time; run it in the background).
 - [ ] **Step 4: Run** `python3 -m pytest tests/test_gates_geo.py -q -m "not live_db"`. Expected: PASS. Record the total `data/ref/surface` size in the commit message. If the total is > 15 MB, stop and report (spec §5 estimates 5-12 MB).
 - [ ] **Step 4b: Seed** `python3 scripts/db_seed.py surface` (skip when `DATABASE_URL` is unset), then, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_gates_geo.py -q -m live_db`. Expected: PASS.
@@ -527,7 +531,7 @@ git commit -m "data: OSM surface graphs per airport (ODbL) and gate to stand bin
   - `store.TOP30: tuple[str, ...]` is a constant in `atm/geo/store.py`: the top 30 IATA codes by 2015 arrivals. `fetch_bts.py --movements2015` computes it once from the downloaded months and prints the tuple to paste in. It is also listed in `GEO_COVERAGE.md`.
   - `store.MOVEMENT_AIRPORTS: tuple[str, ...]` = sorted union of `TOP30` and the 30 benchmark airports (the `dest` of the `eval/benchmark.json` `wave_ids`). Movements are written for all of them if the total fits the 50 MB cap; otherwise for `TOP30` only, and `MOVEMENT_AIRPORTS = TOP30` (the rest are badged partial, spec §6.9).
   - flights2015 rows gain `wheels_on, taxi_in, wheels_off, taxi_out` (floats, NaN when missing).
-  - Datastore: `load_movements(iata, date, from_abs, to_abs)` keeps its signature but does one `get_store().movements_day(iata, date)` fetch (`from atm.datastore import get_store`; a gzipped CSV for that airport-day or `None`), gunzips, parses and filters to the window. `scripts/db_seed.py movements2015` repacks `data/ref/movements2015/{IATA}.csv.gz` per airport-day into `geo.movements2015_day`; it finds the day through the first of `atm.datastore.pack.MOVEMENT_DATE_COLS` present in the CSV, so the `date` column here must stay among those candidates. `scripts/db_seed.py flights2015` carries the new taxi columns into `ref.flights2015` (they exist from the Postgres plan's D2 and are null until then).
+  - Datastore: `load_movements(iata, date, from_abs, to_abs)` keeps its signature but does one `get_store().movements_day(iata, date)` fetch (`from atm.datastore import get_store`; a gzipped CSV for that airport-day or `None`), gunzips, parses and filters to the window. When the window crosses midnight (`to_abs > 1440`), it also reads the next day's `movements_day` blob and concatenates it before filtering. `scripts/db_seed.py movements2015` repacks `data/ref/movements2015/{IATA}.csv.gz` per airport-day into `geo.movements2015_day`; it finds the day through the first of `atm.datastore.pack.MOVEMENT_DATE_COLS` present in the CSV, so the `date` column here must stay among those candidates. `scripts/db_seed.py flights2015` carries the new taxi columns into `ref.flights2015` (they exist from the Postgres plan's D2 and are null until then).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1246,6 +1250,8 @@ def test_evaluate_suggestion_respects_route_earliest():
     else:
         assert sug is not None and sug >= earliest - 1e-6
 
+import pytest
+
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the replay guard reads engine_version from the stored body
 def test_replay_guard_reads_engine_version_from_pg(live_db_url):
     from atm.datastore.pg import PgStore
@@ -1410,6 +1416,8 @@ def test_report_has_engine_version_and_lap_share(tmp_path):
                   "--concurrency", "2", "--out", str(tmp_path)])
     assert rep["engine_version"] == ENGINE_VERSION and "lap_share_pct" in rep["baseline"]
 
+import pytest
+
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the v2 row survives as non-current history
 def test_frozen_v2_row_is_not_current(live_db_url):
     import psycopg
@@ -1420,7 +1428,7 @@ def test_frozen_v2_row_is_not_current(live_db_url):
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_benchmark_small.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Copy** the frozen v2 files first, then implement.
-- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. Then `python3 scripts/db_seed.py benchmark` (skip when `DATABASE_URL` is unset) so the frozen v2 row and the v3-air row are in Postgres, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, run `python3 -m pytest tests/test_benchmark_small.py -q -m live_db`. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`.
+- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`. The run's own `put_benchmark` call writes the v3-air row to Postgres; afterwards `python3 scripts/db_seed.py benchmark` (skip when `DATABASE_URL` is unset) loads the frozen v2 archive row from the files, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, `python3 -m pytest tests/test_benchmark_small.py -q -m live_db` checks it. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
