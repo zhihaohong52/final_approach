@@ -136,10 +136,11 @@ approves. v3 makes the thing they decide about physically real.
 - **Record types we need (verified in the file):** PA (airport reference point, mag var, e.g. KORD
   `W003`, elevation 680 ft, transition altitude 18,000), PG (runway thresholds), PC (terminal waypoints),
   EA (enroute waypoints), D/DB (VHF/NDB navaids), PE (STAR legs), PF (approach legs) and PI (localizer).
-  Leg fields used: fix ident (cols 30-34), waypoint description code (cols 40-43, where col 42 `F` marks
-  the FAF, and `A`/`I` mark the IAF/IF), turn direction (col 44), path terminator (cols 48-49), course
-  (cols 71-74, magnetic, tenths), time or distance (cols 75-78/79-82, e.g. `T010` = 1.0 min), altitude
-  description and altitudes (col 83, cols 85-94). Route type (col 20) separates enroute transitions,
+  Leg fields used: fix ident (cols 30-34), waypoint description code (cols 40-43; col 43 is `A` IAF, `I` IF,
+  `F` FAF), turn direction (col 44), path terminator (cols 48-49), course (cols 71-74, magnetic, tenths),
+  time or distance (cols 75-78: `T010` = 1.0 min, otherwise tenths of NM), altitude description and
+  altitudes (col 83, cols 85-94), speed limit (cols 100-102), vertical angle (cols 103-106) and RF centre
+  fix (cols 107-111). Columns verified on cycle 2611 lines. Route type (col 20) separates enroute transitions,
   common route and runway transitions on STARs (`BENKY6` at KORD has transitions `BFORD`, `BYLAW` and
   others, and runway transitions `RW04B`, `RW27C`, …).
 - **Holding (important):** the CIFP readme states: "Waypoint description code H will not be used for
@@ -335,8 +336,9 @@ timed to land at its fixed time, so it shows on the radar.
 
 ### 6.3 Holding and the stack
 
-- **Hold fix (our call):** the last fix of the STAR common route, which in US practice is typically the
-  meter fix, where STAR charts depict holding. If that fix carries a coded `HF`/`HM` hold in the airport's
+- **Hold fix (our call):** the first fix of the STAR common route, where the enroute transitions join
+  (the meter fix, where STAR charts depict holding; e.g. KORD BENKY6: BENKY → NEWRK → AHSTN → PETAH, hold
+  at BENKY, 12,000 ft); else the last enroute-transition fix. If that fix carries a coded `HF`/`HM` hold in the airport's
   approaches, that published geometry is used (inbound course, turn, leg time: `src: "cifp"`). Otherwise a
   standard AIM hold is synthesized: inbound course = route course into the fix, right turns, leg time by
   altitude (`src: "synth"`, labelled "standard hold synthesized at published fix; STAR holds are not
@@ -656,7 +658,7 @@ Rough size: M0 2-3 days, M1 3-4, M2a 0.5, M2 3, M3 2-3, M4 1 (one builder plus t
    Label the layer as current procedures flown over 2015 traffic.
 2. Write our own fixed-column CIFP extractor. `cifparse` is GPL-3.0 and the repo is MIT; `arinc424`
    (MIT) is used only as a dev-time cross-check.
-3. Holds go at the last STAR common-route fix. Use the published HF/HM geometry if coded there, otherwise
+3. Holds go at the first STAR common-route fix (the meter fix where enroute transitions join). Use the published HF/HM geometry if coded there, otherwise
    a synthesized AIM standard hold, labelled. CIFP does not code STAR holds (readme, verified).
 4. Use a corner-post synthetic arrival where there is no STAR (209 of 320 airports), and a straight-in
    where there is no approach.
