@@ -1,0 +1,348 @@
+{
+ "version": 0.6,
+ "generator": "hand-built fixture",
+ "elements": [
+  {
+   "type": "node",
+   "id": 1001,
+   "lat": 0.0,
+   "lon": 0.0
+  },
+  {
+   "type": "node",
+   "id": 1002,
+   "lat": 0.0,
+   "lon": 0.0044966
+  },
+  {
+   "type": "node",
+   "id": 1003,
+   "lat": 0.0,
+   "lon": 0.0143891
+  },
+  {
+   "type": "node",
+   "id": 1004,
+   "lat": 0.0,
+   "lon": 0.0269796
+  },
+  {
+   "type": "way",
+   "id": 5001,
+   "nodes": [
+    1001,
+    1002,
+    1003,
+    1004
+   ],
+   "tags": {
+    "aeroway": "runway",
+    "ref": "09/27",
+    "width": "45"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1005,
+   "lat": 0.0071946,
+   "lon": 0.0089932
+  },
+  {
+   "type": "node",
+   "id": 1006,
+   "lat": 0.0049463,
+   "lon": 0.0089932
+  },
+  {
+   "type": "node",
+   "id": 1007,
+   "lat": 0.0031476,
+   "lon": 0.0089932
+  },
+  {
+   "type": "way",
+   "id": 5002,
+   "nodes": [
+    1005,
+    1006,
+    1007
+   ],
+   "tags": {
+    "aeroway": "runway",
+    "ref": "18/36",
+    "width": "45"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1008,
+   "lat": 0.0017986,
+   "lon": 0.0
+  },
+  {
+   "type": "node",
+   "id": 1009,
+   "lat": 0.0017986,
+   "lon": 0.0022483
+  },
+  {
+   "type": "node",
+   "id": 1010,
+   "lat": 0.0017986,
+   "lon": 0.0044966
+  },
+  {
+   "type": "node",
+   "id": 1011,
+   "lat": 0.0017986,
+   "lon": 0.0062953
+  },
+  {
+   "type": "node",
+   "id": 1012,
+   "lat": 0.0017986,
+   "lon": 0.0089932
+  },
+  {
+   "type": "node",
+   "id": 1013,
+   "lat": 0.0017986,
+   "lon": 0.0134898
+  },
+  {
+   "type": "node",
+   "id": 1014,
+   "lat": 0.0017986,
+   "lon": 0.0175045
+  },
+  {
+   "type": "node",
+   "id": 1015,
+   "lat": 0.0017986,
+   "lon": 0.0197851
+  },
+  {
+   "type": "node",
+   "id": 1016,
+   "lat": 0.0017986,
+   "lon": 0.022483
+  },
+  {
+   "type": "node",
+   "id": 1017,
+   "lat": 0.0017986,
+   "lon": 0.025181
+  },
+  {
+   "type": "node",
+   "id": 1018,
+   "lat": 0.0017986,
+   "lon": 0.0269796
+  },
+  {
+   "type": "way",
+   "id": 5003,
+   "nodes": [
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018
+   ],
+   "tags": {
+    "aeroway": "taxiway",
+    "ref": "A"
+   }
+  },
+  {
+   "type": "way",
+   "id": 5004,
+   "nodes": [
+    1010,
+    1002
+   ],
+   "tags": {
+    "aeroway": "taxiway",
+    "ref": "A1"
+   }
+  },
+  {
+   "type": "way",
+   "id": 5005,
+   "nodes": [
+    1003,
+    1014
+   ],
+   "tags": {
+    "aeroway": "taxiway",
+    "ref": "A2"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1019,
+   "lat": 8.99e-05,
+   "lon": 0.022483
+  },
+  {
+   "type": "way",
+   "id": 5006,
+   "nodes": [
+    1016,
+    1019
+   ],
+   "tags": {
+    "aeroway": "taxiway",
+    "ref": "A3"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1020,
+   "lat": 0.0049463,
+   "lon": 0.0080939,
+   "tags": {
+    "aeroway": "holding_position",
+    "holding_position:type": "runway"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1021,
+   "lat": 0.0033725,
+   "lon": 0.0062953
+  },
+  {
+   "type": "node",
+   "id": 1022,
+   "lat": 0.0049463,
+   "lon": 0.0062953
+  },
+  {
+   "type": "node",
+   "id": 1023,
+   "lat": 0.0049463,
+   "lon": 0.0116912
+  },
+  {
+   "type": "way",
+   "id": 5007,
+   "nodes": [
+    1011,
+    1021,
+    1022,
+    1020,
+    1006,
+    1023
+   ],
+   "tags": {
+    "aeroway": "taxiway",
+    "ref": "B"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1024,
+   "lat": 0.002698,
+   "lon": 0.0143891,
+   "tags": {
+    "aeroway": "parking_position",
+    "name": "S1",
+    "ref": "1"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1025,
+   "lat": 0.002698,
+   "lon": 0.0152885,
+   "tags": {
+    "aeroway": "parking_position",
+    "name": "S2",
+    "ref": "2"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1026,
+   "lat": 0.002698,
+   "lon": 0.0134898
+  },
+  {
+   "type": "node",
+   "id": 1027,
+   "lat": 0.002698,
+   "lon": 0.0161878
+  },
+  {
+   "type": "way",
+   "id": 5008,
+   "nodes": [
+    1013,
+    1026,
+    1024,
+    1025,
+    1027
+   ],
+   "tags": {
+    "aeroway": "taxilane",
+    "ref": "T"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1028,
+   "lat": 0.0030577,
+   "lon": 0.0139395
+  },
+  {
+   "type": "node",
+   "id": 1029,
+   "lat": 0.0030577,
+   "lon": 0.0161878
+  },
+  {
+   "type": "node",
+   "id": 1030,
+   "lat": 0.0035973,
+   "lon": 0.0161878
+  },
+  {
+   "type": "node",
+   "id": 1031,
+   "lat": 0.0035973,
+   "lon": 0.0139395
+  },
+  {
+   "type": "way",
+   "id": 5009,
+   "nodes": [
+    1028,
+    1029,
+    1030,
+    1031,
+    1028
+   ],
+   "tags": {
+    "aeroway": "terminal",
+    "name": "Main"
+   }
+  },
+  {
+   "type": "node",
+   "id": 1032,
+   "lat": 0.0030127,
+   "lon": 0.014569,
+   "tags": {
+    "aeroway": "gate",
+    "ref": "G1"
+   }
+  }
+ ]
+}
