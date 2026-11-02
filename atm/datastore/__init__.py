@@ -16,7 +16,12 @@ def _build() -> Store:
     if mode == "files":
         return FileStore()
     if mode == "pg" or os.environ.get("DATABASE_URL_POOLED"):
-        raise NotImplementedError("pg backend lands in Task 5")
+        from .fallback import FallbackStore
+        from .pg import PgStore
+
+        primary = PgStore(os.environ["DATABASE_URL_POOLED"])
+        primary.open()
+        return FallbackStore(primary, FileStore())
     return FileStore()
 
 
