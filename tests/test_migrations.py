@@ -27,3 +27,23 @@ def test_every_file_table_has_ord_and_pk():
 def test_migrate_twice_is_noop(live_db_url):
     assert db_migrate.main(["--url-env", "DATABASE_TEST_URL"]) == 0
     assert db_migrate.main(["--url-env", "DATABASE_TEST_URL"]) == 0   # prints "up to date"
+
+
+def test_render_has_only_database_url_secret():
+    import yaml
+    env = {e["key"] for e in yaml.safe_load((Path(__file__).resolve().parents[1] / "render.yaml").read_text())["services"][0]["envVars"]}
+    assert "DATABASE_URL_POOLED" in env and "DATABASE_URL" not in env and not any("SUPABASE" in k for k in env)
+
+
+def test_operator_scripts_exit_2_without_url(monkeypatch, capsys):
+    from scripts import db_dump_live, db_timings
+    monkeypatch.delenv("NOPE_URL", raising=False)
+    assert db_dump_live.main(["--url-env", "NOPE_URL"]) == 2 and "NOPE_URL" in capsys.readouterr().err
+    assert db_timings.main(["--url-env", "NOPE_URL", "--n", "3"]) == 2 and "NOPE_URL" in capsys.readouterr().err
+
+
+def test_timings_percentiles():
+    from scripts import db_timings
+    assert db_timings.pct([5.0], 95) == 5.0
+    assert db_timings.pct(list(map(float, range(1, 21))), 50) == 10.0
+    assert db_timings.pct(list(map(float, range(1, 21))), 95) == 19.0

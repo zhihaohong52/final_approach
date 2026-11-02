@@ -199,6 +199,45 @@ Every change and assumption is returned in `result.limits`. Summary:
 
 Layers missing for a flight fall back to a generic model and are badged in the UI.
 
+### Data: Postgres (Neon) with file fallback
+
+Reference data, runs and decisions live in Neon Postgres. The files under `data/` stay in the repo and are the fallback: the app serves from them when no database is configured or the database is down.
+
+| Variable | Used by | Meaning |
+|---|---|---|
+| `DATABASE_URL_POOLED` | app runtime (`PgStore` pool), Render, `scripts/db_timings.py` | Neon pooled (`-pooler`) endpoint, `sslmode=require`. The only database secret on Render. Unset: the app uses files. |
+| `DATABASE_URL` | `scripts/db_migrate.py`, `scripts/db_seed.py`, `scripts/db_dump_live.py` | Neon direct endpoint, owner role. Dev machine only; never put it on Render. |
+| `DATABASE_TEST_URL` | live DB tests | Direct owner URL of a separate `atm_test` database in the same Neon project. |
+| `ATM_STORE` | app | `files` forces the file store; `pg` requires `DATABASE_URL_POOLED`. |
+| `ATM_LIVE_DB` | tests | `1` enables the opt-in live tests. |
+
+Neon setup: project in region `aws-us-west-2` (Oregon, next to Render's default `oregon`; a region cannot be changed later). Fix the compute at 0.25 CU (min = max) in the Console; autoscaling would burn the free 100 CU-hours up to 8 times faster. Keep a `test` branch (or the `atm_test` database) for the live tests so they never touch the production data.
+
+```bash
+python3 scripts/db_migrate.py            # apply migrations/NNNN_*.sql as the owner (append-only, checksummed)
+python3 scripts/db_seed.py               # load the reference data (idempotent, shadow-table swap, 750 MB guard)
+python3 scripts/db_seed.py --check       # verify row counts and checksums against the files
+ATM_LIVE_DB=1 python3 -m pytest -q -m live_db   # optional: live tests against DATABASE_TEST_URL
+python3 scripts/db_dump_live.py          # back up live.runs and live.decisions to .cache/dump/*.jsonl
+python3 scripts/db_timings.py            # p50/p95 per path against the design budgets (add --after-idle for a wake-up sample)
+```
+
+Measured sizes (1 GB free limit): `atm_test` with all reference data 152 MB; the raw datasets add an estimated ~158 MB.
+
+Fallback behaviour: every read and write goes through `FallbackStore`. A failed or timed-out call is retried (except `record_decision` and `put_benchmark`, which are not idempotent), then served from files; three consecutive failures open a breaker for 60 s. `GET /api/config` never queries the database. Read its `store` object: `{"backend": "postgres", "degraded": false, "persistent": true}` is healthy; `"backend": "files"` means no database is configured; `"degraded": true` with a `reason` means Postgres was configured but a call fell back to files (runs saved then are not persistent).
+
+Compute hours: the free plan gives 100 CU-hours a month, which is 400 active hours at 0.25 CU. Compute suspends 5 minutes after the last query. Do not add a keep-alive, a timer query or a database call to the health check: a database that is never idle uses about 183 CU-hours a month and the budget is gone in about 16 days. If the budget runs out, the site keeps running on files (degraded).
+
+Optional, later: a least-privilege login for the runtime. Until then `DATABASE_URL_POOLED` uses the owner role and nothing depends on `atm_app`. Run this once as the owner (the Neon SQL editor or `psql`), choosing the password yourself:
+
+```sql
+create role atm_app login password '<password>' in role app_read, app_write;
+alter role atm_app set statement_timeout = '5s';
+alter role atm_app set search_path = ref, live, eval, geo, extensions;
+```
+
+`atm_app` needs both groups: `app_write` alone has no `SELECT`, which `UPDATE ... WHERE` and `ON CONFLICT` need. Then point `DATABASE_URL_POOLED` (in `.env` and Render) at the pooler URL for `atm_app`.
+
 ## 5. Evaluation
 
 **What the measured impact is:** every final plan obeys every rule (0 violations in every arm), while the uncoordinated status quo breaks at least one rule on 16 of 50 waves; with the rule engine switched off, 32% of the agents' plans are illegal; a negotiation takes about 1 s in formulas mode and 4-8 s with jev-1.14 (`stats.elapsed_ms`). Delay is roughly neutral: on the 34 waves where the status quo is legal, the negotiated plans are about 2 min better in total. Negotiation buys legality first; minutes are a small bonus.
@@ -309,7 +348,8 @@ atm/             backend
 frontend/        React dashboard (owned by the frontend teammate)
 data/            challenge2/ (flights.csv, workbook), waves index, replay/ demo runs
 eval/            benchmark outputs (BENCHMARK.md, benchmark.json)
-scripts/         data fetch/extract; split_flights2015.py, split_arrivals.py; make_samples.py (API samples)
+scripts/         data fetch/extract; split_flights2015.py, split_arrivals.py; make_samples.py (API samples);
+                 db_migrate.py, db_seed.py, db_dump_live.py, db_timings.py (Postgres)
 docs/            design spec, API contract, graph.mmd
 tests/           pytest suite
 Dockerfile, render.yaml   deployment

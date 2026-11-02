@@ -13,3 +13,5 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: DATABASE_URL_POOLED   # Neon pooler URL; the app serves from files when unset or unreachable
+        sync: false
