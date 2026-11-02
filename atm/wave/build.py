@@ -513,11 +513,7 @@ def _build_wave(wave_id: str) -> Wave:
 
     ap = _airports().get(iata, {})
     coords = _airport_coords(iata) or (0.0, 0.0)
-    try:
-        icao_code = icao.icao_for(iata)
-    except KeyError:
-        icao_code = "K" + iata
-    airport = Airport(iata=iata, icao=icao_code, name=str(ap.get("AIRPORT", iata)),
+    airport = Airport(iata=iata, icao=icao.icao_or_prefix(iata), name=str(ap.get("AIRPORT", iata)),
                       lat=coords[0], lon=coords[1], runways=runways)
     month = date[:7]
     prov = [
@@ -547,7 +543,7 @@ def _summary(row: dict, replay_ids: set[str] | None = None) -> dict:
     ap = _airports().get(iata, {})
     return {
         "id": wid,
-        "airport": {"iata": iata, "icao": "K" + iata, "name": str(ap.get("AIRPORT", iata))},
+        "airport": {"iata": iata, "icao": icao.icao_or_prefix(iata), "name": str(ap.get("AIRPORT", iata))},
         "window_start": start.strftime("%Y-%m-%dT%H:%M:%S"),
         "window_end": (start + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S"),
         "n_flights": len(neg), "n_queue": len(rest),

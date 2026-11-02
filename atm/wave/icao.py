@@ -26,3 +26,11 @@ def icao_for(iata: str) -> str:
 
 def iata_for(icao: str) -> str | None:
     return _maps()[1].get(icao)
+
+
+def icao_or_prefix(iata: str) -> str:
+    """Lookup, falling back to the US "K" prefix rule only when the code is unknown."""
+    try:
+        return icao_for(iata)
+    except KeyError:
+        return "K" + iata

@@ -20,7 +20,7 @@ import pandas as pd
 from atm.datastore import files as _files, get_store
 from atm.wave import build as B
 from atm.wave import constraints, wind
-from atm.wave.icao import icao_for
+from atm.wave.icao import icao_or_prefix
 from atm.wave.model import (Airport, Gate, Metar, Provenance, Runway, Wave, WaveFlight)
 from atm.wave.utility import TYPICAL_TAXI_MIN
 
@@ -42,7 +42,6 @@ _STATE_TZ = {
     "MS": "America/Chicago", "AL": "America/Chicago", "TN": "America/Chicago",
     "PR": "America/Puerto_Rico", "VI": "America/Puerto_Rico", "GU": "Pacific/Guam",
 }  # every other state/territory: America/New_York (split states use their majority zone)
-_ICAO_REGION = {"AK": "PA", "HI": "PH", "GU": "PG", "PR": "TJ", "VI": "TI"}
 
 _IEM_MEM: dict[tuple[str, str], tuple[float, str | None]] = {}
 _IEM_RETRY_S = 120
@@ -116,14 +115,7 @@ def _local_tz(iata: str) -> ZoneInfo:
 
 
 def _icao(iata: str) -> str:
-    try:
-        return icao_for(iata)
-    except KeyError:
-        pass
-    st = str(B._airports().get(iata, {}).get("STATE", ""))
-    if st in _ICAO_REGION:
-        return _ICAO_REGION[st] + iata[1:]   # approximate outside the contiguous US
-    return "K" + iata
+    return icao_or_prefix(iata)
 
 
 def _http_get(url: str) -> str | None:

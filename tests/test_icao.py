@@ -1,6 +1,9 @@
 import os
+from pathlib import Path
 import pytest
 from atm.wave.icao import icao_for, iata_for
+
+ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.mark.parametrize("iata,icao", [("OGG", "PHOG"), ("SJU", "TJSJ"), ("FCA", "KGPI"),
                                        ("KOA", "PHKO"), ("ORD", "KORD"), ("PBI", "KPBI")])
@@ -8,7 +11,7 @@ def test_icao_for_known(iata, icao):
     assert icao_for(iata) == icao
 
 def test_every_flights2015_destination_resolves():
-    dests = [f[:-7] for f in os.listdir("data/challenge2/flights")]
+    dests = [f[:-7] for f in os.listdir(ROOT / "data" / "challenge2" / "flights")]
     assert len(dests) == 320
     assert all(len(icao_for(d)) == 4 for d in dests)
 
@@ -32,4 +35,10 @@ def test_bts_wave_uses_lookup(monkeypatch):
     calls = []
     monkeypatch.setattr(icao, "icao_for", lambda i: calls.append(i) or "KORD")
     build.build_wave(build.list_waves(airport="ORD", limit=1)[0]["id"])
-    assert calls == ["ORD"]
+    assert calls and set(calls) == {"ORD"}
+
+def test_summary_icao_matches_built_wave(monkeypatch):
+    from atm.wave import build, icao
+    monkeypatch.setattr(icao, "icao_for", lambda i: "XXXX")
+    s = build.list_waves(airport="ORD", limit=1)[0]
+    assert s["airport"]["icao"] == "XXXX" == build.build_wave(s["id"]).airport.icao
