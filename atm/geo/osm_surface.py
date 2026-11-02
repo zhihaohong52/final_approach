@@ -311,15 +311,17 @@ def build_surface(osm: dict, icao: str, runways: list[dict], ref_latlon: tuple[f
         best = min(((_seg_dist(pos[k], *s["axis"])[0], s["label"]) for s in strips), default=(None, None))
         holds.append({"node": index[k], "strip": best[1] if best[0] is not None and best[0] <= HOLD_STRIP_M else None})
 
-    # reachability of ALL stands from each runway end present in OSM
+    # reachability of ALL stands from each runway end present in OSM: seeded at the end's exit nodes, taxi edges
+    # only (never along a runway; a taxiway crossing a runway node passes through taxi -> taxi)
     reach = {}
-    for name, start in thr_node.items():
-        seen_n = {start}
-        q = deque([start])
+    for name in thr_node:
+        seeds = {e["node"] for e in exits.get(name, [])}
+        seen_n = set(seeds)
+        q = deque(seeds)
         while q:
             u = q.popleft()
-            for _ei, w in nbrs.get(u, []):
-                if w not in seen_n:
+            for ei, w in nbrs.get(u, []):
+                if edges[ei][3] != "runway" and w not in seen_n:
                     seen_n.add(w)
                     q.append(w)
         reach[name] = round(sum(1 for x in stands if x["node"] in seen_n) / len(stands), 4) if stands else 0.0

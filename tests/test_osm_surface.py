@@ -69,3 +69,60 @@ def test_end_missing_from_osm_is_absent():
                  {"runway": "32", "le_lat": 0.03, "le_lon": 0.03, "he_lat": 0.02, "he_lon": 0.02}]
     s = build_surface(OSM, "KXXX", rw, (0.0, 0.0), "t")
     assert "14" not in s["quality"]["reach_pct"] and "14" not in s["exits"]
+
+
+def test_crossing_strip_only_on_taxiway_b_edges():
+    s = _s()
+    labelled = [e for e in s["edges"] if e[5] is not None]
+    assert labelled and all(e[3] == "taxiway" and e[4] == "B" and e[5] == "18/36" for e in labelled)
+    assert not any(e[3] == "runway" and e[5] is not None for e in s["edges"])
+
+
+def test_reach_does_not_taxi_along_a_runway():
+    # a stand cluster hangs off a stub at the south end of runway 18/36 (an exit of 18/36 only): from 09 it is
+    # reachable only by taxiing along the runway, which does not count
+    import math
+    osm = json.loads(json.dumps(OSM))
+    rw = next(e for e in osm["elements"] if e["type"] == "way" and e["tags"].get("ref") == "18/36")
+    thr36 = rw["nodes"][-1]
+    d = lambda m_: round(math.degrees(m_ / 6371000.0), 7)
+    osm["elements"] += [
+        {"type": "node", "id": 9002, "lat": d(350), "lon": d(900)},
+        {"type": "node", "id": 9003, "lat": d(300), "lon": d(900), "tags": {"aeroway": "parking_position", "name": "SX", "ref": "9"}},
+    ]
+    osm["elements"].append({"type": "way", "id": 9100, "nodes": [thr36, 9002, 9003], "tags": {"aeroway": "taxilane", "ref": "Z"}})
+    s = build_surface(osm, "KXXX", RWYS, (0.0, 0.0), "t")
+    assert s["quality"]["reach_pct"]["09"] == round(2 / 3, 4)
+    assert s["quality"]["reach_pct"]["36"] == round(1 / 3, 4)
+
+
+def _with_stand(dy_m, name="SX", extra=()):
+    import math
+    osm = json.loads(json.dumps(OSM))
+    osm["elements"] += [{"type": "node", "id": 9500 + i, "lat": round(math.degrees((300 + dy_m) / 6371000.0), 7),
+                         "lon": round(math.degrees((1600 + 5 * i) / 6371000.0), 7),
+                         "tags": {"aeroway": "parking_position", "name": name, "ref": "x"}}
+                        for i in range(1 + len(extra))]
+    return build_surface(osm, "KXXX", RWYS, (0.0, 0.0), "t")
+
+
+def test_off_graph_stand_snaps_within_50m_else_isolated():
+    near = _with_stand(30)    # 30 m north of T's end of the S1/S2 row, within 50 m of a T node
+    far = _with_stand(500)
+    n_near = next(x for x in near["stands"] if x["id"] == "SX")
+    n_far = next(x for x in far["stands"] if x["id"] == "SX")
+    assert n_near["node"] < len(_s()["nodes"])
+    assert n_far["node"] == len(far["nodes"]) - 1       # isolated node appended after the graph nodes
+    assert far["quality"]["reach_pct"]["09"] == round(2 / 3, 4)
+
+
+def test_duplicate_stand_names_fall_back_to_osm_ids():
+    s = _with_stand(30, extra=(1,))
+    ids = [x["id"] for x in s["stands"]]
+    assert len(set(ids)) == len(ids) and "S1" in ids and "SX" not in ids
+
+
+def test_present_end_with_no_exits_reports_reach():
+    s = _s()
+    assert s["exits"]["18"] == []
+    assert s["quality"]["reach_pct"]["18"] == 0.0   # no exit node to seed from
