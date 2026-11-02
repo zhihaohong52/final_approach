@@ -33,6 +33,14 @@ ROOT = _P.root
 EVAL = ROOT / "eval"
 
 
+def lift_statement_timeout(conn) -> None:
+    """Session `statement_timeout = 0` on this script's own (direct) connection, committed at once: the role default
+    of 5 s (migration 0006) is for the app, and a long COPY must not be cut off. Not the `options` connect parameter,
+    which would replace an `options=endpoint=...` already in a Neon URL."""
+    conn.execute("set statement_timeout = 0")
+    conn.commit()
+
+
 @dataclass
 class Seeder:
     name: str
@@ -113,10 +121,11 @@ def _load_replays(conn) -> int:
     files = _replay_files()
     with conn.cursor() as cur:
         for f in files:
+            body = json.loads(f.read_text())
             cur.execute(
-                "insert into eval.replays (wave_id, engine_version, body) values (%s, 'v2', %s) "
+                "insert into eval.replays (wave_id, engine_version, body) values (%s, %s, %s) "
                 "on conflict (wave_id, engine_version) do update set body = excluded.body, recorded_at = now()",
-                (f.stem, Jsonb(json.loads(f.read_text()))))
+                (f.stem, body.get("engine_version", "v2"), Jsonb(body)))
     return len(files)
 
 
@@ -859,6 +868,7 @@ def main(argv: list[str] | None = None) -> int:
     import psycopg
     try:
         with psycopg.connect(url, autocommit=False) as conn:
+            lift_statement_timeout(conn)
             if args.drop:
                 _drop_raw(conn)
                 return 0

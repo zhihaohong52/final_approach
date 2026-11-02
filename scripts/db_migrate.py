@@ -35,6 +35,15 @@ def _version(path: Path) -> str:
     return path.name.split("_", 1)[0]
 
 
+def lift_statement_timeout(conn) -> None:
+    """Session-level `statement_timeout = 0` for this script's own connection (direct endpoint, so SET persists for
+    the session). The role default of 5 s (migration 0006) is for the app; a long COPY or migration must not be cut
+    off. Committed at once so a later rollback cannot undo it. Not done via the `options` connect parameter, which
+    would replace an `options=endpoint=...` already in a Neon URL."""
+    conn.execute("set statement_timeout = 0")
+    conn.commit()
+
+
 class ChangedMigration(Exception):
     pass
 
@@ -85,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     import psycopg
     try:
         with psycopg.connect(url, autocommit=False) as conn:
+            lift_statement_timeout(conn)
             applied = apply(conn, migration_files(), args.dry_run)
     except ChangedMigration as e:
         print(f"migration {e} changed after it was applied; migrations are append-only", file=sys.stderr)

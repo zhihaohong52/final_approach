@@ -590,7 +590,11 @@ def main(argv: list[str] | None = None) -> dict:
     (out / "BENCHMARK.md").write_text(markdown(report))
     md = (out / "BENCHMARK.md").read_text()
     default = out.resolve() == (ROOT / "eval").resolve()
-    get_store().put_benchmark(report, md, label="main" if default else out.name, current=default)
+    store = get_store()
+    store.put_benchmark(report, md, label="main" if default else out.name, current=default)
+    st = store.status()
+    if st.degraded:   # Postgres configured (DATABASE_URL_POOLED or ATM_STORE=pg) but the write fell back to files
+        log(f"WARNING: benchmark written to files only; the database write fell back ({st.reason})")
     log(f"wrote {out}/benchmark.json and BENCHMARK.md")
     return report
 

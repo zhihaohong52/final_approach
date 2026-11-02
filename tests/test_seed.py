@@ -118,3 +118,21 @@ def test_raw_loads_last_and_drops(live_db_url):
         n = c.execute("select count(*) from raw.ch3_airports_dat").fetchone()[0]
         assert n > 7000
     assert db_seed.main(["--url-env", "DATABASE_TEST_URL", "--drop", "raw"]) == 0
+
+
+def test_replays_seeded_with_their_engine_version(tmp_path, monkeypatch):
+    import json
+    (tmp_path / "A.json").write_text(json.dumps({"messages": [], "result": {}}))
+    (tmp_path / "B.json").write_text(json.dumps({"engine_version": "v3-air", "messages": [], "result": {}}))
+    monkeypatch.setattr(db_seed, "_replay_files", lambda: sorted(tmp_path.glob("*.json")))
+    seen = []
+
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def execute(self, sql, params): seen.append(params[:2])
+
+    class Conn:
+        def cursor(self): return Cur()
+    assert db_seed._load_replays(Conn()) == 2
+    assert seen == [("A", "v2"), ("B", "v3-air")]

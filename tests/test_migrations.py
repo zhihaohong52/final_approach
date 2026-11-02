@@ -54,3 +54,19 @@ def test_geo_migration_tables():
     for t in ("procedures", "fixes", "surface", "stands", "osm_gates", "holding_positions", "movements2015_day", "coverage"):
         assert f"create table geo.{t}" in sql
     assert "using gist" in sql
+
+
+def test_statement_timeout_on_role_and_lifted_by_scripts():
+    sql = (M / "0006_statement_timeout.sql").read_text()
+    assert "statement_timeout" in sql and "current_user" in sql and "current_database()" in sql and "'5s'" in sql
+    assert "in database" in sql                          # scoped to this database: the owner role is shared
+    from scripts import db_seed
+
+    class Conn:
+        def __init__(self): self.log = []
+        def execute(self, q, *a): self.log.append(q)
+        def commit(self): self.log.append("commit")
+    for mod in (db_migrate, db_seed):
+        c = Conn()
+        mod.lift_statement_timeout(c)
+        assert c.log == ["set statement_timeout = 0", "commit"]
