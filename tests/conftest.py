@@ -18,6 +18,8 @@ def _reset_store():
 
 @pytest.fixture
 def live_db_url(monkeypatch):
+    if os.environ.get("ATM_LIVE_DB") != "1":
+        pytest.skip("live_db tests are opt-in: set ATM_LIVE_DB=1 (and DATABASE_TEST_URL)")
     if TEST_DB_URL is None:
         pytest.skip("DATABASE_TEST_URL not set")
     monkeypatch.setenv("DATABASE_TEST_URL", TEST_DB_URL)

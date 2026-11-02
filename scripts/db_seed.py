@@ -296,7 +296,8 @@ def _load_workbook(conn) -> int:
 
 def _files_waves() -> list[Path]:
     """The index plus everything a summary is computed from."""
-    return ([DATASETS["waves_index"].path, DATASETS["metar_2024"].path, DATASETS["airports"].path]
+    return ([DATASETS["waves_index"].path, DATASETS["metar_2024"].path, DATASETS["airports"].path,
+             ROOT / "atm" / "wave" / "build.py"]       # the summary code: a change there makes `waves` stale
             + sorted((WAVES / "arrivals").glob("*.csv.gz")))
 
 
@@ -381,7 +382,9 @@ def _flights2015_lines() -> Iterable[str]:
                 extra[r["row_id"]] = (r["sched_dep"], r["nas_delay"], r["carrier_delay"])
     with open(DATASETS["flights2015_index"].path, newline="") as f:
         for i, r in enumerate(csv.DictReader(f)):
-            sd, nas, carr = extra.get(r["row_id"], ("", "", ""))
+            if r["row_id"] not in extra:
+                raise ValueError(f"flights_index row_id {r['row_id']} is missing from flights/{r['dest']}.csv.gz")
+            sd, nas, carr = extra[r["row_id"]]
             vals = [str(i), r["row_id"], r["date"], r["arr_date"], r["carrier"], r["flight_no"], r["tail"], r["origin"],
                     r["dest"], sd, r["sched_arr"], r["arr_delay"], r["weather_delay"], r["late_aircraft_delay"],
                     nas, carr, r["diverted"], r["cancelled"]]

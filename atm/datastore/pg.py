@@ -281,15 +281,17 @@ class PgStore:
         key = (iata, date)
         hit = self._arrivals.get(key)
         if hit is not _UNSET:
-            return hit
+            return None if hit is None else hit.copy()
         with self._conn() as conn:
             r = conn.execute("select payload from ref.bts_arrivals_day where airport = %s and date = %s::date",
                              (iata, date)).fetchone()
         df = None if r is None else pd.read_csv(io.BytesIO(gzip.decompress(r[0])), **ARRIVALS_KWARGS)
         self._arrivals.put(key, df)
-        return df
+        return None if df is None else df.copy()
 
     def metar_2024_rows(self, iata: str) -> list[dict[str, str]]:
+        """Rows as strings. Real columns (drct, sknt, ...) are numerically equal to the file's text ("90" for
+        "90.00"), not byte-identical; every reader parses them with float."""
         cols = ("station", "airport", "valid_utc", "local_hour_key", "drct", "sknt", "gust", "vsby", "ceiling_ft",
                 "wxcodes", "raw")
         sel = ", ".join(f"coalesce({c}::text, '')" for c in cols)
@@ -312,7 +314,7 @@ class PgStore:
         key = (dest, arr_date)
         hit = self._flights_day.get(key)
         if hit is not _UNSET:
-            return hit
+            return None if hit is None else hit.copy()
         cols = ("row_id, date::text as date, arr_date::text as arr_date, carrier, flight_no, tail, origin, sched_dep, "
                 "sched_arr, arr_delay, weather_delay, late_aircraft_delay, nas_delay, carrier_delay, diverted, cancelled")
         text = self._copy_text(f"copy (select {cols} from ref.flights2015 where dest = %s and arr_date = %s::date "
@@ -324,7 +326,7 @@ class PgStore:
             if not known:
                 df = None      # no file for this destination, as FileStore
         self._flights_day.put(key, df)
-        return df
+        return None if df is None else df.copy()
 
     def search_flights2015(self, airport: str | None, q: str | None, limit: int, offset: int) -> tuple[list[dict], int]:
         from atm.wave import flights2015 as F   # lazy: flights2015 imports the store
