@@ -132,8 +132,9 @@ def decision(body: dict = Body(...)):
         now = datetime.now(timezone.utc).isoformat()
         DECISIONS.parent.mkdir(parents=True, exist_ok=True)
         with DECISIONS.open("a") as fh:
+            edits = body.get("edits") if isinstance(body.get("edits"), list) else []
             fh.write(json.dumps({"run_id": str(body["run_id"]), "decision": kind, "note": note,
-                                 "recorded_at": now, "ts": time.time()}) + "\n")
+                                 "edits": edits, "recorded_at": now, "ts": time.time()}) + "\n")
         return {"ok": True, "recorded_at": now}
     try:  # v1 behaviour, unchanged
         d = Decision(**body)
@@ -401,9 +402,16 @@ def waves_random(airport: str | None = None, source: str = "flights2015"):
 @app.get("/api/wave/{wave_id}")
 def get_wave(wave_id: str):
     try:
-        return WB.build_wave(wave_id).to_dict()
+        w = WB.build_wave(wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    # v2.1: the status quo (first come, first served) and its rule check, so the screen shows a plan before any negotiation
+    from .wave.moves import fcfs_plan
+    from .wave.utility import evaluate
+    plan = fcfs_plan(w)
+    plan.label = ""
+    ev = evaluate(w, plan)               # fills each assignment's metrics, so it runs before to_dict
+    return {**w.to_dict(), "status_quo": {"plan": plan.to_dict(), "evaluation": ev}}
 
 
 @app.get("/api/runs/{run_id}")
@@ -546,6 +554,26 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/evaluate")
+async def evaluate_plan(body: dict = Body(...)):
+    """Re-check a plan the duty manager edited: same 12 rules and scores as the negotiation."""
+    from .wave import edit
+    wave_id, rows = body.get("wave_id"), body.get("assignments")
+    if not isinstance(wave_id, str) or not wave_id:
+        return _err(422, "invalid_request", "wave_id is required")
+    if not isinstance(rows, list) or not rows:
+        return _err(422, "invalid_request", "assignments must be a non-empty list")
+    try:
+        plan = edit.plan_from_dicts(rows)
+    except (ValueError, TypeError) as e:
+        return _err(422, "invalid_request", str(e))
+    try:
+        wave = await asyncio.to_thread(WB.build_wave, wave_id)
+    except KeyError:
+        return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    return await asyncio.to_thread(edit.check_edit, wave, plan)
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")
