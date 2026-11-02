@@ -12,7 +12,8 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from atm import server
+from atm import datastore, server
+from atm.datastore.files import FilePaths, FileStore
 
 OUT = Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "samples"
 WAVE_ID = sys.argv[1] if len(sys.argv) > 1 else "F2015-270287"
@@ -26,9 +27,9 @@ def _write_json(name: str, data) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp, \
-            mock.patch.object(server, "RUNS_DIR", Path(tmp) / "runs"), \
-            mock.patch.object(server, "DECISIONS", Path(tmp) / "decisions.jsonl"), \
             mock.patch.object(server, "REPLAY_SPACING_S", 0):
+        datastore.set_store(FileStore(FilePaths(runs_dir=Path(tmp) / "runs",
+                                                decisions_path=Path(tmp) / "decisions.jsonl")))
         c = TestClient(server.app)
 
         def get(path: str):
@@ -53,7 +54,7 @@ def main() -> None:
         d.raise_for_status()
         _write_json("decision.json", d.json())
 
-        if server.BENCHMARK.exists():
+        if datastore.get_store().benchmark_current() is not None:
             _write_json("benchmark.json", get("/api/benchmark"))
 
 

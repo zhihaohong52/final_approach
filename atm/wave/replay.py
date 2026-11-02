@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from atm.datastore import get_store
 from atm.wave.loader import _load
 
 WB = _load("build")
@@ -22,11 +23,16 @@ def record(wave_ids: list[str], mode: str = "decision", out_dir: str | Path = RE
                                 on_message=msgs.append)
         res = {k: v for k, v in res.items() if k != "log"}
         p = out / f"{wid}.json"
-        p.write_text(json.dumps({"messages": msgs, "result": res}))
+        body = {"messages": msgs, "result": res}
+        p.write_text(json.dumps(body))
+        get_store().put_replay(wid, body)
         paths.append(str(p))
     return paths
 
 
-def load(wave_id: str, out_dir: str | Path = REPLAY_DIR) -> dict:
+def load(wave_id: str) -> dict:
     """Raises FileNotFoundError if the wave has no recording."""
-    return json.loads((Path(out_dir) / f"{wave_id}.json").read_text())
+    rec = get_store().replay(wave_id)
+    if rec is None:
+        raise FileNotFoundError(wave_id)
+    return rec

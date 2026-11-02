@@ -42,3 +42,33 @@ def test_builders_go_through_the_store(monkeypatch):
     finally:
         datastore.set_store(None)
     assert calls and calls[0][0] == "ORD"
+
+
+def test_runs_roundtrip_and_list(tmp_path):
+    from atm.datastore.files import FilePaths
+    s = FileStore(FilePaths(runs_dir=tmp_path / "runs"))
+    assert s.save_run({"run_id": "abcdef012345", "wave_id": "W1", "outcome": "consensus"})
+    assert s.get_run("abcdef012345")["wave_id"] == "W1"
+    assert s.get_run("../etc/passwd") is None
+    assert [r["run_id"] for r in s.list_runs("W1", 5)] == ["abcdef012345"]
+
+
+def test_decision_appends_both_shapes(tmp_path):
+    from atm.datastore.files import FilePaths
+    p = tmp_path / "d.jsonl"
+    s = FileStore(FilePaths(decisions_path=p))
+    assert s.record_decision({"run_id": "abcdef012345", "decision": "APPROVE", "note": "", "edits": []})
+    assert s.record_decision({"flight_id": 5, "plan_id": "R1", "decision": "OVERRIDE", "note": "x"})
+    assert len(p.read_text().splitlines()) == 2
+
+
+def test_replay_ids_are_the_demo_set():
+    assert FileStore().replay_ids() == {"F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"}
+
+
+def test_iem_cache_roundtrip(tmp_path):
+    from atm.datastore.files import FilePaths
+    s = FileStore(FilePaths(iem_dir=tmp_path))
+    assert s.iem_get("ORD", "2015-08-19") is None
+    s.iem_put("ORD", "2015-08-19", "station,valid\nORD,2015-08-19 00:51\n")
+    assert s.iem_get("ORD", "2015-08-19")[1].startswith("station,valid")

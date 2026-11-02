@@ -26,7 +26,6 @@ from atm.wave.utility import TYPICAL_TAXI_MIN
 CH2 = B.CH2
 FLIGHTS = CH2 / "flights"
 INDEX = CH2 / "flights_index.csv"
-METAR_CACHE = CH2 / "metar_cache"
 PREFIX = "F2015-"
 IEM_TIMEOUT_S = 5
 SRC_FLIGHTS = "DOT 2015 flights.csv"
@@ -142,9 +141,9 @@ def _fetch_iem(station: str, date: str) -> str | None:
     hit = _IEM_MEM.get(key)
     if hit is not None and (hit[1] is not None or time.time() - hit[0] < _IEM_RETRY_S):
         return hit[1]
-    p = METAR_CACHE / f"{station}_{date}.csv"
-    if p.exists():
-        text = p.read_text()
+    cached = get_store().iem_get(station, date)
+    if cached is not None and cached[1] is not None:
+        text = cached[1]
     else:
         d0 = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
         d1 = d0 + timedelta(days=3)
@@ -155,11 +154,7 @@ def _fetch_iem(station: str, date: str) -> str | None:
                "&tz=Etc/UTC&format=onlycomma&latlon=no&missing=M&trace=T&direct=no&report_type=3")
         text = _http_get(url)
         if text is not None and text.startswith("station,valid"):
-            try:
-                METAR_CACHE.mkdir(parents=True, exist_ok=True)
-                p.write_text(text)
-            except OSError:
-                pass
+            get_store().iem_put(station, date, text)
         else:
             text = None
     _IEM_MEM[key] = (time.time(), text)

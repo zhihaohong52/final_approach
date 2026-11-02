@@ -26,6 +26,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from atm.datastore import get_store
 from atm.wave import rules
 from atm.wave.graph import negotiate_wave
 from atm.wave.model import Assignment, JointPlan
@@ -587,6 +588,9 @@ def main(argv: list[str] | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     (out / "benchmark.json").write_text(json.dumps(report, indent=2))
     (out / "BENCHMARK.md").write_text(markdown(report))
+    md = (out / "BENCHMARK.md").read_text()
+    default = out.resolve() == (ROOT / "eval").resolve()
+    get_store().put_benchmark(report, md, label="main" if default else out.name, current=default)
     log(f"wrote {out}/benchmark.json and BENCHMARK.md")
     return report
 

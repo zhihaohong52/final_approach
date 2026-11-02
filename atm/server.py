@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import baseline, decide, jev, negotiation, scenario
+from .datastore import get_store
 from .mcp_server import mcp_asgi_app
 from .wave import replay
 
@@ -33,11 +34,6 @@ GR = _load("graph")
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-EVAL = ROOT / "eval" / "results.json"
-DECISIONS = ROOT / "eval" / "decisions.jsonl"
-BENCHMARK = ROOT / "eval" / "benchmark.json"
-RUNS_DIR = ROOT / "eval" / "runs"
-REPLAY_DIR = ROOT / "data" / "replay"
 
 app = FastAPI(title="ATM disruption negotiation")
 
@@ -77,7 +73,7 @@ def config():
             "default_model": default_model,
             "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
             "tracing": bool(os.environ.get("LANGSMITH_API_KEY")),
-            "replay_available": REPLAY_DIR.is_dir() and any(p.is_file() for p in REPLAY_DIR.iterdir())}
+            "replay_available": bool(_file_view().replay_ids())}
 
 
 @app.get("/api/disruptions")
@@ -130,27 +126,24 @@ def decision(body: dict = Body(...)):
         if kind == "OVERRIDE" and not note:
             return _err(422, "note_required", "a note is required to OVERRIDE")
         now = datetime.now(timezone.utc).isoformat()
-        DECISIONS.parent.mkdir(parents=True, exist_ok=True)
-        with DECISIONS.open("a") as fh:
-            edits = body.get("edits") if isinstance(body.get("edits"), list) else []
-            fh.write(json.dumps({"run_id": str(body["run_id"]), "decision": kind, "note": note,
-                                 "edits": edits, "recorded_at": now, "ts": time.time()}) + "\n")
+        edits = body.get("edits") if isinstance(body.get("edits"), list) else []
+        get_store().record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
+                                     "edits": edits, "recorded_at": now, "ts": time.time()})
         return {"ok": True, "recorded_at": now}
     try:  # v1 behaviour, unchanged
         d = Decision(**body)
     except Exception as e:  # pydantic ValidationError -> same 422 shape FastAPI used
         raise HTTPException(422, detail=json.loads(e.json()) if hasattr(e, "json") else str(e))
-    DECISIONS.parent.mkdir(exist_ok=True)
-    with DECISIONS.open("a") as fh:
-        fh.write(json.dumps({**d.model_dump(), "ts": time.time()}) + "\n")
+    get_store().record_decision({**d.model_dump(), "ts": time.time()})
     return {"ok": True}
 
 
 @app.get("/api/eval")
 def eval_results():
-    if not EVAL.exists():
+    res = get_store().v1_eval("results")
+    if res is None:
         raise HTTPException(404, "run `python -m atm.evaluate` first")
-    return json.loads(EVAL.read_text())
+    return res
 
 
 # ---------------------------------------------------------------- v2 wave mode
@@ -204,11 +197,14 @@ def _model_id(entry: str) -> str:
     return entry
 
 
+def _file_view():
+    """The file backend of the store (the store itself when it is a FileStore): /api/config never queries a database."""
+    st = get_store()
+    return getattr(st, "secondary", st)
+
+
 def _benchmark() -> dict | None:
-    try:
-        return json.loads(BENCHMARK.read_text())
-    except (OSError, ValueError):
-        return None
+    return _file_view().benchmark_current()
 
 
 def _models() -> tuple[list[dict], str]:
@@ -301,13 +297,7 @@ def _save_run(result: dict) -> None:
     RUNS.move_to_end(result["run_id"])
     while len(RUNS) > RUNS_MAX:
         RUNS.popitem(last=False)
-    try:
-        RUNS_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = RUNS_DIR / f".{result['run_id']}.{uuid.uuid4().hex[:6]}.tmp"
-        tmp.write_text(json.dumps(result))
-        os.replace(tmp, RUNS_DIR / f"{result['run_id']}.json")
-    except OSError:
-        pass
+    threading.Thread(target=get_store().save_run, args=(result,), daemon=True).start()
 
 
 class _Cancelled(Exception):
@@ -368,9 +358,9 @@ def _replay_summaries() -> list[dict]:
     global _REPLAY_SUMMARIES
     if _REPLAY_SUMMARIES is None:
         out = []
-        for p in sorted(REPLAY_DIR.glob("F2015-*.json")) if REPLAY_DIR.is_dir() else []:
+        for wid in sorted(i for i in get_store().replay_ids() if i.startswith("F2015-")):
             try:
-                out.append(_f2015_summary(WB.build_wave(p.stem).to_dict(), replay_available=True))
+                out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
             except (KeyError, ValueError):
                 continue
         _REPLAY_SUMMARIES = out
@@ -419,11 +409,9 @@ def get_run(run_id: str):
     if run_id in RUNS:
         RUNS.move_to_end(run_id)
         return RUNS[run_id]
-    if re.fullmatch(r"[0-9a-f]{12}", run_id):
-        try:
-            return json.loads((RUNS_DIR / f"{run_id}.json").read_text())
-        except (OSError, ValueError):
-            pass
+    run = get_store().get_run(run_id)
+    if run is not None:
+        return run
     return _err(404, "unknown_run", f"unknown run id {run_id!r}")
 
 
@@ -461,7 +449,7 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
         try:
             if not re.fullmatch(r"[A-Za-z0-9_.-]+", wave_id):
                 raise FileNotFoundError(wave_id)
-            rec = replay.load(wave_id, REPLAY_DIR)
+            rec = replay.load(wave_id)
         except (FileNotFoundError, ValueError):
             rec = None  # no recording for this wave: negotiate it live instead of failing the demo
     if rec is not None:

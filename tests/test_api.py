@@ -4,7 +4,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from atm import server
+from atm import datastore, server
 from atm.wave import stub
 
 WID = "ATL-2024-07-15-16"
@@ -12,17 +12,17 @@ WID = "ATL-2024-07-15-16"
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    from atm import datastore
+    from atm.datastore.files import FileStore, FilePaths
     monkeypatch.setattr(server, "WB", stub)
     monkeypatch.setattr(server, "GR", stub)
-    monkeypatch.setattr(server, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(server, "DECISIONS", tmp_path / "decisions.jsonl")
-    monkeypatch.setattr(server, "REPLAY_DIR", tmp_path / "replay")
-    monkeypatch.setattr(server, "BENCHMARK", tmp_path / "benchmark.json")
+    datastore.set_store(FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "decisions.jsonl",
+                                            replay_dir=tmp_path / "replay", benchmark_path=tmp_path / "benchmark.json")))
     monkeypatch.setattr(stub, "_REPLAY_DIR", tmp_path / "replay")
     monkeypatch.setattr(server, "REPLAY_SPACING_S", 0)
-    server._RATE.clear()
-    server.RUNS.clear()
-    return TestClient(server.app)
+    server._RATE.clear(); server.RUNS.clear()
+    yield TestClient(server.app)
+    datastore.set_store(None)
 
 
 def _frames(text):
@@ -59,7 +59,7 @@ def test_override_requires_note(client):
     assert r.status_code == 422
     r = client.post("/api/decision", json={"run_id": "abc", "decision": "APPROVE"})
     assert r.json()["ok"] is True and r.json()["recorded_at"]
-    assert json.loads(server.DECISIONS.read_text().splitlines()[-1])["decision"] == "APPROVE"
+    assert json.loads(datastore.get_store().paths.decisions_path.read_text().splitlines()[-1])["decision"] == "APPROVE"
 
 
 def test_v1_decision_still_works(client):
@@ -103,7 +103,7 @@ def test_replay_streams_saved_run(client, monkeypatch):
     from atm.wave import replay
     monkeypatch.setattr(replay, "WB", stub)
     monkeypatch.setattr(replay, "GR", stub)
-    monkey_path = server.REPLAY_DIR
+    monkey_path = datastore.get_store().paths.replay_dir
     replay.record([WID], out_dir=monkey_path)
     fr = _frames(client.post("/api/negotiate-wave", json={"wave_id": WID, "mode": "decision", "replay": True}).text)
     assert fr[0][0] == "start" and fr[-1][0] == "result" and len(fr) > 3
@@ -112,7 +112,7 @@ def test_replay_streams_saved_run(client, monkeypatch):
 
 
 def test_default_chain_uses_benchmark_winner(client):
-    server.BENCHMARK.write_text(json.dumps({"selection": {"winner": "baseten/elephant-1"}, "arms": []}))
+    datastore.get_store().paths.benchmark_path.write_text(json.dumps({"selection": {"winner": "baseten/elephant-1"}, "arms": []}))
     chain = server._default_chain()
     assert chain[0] == "openrouter:baseten/elephant-1" and chain[-1] == "formula"
     assert len(chain) == len(set(chain))
@@ -128,7 +128,7 @@ def test_formula_winner_defaults_to_formulas_mode(client):
             {"model": "typesafe/jev-1.14", "provider": "openrouter",
              "summary": {"error_rate_pct": 0, "latency_p95_ms": 550, "consensus_rate_pct": 90}},
             {"model": "formula", "provider": "formula", "summary": {}}]
-    server.BENCHMARK.write_text(json.dumps({"selection": {"winner": "formula"}, "arms": arms}))
+    datastore.get_store().paths.benchmark_path.write_text(json.dumps({"selection": {"winner": "formula"}, "arms": arms}))
     assert client.get("/api/config").json()["default_mode"] == "formulas"
     chain = server._default_chain()
     assert chain[:2] == ["openrouter:typesafe/jev-1.14", "openrouter:liquid/d1-ultra"] and chain[-1] == "formula"

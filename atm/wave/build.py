@@ -21,7 +21,6 @@ from atm.wave.model import (Airport, Gate, Metar, Provenance, QueueArrival, Runw
 ROOT = Path(__file__).resolve().parent.parent.parent
 WAVES = ROOT / "data" / "waves"
 REF = ROOT / "data" / "ref"
-REPLAY = ROOT / "data" / "replay"
 CH2 = ROOT / "data" / "challenge2"
 
 _CACHE: dict = {}
@@ -532,7 +531,7 @@ def _summary(row: dict) -> dict:
         "callsigns": list(neg["callsign"]),
         "disrupted_callsigns": [c for c in neg["callsign"] if c in dis_cs],
         "weather_summary": _weather_summary(_metar_for(iata, date, hour)),
-        "replay_available": (REPLAY / f"{wid}.json").exists(),
+        "replay_available": wid in get_store().replay_ids(),
     }
 
 

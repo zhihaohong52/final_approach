@@ -1,8 +1,13 @@
-"""File-backed store: the repo's data/ and eval/ files. Reads and writes land in later tasks."""
+"""File-backed store: the repo's data/ and eval/ files."""
 from __future__ import annotations
 
 import csv
 import functools
+import json
+import os
+import re
+import uuid
+from datetime import datetime, timezone
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -174,6 +179,127 @@ class FileStore:
                 m |= df["row_id"].astype(str).str.contains(digits, regex=False)
             df = df[m]
         return [F.flight_row(r) for r in df.iloc[offset:offset + limit].to_dict("records")], len(df)
+
+    # ------------------------------------------------------------ IEM cache
+
+    def iem_get(self, station: str, date: str) -> tuple[float, str | None] | None:
+        p = self.paths.iem_dir / f"{station}_{date}.csv"
+        try:
+            return p.stat().st_mtime, p.read_text()
+        except OSError:
+            return None
+
+    def iem_put(self, station: str, date: str, body: str | None) -> None:
+        if body is None:
+            return
+        try:
+            self.paths.iem_dir.mkdir(parents=True, exist_ok=True)
+            (self.paths.iem_dir / f"{station}_{date}.csv").write_text(body)
+        except OSError:
+            pass
+
+    # ------------------------------------------------------------ runs and decisions
+
+    def save_run(self, result: dict) -> bool:
+        d = self.paths.runs_dir
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            tmp = d / f".{result['run_id']}.{uuid.uuid4().hex[:6]}.tmp"
+            tmp.write_text(json.dumps(result))
+            os.replace(tmp, d / f"{result['run_id']}.json")
+            return True
+        except OSError:
+            return False
+
+    def get_run(self, run_id: str) -> dict | None:
+        if not re.fullmatch(r"[0-9a-f]{12}", run_id):
+            return None
+        try:
+            return json.loads((self.paths.runs_dir / f"{run_id}.json").read_text())
+        except (OSError, ValueError):
+            return None
+
+    def _decided_ids(self) -> set[str]:
+        try:
+            lines = self.paths.decisions_path.read_text().splitlines()
+        except OSError:
+            return set()
+        out = set()
+        for ln in lines:
+            try:
+                rid = json.loads(ln).get("run_id")
+            except (ValueError, AttributeError):
+                continue
+            if rid:
+                out.add(str(rid))
+        return out
+
+    def list_runs(self, wave_id: str, limit: int) -> list[dict]:
+        d = self.paths.runs_dir
+        if not d.is_dir():
+            return []
+        found = []
+        for p in d.glob("*.json"):
+            try:
+                found.append((p.stat().st_mtime, json.loads(p.read_text())))
+            except (OSError, ValueError):
+                continue
+        decided = self._decided_ids()
+        found.sort(key=lambda t: t[0], reverse=True)
+        out = []
+        for mtime, r in found:
+            if r.get("wave_id") != wave_id:
+                continue
+            out.append({"run_id": r.get("run_id"), "wave_id": r.get("wave_id"), "mode": r.get("mode"),
+                        "model": r.get("model"), "outcome": r.get("outcome"),
+                        "created_at": datetime.fromtimestamp(mtime, timezone.utc).isoformat(),
+                        "decided": r.get("run_id") in decided})
+            if len(out) >= limit:
+                break
+        return out
+
+    def record_decision(self, row: dict) -> bool:
+        try:
+            self.paths.decisions_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.paths.decisions_path.open("a") as fh:
+                fh.write(json.dumps(row) + "\n")
+            return True
+        except OSError:
+            return False
+
+    # ------------------------------------------------------------ replays and evaluation
+
+    def replay(self, wave_id: str) -> dict | None:
+        try:
+            return json.loads((self.paths.replay_dir / f"{wave_id}.json").read_text())
+        except (OSError, ValueError):
+            return None
+
+    def replay_ids(self) -> set[str]:
+        d = self.paths.replay_dir
+        return {p.stem for p in d.glob("*.json") if p.is_file()} if d.is_dir() else set()
+
+    def put_replay(self, wave_id: str, body: dict, engine_version: str = "v2") -> None:
+        self.paths.replay_dir.mkdir(parents=True, exist_ok=True)
+        (self.paths.replay_dir / f"{wave_id}.json").write_text(json.dumps(body))
+
+    def benchmark_current(self) -> dict | None:
+        try:
+            return json.loads(self.paths.benchmark_path.read_text())
+        except (OSError, ValueError):
+            return None
+
+    def put_benchmark(self, report: dict, markdown: str | None, label: str, current: bool = True) -> None:
+        if not current:
+            return
+        self.paths.benchmark_path.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.benchmark_path.write_text(json.dumps(report, indent=2))
+
+    def v1_eval(self, name: str) -> dict | list | None:
+        try:
+            return json.loads((self.paths.root / "eval" / f"{name}.json").read_text())
+        except (OSError, ValueError):
+            return None
 
     # ------------------------------------------------------------ other
 
