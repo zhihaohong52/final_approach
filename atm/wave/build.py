@@ -47,6 +47,19 @@ def _arrivals_cache_clear() -> None:
     _files._arrivals.cache_clear()
 
 
+def _reset_caches() -> None:
+    """Drop every in-process reader cache of the wave builders (tests only: parity runs swap the store between
+    builds). The FileStore's own file caches are not touched."""
+    from atm import scenario
+    from atm.wave import flights2015
+    _CACHE.clear()
+    _metar_table.cache_clear()
+    flights2015._IEM_MEM.clear()
+    constraints._load.cache_clear()
+    for fn in (scenario.disruptions, scenario.airports, scenario.airlines):
+        fn.cache_clear()
+
+
 def _frame(name: str) -> pd.DataFrame:
     df = get_store().frame(name)
     if df is None:
@@ -469,6 +482,11 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueAr
 # ---------------------------------------------------------------- public API
 
 def build_wave(wave_id: str) -> Wave:
+    with get_store().session():     # one pooled connection for all the store reads of this build
+        return _build_wave(wave_id)
+
+
+def _build_wave(wave_id: str) -> Wave:
     if wave_id.startswith("F2015-"):
         from atm.wave import flights2015   # lazy: flights2015 imports this module
         try:
@@ -535,16 +553,28 @@ def _summary(row: dict, replay_ids: set[str] | None = None) -> dict:
     }
 
 
+def _row_summary(row: dict, replay_ids: set[str]) -> dict:
+    """The WaveSummary of an index row. PgStore rows carry the summary precomputed at seed time (one indexed query
+    per listing); FileStore rows do not, so it is computed from the arrivals and METAR files."""
+    pre = row.get("summary")
+    if pre is not None:
+        return pre | {"replay_available": row["wave_id"] in replay_ids}
+    return _summary(row, replay_ids)
+
+
 def list_waves(airport: str | None = None, q: str | None = None, limit: int = 50) -> list[dict]:
-    ids = get_store().replay_ids()
-    return [_summary(r, ids) for r in get_store().wave_rows(airport.upper() if airport else None, q, limit)]
+    store = get_store()
+    with store.session():
+        ids = store.replay_ids()
+        return [_row_summary(r, ids) for r in store.wave_rows(airport.upper() if airport else None, q, limit)]
 
 
 def random_wave(airport: str | None = None, seed: int | None = None) -> dict:
     store = get_store()
     ap = airport.upper() if airport else None
-    n = store.wave_count(ap)
-    if n == 0:
-        raise KeyError(airport)
-    rng = random.Random(seed)
-    return _summary(store.wave_rows(ap, None, 1, rng.randrange(n))[0])
+    with store.session():
+        n = store.wave_count(ap)
+        if n == 0:
+            raise KeyError(airport)
+        rng = random.Random(seed)
+        return _row_summary(store.wave_rows(ap, None, 1, rng.randrange(n))[0], store.replay_ids())

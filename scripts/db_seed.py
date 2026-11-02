@@ -8,9 +8,11 @@ Exit codes: 0 ok, 1 stale (--check) or database error, 2 URL not set, 4 over the
 """
 import argparse
 import csv
+import hashlib
 import io
 import json
 import os
+import re
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -21,6 +23,7 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import atm  # noqa: E402,F401  (loads .env)
 from atm.datastore import pack  # noqa: E402
+from atm.datastore.datasets import CH2, DATASETS, WAVES, WORKBOOK, Dataset  # noqa: E402
 from atm.datastore.files import FilePaths  # noqa: E402
 
 SCRIPT_VERSION = "1"
@@ -174,6 +177,220 @@ def _load_iem(conn) -> int:
         return cur.rowcount
 
 
+
+# ------------------------------------------------------------------ reference datasets (Task 8)
+#
+# Every index_sql below runs against <table>__new before the old table is dropped, so every index and constraint
+# is UNNAMED: PostgreSQL then picks a free name and the second swap cannot collide with the first table's.
+
+_INT = re.compile(r"-?\d+")
+_SMALL_FILES = ("runways", "runway_history", "aircraft", "gates", "airports", "airlines", "openflights")
+_WORKBOOK_SHEETS = ("airport_capacity", "wake_separation")
+
+
+def _field(v: str | None, text: bool) -> str:
+    """One CSV field for COPY. COPY reads an unquoted empty field as NULL, so '' in a text column is written as
+    "" (stays an empty string) and an empty numeric/date field stays unquoted (NULL)."""
+    if v is None:
+        return ""
+    if v == "":
+        return '""' if text else ""
+    if v == "\\." or any(c in v for c in ',"\n\r'):
+        return '"' + v.replace('"', '""') + '"'
+    return v
+
+
+def _pg_line(vals: list, text: list[bool]) -> str:
+    return ",".join(_field(v, t) for v, t in zip(vals, text)) + "\n"
+
+
+def _cell(v: str, pgtype: str) -> str | None:
+    """A file field as the value COPY should get. Integer columns accept '7599.0' (written as 7599) but nothing else."""
+    if pgtype == "text":
+        return v
+    if v == "":
+        return None
+    if pgtype in ("int2", "int4") and not _INT.fullmatch(v):
+        f = float(v)
+        if not f.is_integer():
+            raise ValueError(f"{pgtype} column got {v!r}")
+        return str(int(f))
+    return v
+
+
+def _dataset_lines(ds: Dataset) -> Iterable[str]:
+    """CSV lines (ord first) for one file-backed dataset, in file order."""
+    text = [True] + [c.pgtype == "text" for c in ds.columns]
+    with open(ds.path, newline="") as f:
+        rd = csv.reader(f)
+        if ds.header:
+            next(rd)
+        for i, row in enumerate(rd):
+            if len(row) != len(ds.columns):
+                raise ValueError(f"{ds.path.name} row {i}: {len(row)} fields, expected {len(ds.columns)}")
+            yield _pg_line([str(i)] + [_cell(v, c.pgtype) for v, c in zip(row, ds.columns)], text)
+
+
+def _ord_columns(ds: Dataset) -> list[str]:
+    return ["ord"] + [c.col for c in ds.columns]
+
+
+_PK_ORD = ["alter table {t} add primary key (ord)"]
+_REF_INDEXES: dict[str, list[str]] = {
+    "ref.runways": _PK_ORD + ["alter table {t} add unique (airport, runway)",
+                              "update {t} set le_geog = extensions.st_makepoint(le_lon, le_lat)::extensions.geography "
+                              "where le_lat is not null and le_lon is not null",
+                              "update {t} set he_geog = extensions.st_makepoint(he_lon, he_lat)::extensions.geography "
+                              "where he_lat is not null and he_lon is not null"],
+    "ref.runway_history": _PK_ORD,
+    "ref.aircraft": _PK_ORD + ["alter table {t} add unique (tail)"],
+    "ref.gates": _PK_ORD,
+    "ref.airports": _PK_ORD + ["alter table {t} add unique (iata_code)"],
+    "ref.airlines": _PK_ORD + ["alter table {t} add unique (iata_code)"],
+    "ref.openflights": _PK_ORD,
+    "ref.metar_2024": _PK_ORD + ["create index on {t} (airport)"],
+    "ref.disruptions_v1": _PK_ORD + ["alter table {t} add unique (id)"],
+    "ref.waves": ["alter table {t} add primary key (wave_id)", "create index on {t} (airport, ord)",
+                  "create index on {t} (ord)"],
+    "ref.bts_arrivals_day": ["alter table {t} add primary key (airport, date)"],
+    "ref.flights2015": ["alter table {t} add primary key (row_id)", "create index on {t} (dest, arr_date)",
+                        "create index on {t} (dest, ord) where cancelled = 0", "create index on {t} (ord) where cancelled = 0"],
+    "ref.workbook": ["alter table {t} add primary key (sheet, row_no)"],
+}
+
+
+def _swap(conn, table: str, columns: list[str], lines: Iterable[str]) -> int:
+    return swap_load(conn, table, columns, lines, [s.format(t=f"{table}__new") for s in _REF_INDEXES[table]])
+
+
+def _files_small() -> list[Path]:
+    return [DATASETS[n].path for n in _SMALL_FILES]
+
+
+def _load_small(conn) -> int:
+    n = 0
+    for name in _SMALL_FILES:
+        ds = DATASETS[name]
+        n += _swap(conn, ds.table, _ord_columns(ds), _dataset_lines(ds))
+    return n
+
+
+def _files_workbook() -> list[Path]:
+    return [WORKBOOK]
+
+
+def _workbook_lines() -> Iterable[str]:
+    import openpyxl
+    wb = openpyxl.load_workbook(WORKBOOK, read_only=True, data_only=True)
+    try:
+        for sheet in _WORKBOOK_SHEETS:
+            for row_no, cells in enumerate(wb[sheet].iter_rows(min_row=4, values_only=True), start=4):
+                yield _pg_line([sheet, str(row_no), json.dumps(list(cells))], [True, False, True])   # no default=: fail on odd types
+    finally:
+        wb.close()
+
+
+def _load_workbook(conn) -> int:
+    return _swap(conn, "ref.workbook", ["sheet", "row_no", "cells"], _workbook_lines())
+
+
+def _files_waves() -> list[Path]:
+    """The index plus everything a summary is computed from."""
+    return ([DATASETS["waves_index"].path, DATASETS["metar_2024"].path, DATASETS["airports"].path]
+            + sorted((WAVES / "arrivals").glob("*.csv.gz")))
+
+
+def _wave_lines() -> Iterable[str]:
+    """index.csv rows with `summary` = build._summary(row) minus replay_available, computed on a FileStore."""
+    from atm import datastore
+    from atm.datastore.files import FileStore
+    from atm.wave import build
+    ds = DATASETS["waves_index"]
+    with open(ds.path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    prev = datastore._store
+    datastore.set_store(FileStore())
+    build._reset_caches()
+    try:
+        summaries: dict[int, dict] = {}
+        for i in sorted(range(len(rows)), key=lambda i: rows[i]["airport"]):   # one airport at a time: the arrivals LRU holds 4
+            row = dict(rows[i])
+            row["disrupted_flights"] = re.sub(r"\.0(?=;|$)", "", row["disrupted_flights"])
+            s = build._summary(row, set())
+            s.pop("replay_available")
+            summaries[i] = s
+    finally:
+        build._reset_caches()
+        datastore.set_store(prev)
+    text = [True, True, True, False, False, False, False, True, True]
+    for i, r in enumerate(rows):
+        yield _pg_line([r["wave_id"], str(i), r["airport"], r["date"], r["hour"], r["n_arrivals"], r["n_disrupted"],
+                        r["disrupted_flights"], json.dumps(summaries[i])], text)
+
+
+def _load_waves(conn) -> int:
+    return _swap(conn, "ref.waves", ["wave_id", "ord", "airport", "date", "hour", "n_arrivals", "n_disrupted",
+                                     "disrupted_flights", "summary"], list(_wave_lines()))   # computed before the transaction opens
+
+
+def _files_bts() -> list[Path]:
+    return sorted((WAVES / "arrivals").glob("*.csv.gz"))
+
+
+def _bts_lines() -> Iterable[str]:
+    """One gzip CSV per (airport, date): the file's own rows and columns, read and written as text so nothing is reformatted."""
+    import pandas as pd
+    for p in _files_bts():
+        airport = p.name.split(".")[0]
+        df = pd.read_csv(p, dtype=str, keep_default_na=False)
+        for (date,), sub in pack.split_by(df, ["date"]):
+            blob = pack.gzip_csv(sub)
+            yield _pg_line([airport, date, str(len(sub)), "\\x" + blob.hex(), hashlib.sha256(blob).hexdigest()],
+                           [True, False, False, False, True])
+
+
+def _load_bts(conn) -> int:
+    return _swap(conn, "ref.bts_arrivals_day", ["airport", "date", "n_rows", "payload", "sha256"], _bts_lines())
+
+
+def _load_dataset(name: str) -> Callable:
+    ds = DATASETS[name]
+    return lambda conn: _swap(conn, ds.table, _ord_columns(ds), _dataset_lines(ds))
+
+
+_F15_COLS = ["ord", "row_id", "date", "arr_date", "carrier", "flight_no", "tail", "origin", "dest", "sched_dep",
+             "sched_arr", "arr_delay", "weather_delay", "late_aircraft_delay", "nas_delay", "carrier_delay",
+             "diverted", "cancelled"]
+_F15_TYPES = ["text" if c in ("carrier", "tail", "origin", "dest") else "date" if c in ("date", "arr_date") else "int4"
+              for c in _F15_COLS]
+_F15_TEXT = [t == "text" for t in _F15_TYPES]
+
+
+def _files_flights2015() -> list[Path]:
+    return [DATASETS["flights2015_index"].path] + sorted((CH2 / "flights").glob("*.csv.gz"))
+
+
+def _flights2015_lines() -> Iterable[str]:
+    """flights_index.csv (row order = ord) merged with the per-destination files on row_id for the three columns
+    the index lacks (sched_dep, nas_delay, carrier_delay)."""
+    import gzip
+    extra: dict[str, tuple[str, str, str]] = {}
+    for p in sorted((CH2 / "flights").glob("*.csv.gz")):
+        with gzip.open(p, "rt", newline="") as f:
+            for r in csv.DictReader(f):
+                extra[r["row_id"]] = (r["sched_dep"], r["nas_delay"], r["carrier_delay"])
+    with open(DATASETS["flights2015_index"].path, newline="") as f:
+        for i, r in enumerate(csv.DictReader(f)):
+            sd, nas, carr = extra.get(r["row_id"], ("", "", ""))
+            vals = [str(i), r["row_id"], r["date"], r["arr_date"], r["carrier"], r["flight_no"], r["tail"], r["origin"],
+                    r["dest"], sd, r["sched_arr"], r["arr_delay"], r["weather_delay"], r["late_aircraft_delay"],
+                    nas, carr, r["diverted"], r["cancelled"]]
+            yield _pg_line([_cell(v, t) for v, t in zip(vals, _F15_TYPES)], _F15_TEXT)
+
+
+def _load_flights2015(conn) -> int:
+    return _swap(conn, "ref.flights2015", _F15_COLS, _flights2015_lines())
+
 def _later(task: str) -> Callable:
     def load(conn):
         raise NotImplementedError(f"lands in Task {task}")
@@ -185,14 +402,14 @@ def _none() -> list[Path]:
 
 
 SEEDERS: dict[str, Seeder] = {s.name: s for s in [
-    Seeder("small", _none, _later("8")),
-    Seeder("workbook", _none, _later("8")),
-    Seeder("waves", _none, _later("8")),
-    Seeder("bts_arrivals", _none, _later("8")),
-    Seeder("metar_2024", _none, _later("8")),
+    Seeder("small", _files_small, _load_small),
+    Seeder("workbook", _files_workbook, _load_workbook),
+    Seeder("waves", _files_waves, _load_waves),
+    Seeder("bts_arrivals", _files_bts, _load_bts),
+    Seeder("metar_2024", lambda: [DATASETS["metar_2024"].path], _load_dataset("metar_2024")),
     Seeder("iem_cache", _iem_files, _load_iem),
-    Seeder("flights2015", _none, _later("8")),
-    Seeder("disruptions_v1", _none, _later("8")),
+    Seeder("flights2015", _files_flights2015, _load_flights2015),
+    Seeder("disruptions_v1", lambda: [DATASETS["disruptions_v1"].path], _load_dataset("disruptions_v1")),
     Seeder("replays", _replay_files, _load_replays),
     Seeder("runs_import", _run_files, _load_runs),
     Seeder("benchmark", _benchmark_files, _load_benchmark),

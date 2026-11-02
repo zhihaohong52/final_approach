@@ -309,6 +309,11 @@ def _sched_iso(date: str, minutes_abs: int) -> str:
 
 
 def build_from_row(row_id: int) -> Wave:
+    with get_store().session():     # one pooled connection for all the store reads of this build
+        return _build_from_row(row_id)
+
+
+def _build_from_row(row_id: int) -> Wave:
     row = _locate(int(row_id))
     if row["cancelled"] == "1":
         raise KeyError(f"{PREFIX}{row_id}")

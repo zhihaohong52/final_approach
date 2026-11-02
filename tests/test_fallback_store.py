@@ -81,8 +81,13 @@ def test_pool_timeout_falls_back_without_retry(monkeypatch):
     assert fb.status().degraded
 
 
+class Unbuilt(pg.PgStore):      # a method the Postgres store does not implement yet (wave_row is built since Task 8)
+    def wave_row(self, wave_id):
+        raise NotImplementedError("PgStore.wave_row")
+
+
 def test_not_implemented_does_not_open_breaker_or_degrade():
-    fb = FallbackStore(pg.PgStore("postgresql://u:p@127.0.0.1:1/db"), FileStore())
+    fb = FallbackStore(Unbuilt("postgresql://u:p@127.0.0.1:1/db"), FileStore())
     wid = FileStore().wave_rows(None, None, 1)[0]["wave_id"]
     for _ in range(5):
         assert fb.wave_row(wid)["wave_id"] == wid
