@@ -17,6 +17,7 @@ import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Callable
 
@@ -36,7 +37,12 @@ EVAL = ROOT / "eval"
 class Seeder:
     name: str
     sources: Callable[[], list[Path]]
-    load: Callable[[object], int]      # load(conn) -> rows
+    load: Callable[..., int]           # load(conn) -> rows; load(conn, budget_mb) when budget_aware
+    budget_aware: bool = False         # the seeder runs the size guard itself between its tables
+
+
+class OverBudget(Exception):
+    """A seeder stopped because the next step would push (or has pushed) the database over --budget-mb."""
 
 
 # ------------------------------------------------------------------ shadow-table load
@@ -394,14 +400,168 @@ def _flights2015_lines() -> Iterable[str]:
 def _load_flights2015(conn) -> int:
     return _swap(conn, "ref.flights2015", _F15_COLS, _flights2015_lines())
 
-def _later(task: str) -> Callable:
-    def load(conn):
-        raise NotImplementedError(f"lands in Task {task}")
-    return load
+# ------------------------------------------------------------------ raw challenge tables (Task 9)
+
+DATA = ROOT / "data"
+_RAW_CHUNK_ROWS = 50_000
+_RAW_FACTOR = {"csv": 1.5, "xlsx": 10.0}   # table bytes per source byte; ch2 36.8 MB -> ~54 MB, ch5 64 MB -> ~80 MB (design §10)
+_RAW_PRECHECK_BYTES = 20_000_000           # tables estimated below this are only checked after loading
 
 
-def _none() -> list[Path]:
-    return []
+@dataclass
+class RawTable:
+    table: str                 # schema-qualified, e.g. raw.ch2_flights
+    path: Path
+    kind: str                  # "csv" or "xlsx"
+    header: bool | None = True  # csv: first row is the header; False -> columns c1..cN
+    sheet: str | None = None   # xlsx: sheet name
+
+
+def _raw_tables() -> list[RawTable]:
+    """The raw tables whose files exist, in load order (small first; the two bulk files last)."""
+    out: list[RawTable] = []
+    p = DATA / "challenge3" / "airports.dat"
+    if p.exists():
+        out.append(RawTable("raw.ch3_airports_dat", p, "csv", False))
+    for p in sorted((DATA / "challenge3").glob("kalimantan*.csv")):
+        out.append(RawTable("raw.ch3_kalimantan_locations", p, "csv"))
+    p = DATA / "challenge4" / "ad_nprm.xlsx"
+    if p.exists():
+        import openpyxl
+        wb = openpyxl.load_workbook(p, read_only=True)
+        try:
+            out += [RawTable(f"raw.ch4_ad_nprm__{pack.pg_ident(n)}", p, "xlsx", True, n) for n in wb.sheetnames]
+        finally:
+            wb.close()
+    p = DATA / "challenge2" / "flights.csv"
+    if p.exists():
+        out.append(RawTable("raw.ch2_flights", p, "csv"))
+    for p in sorted((DATA / "challenge5").glob("*.csv")):
+        out.append(RawTable("raw.ch5_flights_weather", p, "csv"))
+    for name, f in (("ch1_train", "train_data.csv"), ("ch1_test", "test_data.csv")):
+        p = DATA / "challenge1" / f
+        if p.exists():
+            out.append(RawTable(f"raw.{name}", p, "csv"))
+    return out
+
+
+def _files_raw() -> list[Path]:
+    return list(dict.fromkeys(t.path for t in _raw_tables()))
+
+
+def _estimate_bytes(t: RawTable) -> int:
+    return int(t.path.stat().st_size * _RAW_FACTOR[t.kind])
+
+
+def _xl_cell(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+def _raw_chunks(t: RawTable, chunk_rows: int):
+    """The file as DataFrames of strings (blank = ""), chunk_rows at a time."""
+    import pandas as pd
+    if t.kind == "csv":
+        yield from pd.read_csv(t.path, dtype=str, keep_default_na=False, na_filter=False,
+                               header=0 if t.header else None, chunksize=chunk_rows)
+        return
+    import openpyxl
+    wb = openpyxl.load_workbook(t.path, read_only=True, data_only=True)
+    try:
+        rows = wb[t.sheet].iter_rows(values_only=True)
+        header = [_xl_cell(c) for c in next(rows)]
+        batch: list[list[str]] = []
+        first = True
+        for r in rows:
+            r = [_xl_cell(c) for c in r][:len(header)]
+            batch.append(r + [""] * (len(header) - len(r)))
+            if len(batch) == chunk_rows:
+                yield pd.DataFrame(batch, columns=header, dtype=str)
+                batch, first = [], False
+        if batch or first:
+            yield pd.DataFrame(batch, columns=header, dtype=str)
+    finally:
+        wb.close()
+
+
+def _int_cell(v: str) -> str | None:
+    if v == "":
+        return None
+    return v if _INT.fullmatch(v) else str(int(Decimal(v)))     # '7599.0' -> 7599
+
+
+def _raw_prepare(t: RawTable, chunk_rows: int = _RAW_CHUNK_ROWS):
+    """(column names, pg types, lazy CSV lines with ord first). Types come from one streaming pass over the whole
+    file; the lines are produced by a second pass."""
+    scan = None
+    names: list[str] = []
+    for chunk in _raw_chunks(t, chunk_rows):
+        if scan is None:
+            taken = {"ord"}
+            names = ([f"c{i + 1}" for i in range(chunk.shape[1])] if not t.header
+                     else [pack.pg_ident(str(h), taken) for h in chunk.columns])
+            scan = pack.TypeScan(names)
+        scan.update(chunk)
+    if scan is None:
+        raise ValueError(f"{t.path.name}: no rows")
+    types = [scan.types()[c] for c in names]
+
+    def lines():
+        text = [True] + [ty == "text" for ty in types]
+        i = 0
+        for chunk in _raw_chunks(t, chunk_rows):
+            for row in chunk.itertuples(index=False, name=None):
+                cells = [str(i)] + [v if ty == "text" else _int_cell(v) if ty.startswith("int") else (v or None)
+                                    for v, ty in zip(row, types)]
+                yield _pg_line(cells, text)
+                i += 1
+    return names, types, lines()
+
+
+def _db_bytes(conn) -> int:
+    used = conn.execute("select pg_database_size(current_database())").fetchone()[0]
+    conn.commit()
+    return used
+
+
+def _load_raw_table(conn, t: RawTable) -> int:
+    names, types, lines = _raw_prepare(t)
+    ddl = ", ".join(['"ord" int4'] + [f'"{c}" {ty}' for c, ty in zip(names, types)])
+    with conn.transaction():
+        conn.execute(f"drop table if exists {t.table}")      # a swap needs a table to clone; the raw tables are not read by the app
+        conn.execute(f"create table {t.table} ({ddl})")
+    n = swap_load(conn, t.table, [f'"{c}"' for c in ["ord"] + names], lines,
+                  [f"alter table {t.table}__new add primary key (ord)"])
+    conn.commit()
+    return n
+
+
+def _load_raw(conn, budget_mb: int = 750) -> int:
+    """One table per file, size-guarded: a big table is refused up front when its estimate would not fit, and the
+    check after each table stops the seeder at the first one over budget (the last is left to run())."""
+    limit = budget_mb * 1024 * 1024
+    tables = _raw_tables()
+    total = 0
+    for i, t in enumerate(tables):
+        est = _estimate_bytes(t)
+        if est >= _RAW_PRECHECK_BYTES:
+            used = _db_bytes(conn)
+            if used + est > limit:
+                raise OverBudget(f"{t.table}: ~{est / 1048576:.0f} MB estimated on top of {used / 1048576:.0f} MB "
+                                 f"would exceed the {budget_mb} MB budget; not loaded")
+        n = _load_raw_table(conn, t)
+        total += n
+        size = conn.execute("select pg_total_relation_size(%s::regclass)", (t.table,)).fetchone()[0]
+        conn.commit()
+        print(f"  {t.table}: {n} rows, {size / 1e6:.1f} MB (estimated {est / 1e6:.1f} MB)")
+        if i < len(tables) - 1:
+            used = _db_bytes(conn)
+            if used > limit:
+                raise OverBudget(f"database is {used / 1048576:.0f} MB, budget {budget_mb} MB")
+    return total
 
 
 SEEDERS: dict[str, Seeder] = {s.name: s for s in [
@@ -417,7 +577,7 @@ SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("runs_import", _run_files, _load_runs),
     Seeder("benchmark", _benchmark_files, _load_benchmark),
     Seeder("v1_eval", lambda: sorted(_V1.values()), _load_v1_eval),
-    Seeder("raw", _none, _later("9")),
+    Seeder("raw", _files_raw, _load_raw, budget_aware=True),
 ]}
 
 
@@ -453,11 +613,18 @@ def run(conn, names: list[str], check: bool, budget_mb: int) -> int:
             stale += 1
             continue
         try:
-            n = s.load(conn)
+            n = s.load(conn, budget_mb) if s.budget_aware else s.load(conn)
         except NotImplementedError as e:
             conn.rollback()
             print(f"{name}: skipped ({e})")
             continue
+        except OverBudget as e:
+            conn.rollback()
+            print(f"{name}: stopped, {e}; per-table sizes:")
+            _size_report(conn)
+            conn.commit()
+            print("over budget: drop raw.* first (db_seed.py --drop raw)")
+            return 4
         size = sum(p.stat().st_size for p in s.sources())
         conn.execute(
             "insert into meta.seed_manifest (dataset, source_sha256, script_version, n_rows, bytes) "

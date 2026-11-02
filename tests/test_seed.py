@@ -82,3 +82,39 @@ def test_grants_survive_reseed(live_db_url):                  # design §9: defa
         assert not q("select has_schema_privilege('app_read', 'raw', 'usage')")
         assert not q("select has_schema_privilege('app_read', 'meta', 'usage')")
         assert q("select count(*) from pg_constraint where conrelid = 'ref.runways'::regclass and contype = 'p'") == 1
+
+
+def test_raw_plan_order_and_absent_files(tmp_path, monkeypatch):
+    d = tmp_path / "data"
+    for sub, name in [("challenge3", "airports.dat"), ("challenge2", "flights.csv"), ("challenge5", "Flight_Data_With_Weather_Final.csv"),
+                      ("challenge3", "kalimantan_80_locations_6800kt_full_range.csv")]:
+        (d / sub).mkdir(parents=True, exist_ok=True)
+        (d / sub / name).write_text("a,b\n1,2\n")
+    monkeypatch.setattr(db_seed, "DATA", d)
+    names = [t.table for t in db_seed._raw_tables()]
+    assert names == ["raw.ch3_airports_dat", "raw.ch3_kalimantan_locations", "raw.ch2_flights", "raw.ch5_flights_weather"]
+
+
+def test_raw_estimate_flags_big_tables(tmp_path):
+    big = db_seed.RawTable("raw.x", tmp_path / "x.csv", "csv", None)
+    (tmp_path / "x.csv").write_bytes(b"0" * 1000)
+    assert db_seed._estimate_bytes(big) == 1500
+
+
+def test_raw_csv_roundtrip_lines(tmp_path):
+    p = tmp_path / "t.csv"
+    p.write_text('Id,Name,Score\n1,"a,b",\n2,,1.5\n')
+    t = db_seed.RawTable("raw.t", p, "csv", True)
+    cols, types, lines = db_seed._raw_prepare(t, chunk_rows=1)
+    assert cols == ["id", "name", "score"] and types == ["int2", "text", "float8"]
+    assert list(lines) == ['0,1,"a,b",\n', '1,2,"",1.5\n']
+
+
+@pytest.mark.live_db
+def test_raw_loads_last_and_drops(live_db_url):
+    import psycopg
+    assert db_seed.main(["--url-env", "DATABASE_TEST_URL", "--budget-mb", "1", "raw"]) == 4   # stops after the first table (cheap; no 150 MB of ch2/ch5 WAL per run)
+    with psycopg.connect(live_db_url) as c:
+        n = c.execute("select count(*) from raw.ch3_airports_dat").fetchone()[0]
+        assert n > 7000
+    assert db_seed.main(["--url-env", "DATABASE_TEST_URL", "--drop", "raw"]) == 0
