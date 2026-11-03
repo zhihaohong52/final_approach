@@ -132,6 +132,17 @@ export function activeWait<W extends { from_min: number; to_min: number }>(waits
   return null;
 }
 
+/** A wait as a data block shows it: `HS 17R`, `GW AA1359`, `HT 09R` (hold for takeoff), else the reason's start. */
+export function waitTag(reason: string): string {
+  const m = reason.match(/^hold short (?:of )?(\S+)/i);
+  if (m) return `HS ${m[1]}`;
+  const gw = reason.match(/^give way to (\S+)/i);
+  if (gw) return `GW ${gw[1]}`;
+  const ht = reason.match(/^hold for takeoff (\S+)/i);
+  if (ht) return `HT ${ht[1]}`;
+  return reason.split(" ").slice(0, 2).join(" ").toUpperCase();
+}
+
 /** Where a timed path on the plane (metres, `[t_min, x, y]`) crosses runway centrelines: the runway's index and
  *  the time it is on the centreline, in time order. A runway the path starts or ends on (within `clearM` of its
  *  centreline: the strip an arrival vacates, or a departure's line-up) is its own and is not a crossing. */
@@ -154,9 +165,12 @@ export function runwayCrossings(path: [number, number, number][], runways: [numb
         if (!d) continue;
         const u = ((ax - x0) * (by - ay) - (ay - y0) * (bx - ax)) / d;     // along the path segment
         const v = ((ax - x0) * (y1 - y0) - (ay - y0) * (x1 - x0)) / d;     // along the runway segment
-        if (u >= 0 && u < 1 && v >= 0 && v <= 1) out.push({ rw, t: t0 + (t1 - t0) * u });
+        // half-open on both lines, so a crossing at a shared vertex counts once; the runway line's last point is closed
+        if (u >= 0 && u < 1 && v >= 0 && (v < 1 || (i === xy.length - 1 && v <= 1))) out.push({ rw, t: t0 + (t1 - t0) * u });
       }
     }
   });
-  return out.sort((a, b) => a.t - b.t);
+  // rounding can still put one crossing on both sides of a vertex: one runway, the same instant, counts once
+  out.sort((a, b) => a.t - b.t);
+  return out.filter((c, k) => !out.slice(0, k).some((d) => d.rw === c.rw && c.t - d.t < 1e-4));
 }

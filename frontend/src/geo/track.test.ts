@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeWait, bearing, runwayCrossings, endOfLine, entryFix, matchHold, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { activeWait, bearing, runwayCrossings, waitTag, endOfLine, entryFix, matchHold, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -145,4 +145,15 @@ describe("runwayCrossings", () => {
     expect(runwayCrossings([[0, 0, 0], [1, 0, -300], [2, 800, -300]], rwy).map((c) => c.rw)).toEqual([1]);
     expect(runwayCrossings([[0, 300, -300], [1, 300, 20]], rwy)).toEqual([]);
   });
+  it("counts a crossing at a vertex of the runway line once", () => {
+    const bent: [number, number][][] = [[[-1000, 0], [0, 0], [1000, 10]]];
+    const c = runwayCrossings([[0, 0, -200], [2, 0, 200]], bent);
+    expect(c).toHaveLength(1); expect(c[0].t).toBeCloseTo(1, 9);
+    expect(runwayCrossings([[0, 1000, -200], [2, 1000, 200]], bent)).toHaveLength(1);   // the line's last point still counts
+  });
+});
+it("waitTag abbreviates a wait for the data block", () => {
+  expect(waitTag("hold short 27L/09R for landing UA12")).toBe("HS 27L/09R");
+  expect(waitTag("give way to AA1359")).toBe("GW AA1359");
+  expect(waitTag("hold for takeoff 09R")).toBe("HT 09R");
 });

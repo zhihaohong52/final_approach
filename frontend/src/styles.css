@@ -430,6 +430,9 @@ tbody tr:hover { background: #18171c; }
 
 /* airport surface: to scale from OSM, aircraft on the engine's taxi tracks */
 .surface-map { position: relative; flex: 1; min-height: 460px; }
+/* the scope keeps its own height (it does not stretch with the decision rail as a run fills it): a taller panel
+   only adds empty bands round the field, which is fitted to the width; never taller than the screen */
+.ops-top > .scope-card { align-self: start; max-height: max(560px, calc(100vh - 96px)); }
 .surface-map svg { position: absolute; inset: 0; display: block; user-select: none; -webkit-user-select: none; }
 .surface-map .range { position: absolute; z-index: 1; top: 44px; left: 16px; }
 .surface-map .range button { height: 26px; padding: 0 10px; font: 500 12px var(--mono); }
@@ -457,7 +460,11 @@ tbody tr:hover { background: #18171c; }
 .surface-map .legend-synth line { stroke: var(--soft); stroke-width: 1.2; }
 .surface-map .legend-synth text { font: 11px var(--mono); fill: var(--muted); }
 .surface-map .legend-synth.wait line { stroke: var(--warning); stroke-width: 3; }
-.surface-map .legend-synth.conflict line { stroke: var(--negative); stroke-width: 3; }
+.surface-map .legend-synth.conflict circle { fill: rgba(229, 86, 111, .16); stroke: var(--negative); stroke-width: 2; }
+.surface-map .legend-synth.info circle { fill: none; stroke: var(--queue); stroke-width: 1.4; stroke-dasharray: 2 2; }
+.surface-map .legend-synth.cross line { stroke: var(--soft); stroke-opacity: .55; stroke-width: 6; }
+.surface-map .sf-stand .used .stand-label.quiet { display: none; }
+.surface-map .sf-stand .used:hover .stand-label.quiet { display: inline; }
 /* waits, crossings and conflicts (T32): amber is a wait, red only a failing rule, grey the fixed 2015 traffic */
 .surface-map .sf-wait line { stroke: var(--warning); stroke-width: 3; stroke-linecap: round; }
 .surface-map .sf-wait .fixed line { stroke: var(--queue); stroke-width: 1.6; }
