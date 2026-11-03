@@ -553,26 +553,64 @@ def _geo_body(wave) -> bytes:
     return body
 
 
+def _accepts_gzip(request: Request) -> bool:
+    """Accept-Encoding lists gzip (or *) with q > 0."""
+    for part in request.headers.get("accept-encoding", "").lower().split(","):
+        name, _, params = part.strip().partition(";")
+        if name.strip() in ("gzip", "*"):
+            q = 1.0
+            for prm in params.split(";"):
+                k, _, v = prm.strip().partition("=")
+                if k == "q":
+                    try:
+                        q = float(v)
+                    except ValueError:
+                        q = 0.0
+            if q > 0:
+                return True
+    return False
+
+
+def _etag_match(request: Request, etags: tuple[str, ...]) -> bool:
+    """If-None-Match with the weak comparison (W/ ignored); "*" matches any representation."""
+    inm = request.headers.get("if-none-match")
+    if not inm:
+        return False
+    tags = {t.strip().removeprefix("W/") for t in inm.split(",")}
+    return "*" in tags or any(e in tags for e in etags)
+
+
+def _json_response(request: Request, obj=None, body: bytes | None = None, etag: bool = False) -> Response:
+    """Compact JSON, gzipped here when the client accepts it (no app-wide GZipMiddleware: Starlette 0.40
+    would buffer the SSE streams of /api/negotiate-wave and /mcp). With `etag`: a strong ETag on the body
+    bytes, `-gz` suffixed for the gzip variant, and 304 on If-None-Match."""
+    if body is None:
+        body = json.dumps(obj, separators=(",", ":")).encode()
+    gz = _accepts_gzip(request)
+    headers = {"Vary": "Accept-Encoding"}
+    if etag:
+        h = hashlib.sha1(body).hexdigest()
+        plain, zipped = f'"{h}"', f'"{h}-gz"'
+        headers.update({"ETag": zipped if gz else plain, "Cache-Control": "no-cache"})
+        if _etag_match(request, (plain, zipped)):
+            return Response(status_code=304, headers=headers)
+    if gz:
+        return Response(gzip.compress(body, compresslevel=6), media_type="application/json",
+                        headers={**headers, "Content-Encoding": "gzip"})
+    return Response(body, media_type="application/json", headers=headers)
+
+
 @app.get("/api/wave/{wave_id}/geo")
 def get_wave_geo(wave_id: str, request: Request):
-    """v2.2 WaveGeo: the procedures the engine flies at this wave (surface null in M1). Static per wave and
-    engine version: ETag = sha1(engine_version + wave_id). Gzipped here when the client accepts it (no
-    app-wide GZipMiddleware: it would buffer the SSE streams)."""
-    etag = '"' + hashlib.sha1((ENGINE_VERSION + wave_id).encode()).hexdigest() + '"'
-    headers = {"ETag": etag, "Vary": "Accept-Encoding", "Cache-Control": "no-cache"}
+    """v2.2 WaveGeo: the procedures the engine flies at this wave (surface null in M1). ETag = sha1 of the
+    JSON body (so a data reseed changes it), "-gz" suffixed for the gzipped variant."""
     try:
         w = WB.build_wave(wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
     if not w.geo_available():
         return _err(404, "geo_unavailable", f"wave {wave_id!r} has no airport or runway coordinates")
-    if etag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
-        return Response(status_code=304, headers=headers)
-    body = _geo_body(w)
-    if "gzip" in request.headers.get("accept-encoding", "").lower():
-        return Response(gzip.compress(body, compresslevel=6), media_type="application/json",
-                        headers={**headers, "Content-Encoding": "gzip"})
-    return Response(body, media_type="application/json", headers=headers)
+    return _json_response(request, body=_geo_body(w), etag=True)
 
 
 def _find_run(run_id: str) -> dict | None:
@@ -583,10 +621,10 @@ def _find_run(run_id: str) -> dict | None:
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: str):
+def get_run(run_id: str, request: Request):
     run = _find_run(run_id)
     if run is not None:
-        return run
+        return _json_response(request, run)
     return _err(404, "unknown_run", f"unknown run id {run_id!r}")
 
 
@@ -746,11 +784,15 @@ async def evaluate_plan(body: dict = Body(...)):
         wave = await asyncio.to_thread(WB.build_wave, wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    try:   # bounded input: the engine never sees a slot or delay it cannot draw (or that would hang it)
+        plan = edit.plan_from_dicts(rows, wave)
+    except (ValueError, TypeError) as e:
+        return _err(422, "invalid_request", str(e))
     return await asyncio.to_thread(edit.check_edit, wave, plan, body.get("include_trajectories") is True)
 
 
 @app.post("/api/trajectories")
-async def trajectories(body: dict = Body(...)):
+async def trajectories(request: Request, body: dict = Body(...)):
     """v2.2 TrajectorySet, deterministic and model-free: either {wave_id, assignments} (any plan, e.g. an
     intermediate proposal or a duty-manager edit) or {run_id} (that run's agreed plan, as embedded in it)."""
     from .wave import edit, trajectory
@@ -766,7 +808,7 @@ async def trajectories(body: dict = Body(...)):
             return _err(409, "engine_mismatch",
                         f"run {run_id!r} was recorded on engine {run.get('engine_version') or 'v2'}; "
                         f"paths are not available on {ENGINE_VERSION}")
-        return final
+        return _json_response(request, final)
     wave_id, rows = body.get("wave_id"), body.get("assignments")
     if not isinstance(wave_id, str) or not wave_id:
         return _err(422, "invalid_request", "wave_id (with assignments) or run_id is required")
@@ -780,7 +822,11 @@ async def trajectories(body: dict = Body(...)):
         wave = await asyncio.to_thread(WB.build_wave, wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
-    return await asyncio.to_thread(lambda: trajectory.build(wave, plan).to_dict())
+    try:   # bounded input: the engine never sees a slot or delay it cannot draw (or that would hang it)
+        plan = edit.plan_from_dicts(rows, wave)
+    except (ValueError, TypeError) as e:
+        return _err(422, "invalid_request", str(e))
+    return _json_response(request, await asyncio.to_thread(lambda: trajectory.build(wave, plan).to_dict()))
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")

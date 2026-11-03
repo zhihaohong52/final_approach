@@ -40,6 +40,7 @@ from backend.wave.version import ENGINE_VERSION
 CACHE_MAX = 4096
 MIN_VECTOR_DRAW_MIN = 1e-6     # below this the stretch is kept in vector_min but not drawn
 INTERP_FLOOR_AGL_FT = 4000.0   # lowest shared base at a fix whose bases are interpolated route altitudes
+MAX_HOLD_LAPS = 12             # defence in depth: ~50 min of laps, past the 30-min horizon; the rest is stretch
 RADAR_NM = 150.0               # drawn points stay within this of the airport reference point (spec §12)
 
 
@@ -362,6 +363,7 @@ def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
 def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     routes = route.routes_for_wave(wave)
     rows = []   # (callsign, is_wave, runway, slot, route or None, laps, lap_min, vector, extra)
+    capped: dict[str, int] = {}   # callsign -> uncapped laps
     for a in plan.assignments:
         if a.action != "land" or not a.runway or a.slot_min is None or not math.isfinite(a.slot_min):
             continue
@@ -376,6 +378,9 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
         lap = hold_for(wave, r).lap_min
         # snap: a slot at exactly earliest + k laps (the hold move) gives k laps, not k-1 plus a full lap
         laps = int(math.floor(D / lap + 1e-9)) if D > 0 else 0
+        if laps > MAX_HOLD_LAPS:
+            capped[a.callsign] = laps
+            laps = MAX_HOLD_LAPS
         vec = max(D - laps * lap, 0.0) if D > 0 else 0.0
         rows.append((a.callsign, True, a.runway, slot, r, laps, lap, vec,
                      _route_extra(wave, a.callsign, a.runway)))
@@ -421,6 +426,9 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
             air.append(AirTrack(cs, is_wave, rwy, slot, [], None, 0.0, 0.0, 0, vec, None, None, None, "none"))
             continue
         notes: list[str] = []
+        if cs in capped:
+            notes.append(f"{cs}: {capped[cs]} laps capped at {MAX_HOLD_LAPS}; the rest of the delay is drawn as "
+                         f"vector stretch")
         draw = hold_for(wave, r)
         level = levels.get(cs) if laps >= 1 else None
         hold = None

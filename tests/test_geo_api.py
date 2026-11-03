@@ -44,6 +44,7 @@ def test_trajectories_touchdown_equals_slot():
 def test_replay_engine_mismatch_has_no_paths(tmp_path, monkeypatch):
     src = next(p for p in glob.glob("data/replay/*.json") if p.endswith(f"{ORD_REPLAY}.json"))
     d = json.load(open(src)); d.pop("engine_version", None)          # => treated as "v2"
+    d["result"].pop("engine_version", None)                          # (load falls back to the result's version)
     (tmp_path / f"{ORD_REPLAY}.json").write_text(json.dumps(d))
     from backend import datastore
     from backend.datastore.files import FilePaths, FileStore
@@ -122,6 +123,8 @@ def test_live_result_embeds_paths_and_run_id_form_serves_them(tmp_path, monkeypa
     fin, base = r["trajectories"]["final"], r["trajectories"]["baseline"]
     assert fin["plan_id"] == r["evaluation"]["plan_id"] and base["plan_id"] == r["baseline"]["evaluation"]["plan_id"]
     assert c.post("/api/trajectories", json={"run_id": r["run_id"]}).json() == fin
+    rr = c.get(f"/api/runs/{r['run_id']}", headers={"Accept-Encoding": "gzip"})
+    assert rr.headers.get("content-encoding") == "gzip" and rr.json()["run_id"] == r["run_id"]
     assert c.post("/api/trajectories", json={"run_id": "nope"}).status_code == 404
     assert c.post("/api/trajectories", json={}).status_code == 422
     assert all(p["alt_src"] in ("constraint", "interp") for a in fin["air"] for p in a["points"])
@@ -136,3 +139,84 @@ def test_geo_gzip_and_etag():
     assert c.get(f"/api/wave/{ORD}/geo", headers={"Accept-Encoding": "identity"}).headers.get("content-encoding") is None
     assert c.get(f"/api/wave/{ORD}/geo", headers={"If-None-Match": r.headers["etag"]}).status_code == 304
     assert c.get("/api/wave/F2015-999999999/geo").status_code == 404
+
+
+# ---------------------------------------------------------------- fix round 1: bounded input, ETag, replay version
+
+def _sq():
+    return c.get(f"/api/wave/{ORD}").json()["status_quo"]["plan"]["assignments"]
+
+
+@pytest.mark.parametrize("patch", [
+    {"slot_min": 1e308}, {"slot_min": 1e5}, {"slot_min": -1e5}, {"slot_min": "nan"}, {"slot_min": "inf"},
+    {"speed_reduction_min": -1}, {"speed_reduction_min": 241}, {"ground_delay_min": 1e9},
+    {"runway": "99X"}, {"callsign": "ZZ9999"},
+])
+def test_unbounded_or_unknown_input_is_422(patch):
+    for path, extra in (("/api/trajectories", {}), ("/api/evaluate", {}), ("/api/evaluate", {"include_trajectories": True})):
+        asg = _sq()
+        asg[0] = {**asg[0], **{k: (float(v) if v in ("nan", "inf") else v) for k, v in patch.items()}}
+        body = {"wave_id": ORD, "assignments": asg, **extra}   # json.dumps writes NaN / Infinity tokens
+        r = c.post(path, content=json.dumps(body), headers={"Content-Type": "application/json"})
+        assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (path, patch, r.text[:200])
+
+
+def test_duplicate_or_too_many_assignments_is_422():
+    asg = _sq()
+    assert c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg + [asg[0]]}).status_code == 422
+    assert c.post("/api/evaluate", json={"wave_id": ORD, "assignments": asg * 3}).status_code == 422
+
+
+def test_plan_from_dicts_bounds_are_the_waves_own():
+    from backend.wave import edit
+    w = build.build_wave(ORD)
+    lo, hi = edit.slot_bounds(w)
+    assert lo <= -60 and hi >= max(f.eta_earliest_min for f in w.flights) + 240
+    asg = _sq()
+    edit.plan_from_dicts([{**asg[0], "slot_min": hi}] + asg[1:], w)            # the bound itself is legal
+    with pytest.raises(ValueError):
+        edit.plan_from_dicts([{**asg[0], "slot_min": hi + 1}] + asg[1:], w)
+
+
+def test_laps_capped():
+    from backend.wave import edit
+    from backend.wave.moves import fcfs_plan
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    a = next(x for x in p.assignments if x.action == "land")
+    from dataclasses import replace
+    slot = trajectory.earliest(w, a.callsign, a.runway) + 200.0
+    ts = trajectory.build(w, p.with_assignment(replace(a, slot_min=slot)))
+    t = next(x for x in ts.air if x.callsign == a.callsign)
+    assert t.laps == trajectory.MAX_HOLD_LAPS and any("capped" in n for n in t.notes)
+    assert abs(t.points[-1]["t_min"] - slot) < 1e-6
+    assert abs(t.laps * t.lap_min + t.vector_min - 200.0) < 1e-6
+
+
+def test_geo_etag_is_body_hash_weak_compare_and_star():
+    import gzip as _gz, hashlib
+    r = c.get(f"/api/wave/{ORD}/geo", headers={"Accept-Encoding": "identity"})
+    assert r.headers["etag"] == '"' + hashlib.sha1(r.content).hexdigest() + '"'
+    rz = c.get(f"/api/wave/{ORD}/geo", headers={"Accept-Encoding": "gzip"})
+    assert rz.headers["etag"] == r.headers["etag"][:-1] + '-gz"'
+    for inm in (r.headers["etag"], "W/" + r.headers["etag"], "*", '"x", ' + rz.headers["etag"]):
+        assert c.get(f"/api/wave/{ORD}/geo", headers={"If-None-Match": inm}).status_code == 304, inm
+    assert c.get(f"/api/wave/{ORD}/geo", headers={"If-None-Match": '"stale"'}).status_code == 200
+    r0 = c.get(f"/api/wave/{ORD}/geo", headers={"Accept-Encoding": "gzip;q=0, identity"})
+    assert r0.headers.get("content-encoding") is None
+
+
+def test_trajectories_and_runs_are_gzipped_on_request():
+    r = c.post("/api/trajectories", json={"wave_id": ORD, "assignments": _sq()}, headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip" and r.json()["air"]
+
+
+def test_replay_load_falls_back_to_result_engine_version(tmp_path, monkeypatch):
+    from backend import datastore
+    from backend.datastore.files import FilePaths, FileStore
+    from backend.wave import replay
+    (tmp_path / "W1.json").write_text(json.dumps({"messages": [], "result": {"engine_version": ENGINE_VERSION}}))
+    (tmp_path / "W2.json").write_text(json.dumps({"messages": [], "result": {}}))
+    monkeypatch.setattr(datastore, "_store", FileStore(FilePaths(replay_dir=tmp_path, runs_dir=tmp_path / "runs",
+                                                                 decisions_path=tmp_path / "decisions.jsonl")))
+    assert replay.load("W1")["engine_version"] == ENGINE_VERSION and replay.load("W2")["engine_version"] == "v2"

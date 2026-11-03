@@ -48,7 +48,7 @@ interface Provenance {
 | GET | `/api/waves/random?airport=ATL` | `WaveSummary` |
 | GET | `/api/flights?airport=ATL&q=DL123&limit=50&offset=0` | `{ flights: FlightRow[]; total: number }` (rows of the 2015 challenge flights.csv) |
 | GET | `/api/wave/{wave_id}` | `WaveScenario` (`wave_id` may be a BTS wave id or `"F2015-<row_id>"`) |
-| GET | `/api/wave/{wave_id}/geo` | `WaveGeo` (v2.2; gzip, `ETag`; 404 `geo_unavailable` / `unknown_wave`) |
+| GET | `/api/wave/{wave_id}/geo` | `WaveGeo` (v2.2; gzip, `ETag` = sha1 of the body; 404 `geo_unavailable` / `unknown_wave`) |
 | POST | `/api/trajectories` | `TrajectorySet` (v2.2; body `{wave_id, assignments}` or `{run_id}`; 409 `engine_mismatch`) |
 | POST | `/api/evaluate` | `EvaluateResponse` (duty-manager edit re-check) |
 | POST | `/api/negotiate-wave` | SSE stream of `NegotiationEvent` (or `NegotiationResult` with `stream:false`) |
@@ -470,6 +470,14 @@ interface EvaluateResponse {
 ```
 Errors: 422 `invalid_request` (empty or malformed assignments), 404 `unknown_wave`.
 
+v2.2 input bounds (`POST /api/evaluate` and `POST /api/trajectories {wave_id, assignments}`), each a 422
+`invalid_request` with a message naming the field: numbers must be finite (no NaN / ±Infinity); at most one
+assignment per wave flight (no more rows than `flights`, no duplicate callsign); every callsign must be a
+wave flight; `runway`, when given, must be one of the airport's runway ids; `slot_min` must lie in
+[min(0, every flight's `sched_min` / `eta_earliest_min` and queue `slot_min`) − 60,
+ max(60, the same times) + 240] (minutes vs T0; the window is 60 min); `speed_reduction_min` and
+`ground_delay_min` must lie in [0, 240].
+
 ### GET /api/wave/{wave_id}/geo (v2.2)
 
 `WaveGeo` (see "v2.2 types"): the procedures the engine flies for this wave, built from its own routes, so
@@ -482,9 +490,11 @@ hold > corner > faf > if > iaf > entry > star; `star` also covers uncoded approa
 `"FAA CIFP"`), `""`/`"synthetic"` when the airport has no procedures; `status` is `"real"` when some route
 flies a CIFP STAR and approach. `surface` is `null` until the surface milestone.
 
-Static per wave and engine version: `ETag: "sha1(engine_version + wave_id)"` (`If-None-Match` → 304). The
-body is gzipped when the request's `Accept-Encoding` has `gzip` (`Content-Encoding: gzip`,
-`Vary: Accept-Encoding`). Errors: 404 `unknown_wave`; 404 `geo_unavailable` when the wave's
+`ETag` is the sha1 of the JSON body, so it changes with the engine version and with any procedures/route
+data change: `"<sha1>"` for the identity body, `"<sha1>-gz"` for the gzipped one (`Cache-Control: no-cache`:
+clients revalidate). `If-None-Match` uses the weak comparison (`W/` ignored) and `*` matches; a match is a
+304. The body is gzipped when `Accept-Encoding` lists `gzip` (or `*`) with q > 0 (`Content-Encoding: gzip`,
+`Vary: Accept-Encoding`); `POST /api/trajectories` and `GET /api/runs/{run_id}` are gzipped the same way. Errors: 404 `unknown_wave`; 404 `geo_unavailable` when the wave's
 `geo_available` is false.
 
 ### POST /api/trajectories (v2.2)
@@ -499,7 +509,8 @@ type TrajectoriesRequest =
 ```
 Errors: 422 `invalid_request` (neither form, empty or malformed assignments), 404 `unknown_wave`,
 404 `unknown_run`, 409 `engine_mismatch` (the run has `paths_unavailable`, or was recorded on another engine
-version, or carries no trajectories).
+version, or carries no trajectories). A hold is drawn with at most 12 laps (`hold.laps` ≤ 12); any
+remaining delay is drawn as vector stretch, so the threshold is still crossed at `slot_min`.
 
 ### GET /api/benchmark
 
