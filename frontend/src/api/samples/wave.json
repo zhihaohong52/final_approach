@@ -1011,9 +1011,9 @@
     },
     {
       "layer": "ground_traffic",
-      "status": "generic",
-      "source": "challenge flights.csv subset",
-      "detail": "partial: 13 queue arrivals only, no departures (no BTS 2015 movements for this airport and day); scheduled over the 30-min horizon or with an unresolved conflict (still reserved): 0; fixed arrivals still on the runway at another fixed movement (data times): 1 (OO5597); not routed on the OSM taxi graph (runway events only): 7 (MQ3312, EV5810, OO4990, MQ3363, OO5168, EV4234, EV4184)"
+      "status": "real",
+      "source": "BTS 2015 movements",
+      "detail": "144 real departures (wheels-off T-30..T+120 min; stands simulated, seeded in the carrier's most-used pier) and 13 queue arrivals; departure runway 14R: mixed mode on 14R; scheduled over the 30-min horizon or with an unresolved conflict (still reserved): 0; fixed arrivals still on the runway at another fixed movement (data times): 1 (OO5597); not routed on the OSM taxi graph (runway events only): 151 (EV3819, EV4336, OO6365, UA555, UA743, AA2504, MQ3488, UA679, AA2349, MQ3070, OO5536, MQ3390, UA728, AA47, MQ3601, OO6378, MQ3128, AA2319, MQ3351, MQ3408, MQ3499, OO4664, UA248, AA1277, AA348, AA1529, B6112, OO2931, OO6242, UA619, F91298, AA1323, EV2837, AA2270, NK425, AA2225, DL671, MQ3273, AA366, UA790, AA1110, EV4496, AA1446, MQ3446, AA1305, UA755, VX211, UA278, EV5916, AA854, DL1777, OO6258, OO5329, OO6217, EV4108, EV4755, OO5322, AA2323, UA884, OO4535, UA1196, UA362, AA2193, UA457, EV3267, UA541, UA612, UA794, EV4437, EV6026, UA511, DL866, UA599, EV5974, UA1788, EV5922, UA308, EV4425, EV4566, UA259, AA154, MQ3312, UA515, EV5918, UA262, EV5862, UA350, NK903, OO5455, EV4237, OO5413, OO5508, OO6449, OO5345, MQ3486, UA220, EV4683, AA350, OO4980, UA478, MQ3193, NK763, UA269, UA518, UA608, MQ3254, MQ3115, OO2933, EV5810, AA2257, MQ3466, MQ3174, MQ3275, MQ3316, UA625, UA565, AA2284, MQ3189, MQ3156, MQ3038, MQ3232, MQ3493, MQ3303, UA1702, MQ3082, MQ3238, OO2932, MQ3127, OO4990, AA1003, AA1615, AS21, AA2327, UA1655, MQ3199, MQ3417, EV4896, AA2353, MQ3272, AA288, MQ3363, AA336, UA702, AA2185, MQ3347, EV6087, EV5956, OO6464, OO5168, EV4234, EV4184)"
     }
   ],
   "severity": null,
