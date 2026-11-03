@@ -526,11 +526,15 @@ type TrajectoriesRequest =
 // response: TrajectorySet
 ```
 With `move`, the response is the paths of the plan the engine's own `moves.apply` makes from `assignments` and
-that move (the plan a vetoed move would have produced; the UI draws its failing `conflicts` for a rejection).
-The move is bounded like the other inputs: `kind` and `agent` strings, `callsigns` 1-2 strings, `params` at most
-4 entries, each a string of ≤ 64 chars or a finite number; the agent must have authority for the kind and the
-move must apply to the plan (the negotiation's own checks), and the moved plan must satisfy the input bounds
-below; otherwise 422 `invalid_request`.
+that move (the plan a vetoed move would have produced). The UI asks only for a veto that cites
+`ATC-TAXI-CONFLICT` and draws only the failing `conflicts` of the flights that veto names. Its `assignments` are
+the plan on screen when the rejection arrived, an approximation of the engine's working plan: from turn 2 the
+engine starts from the incumbent (not the last `AGENT_TURN` proposal), and a turn's earlier applied moves are not
+included. The move is bounded like the other inputs: `kind`, `agent` and `id` strings of ≤ 64 chars, `label` ≤ 200;
+`callsigns` 1-2 strings of ≤ 16 chars; `params` at most 4 entries with keys of ≤ 64 chars, each value a string of
+≤ 64 chars or a finite number, and every number (or numeric string) within ±1440; the agent must have authority
+for the kind and the move must apply to the plan (the negotiation's own checks), and the moved plan must satisfy
+the input bounds below; otherwise 422 `invalid_request` (the message never echoes the input).
 Errors: 422 `invalid_request` (neither form, empty or malformed assignments, a bad `move`), 404 `unknown_wave`,
 404 `unknown_run`, 409 `engine_mismatch` (the run has `paths_unavailable`, or was recorded on another engine
 version, or carries no trajectories). A hold is drawn with at most 12 laps (`hold.laps` ≤ 12); any

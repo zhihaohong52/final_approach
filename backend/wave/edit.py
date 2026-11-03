@@ -73,29 +73,68 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
 
 
 MOVE_PARAMS_MAX = 4          # a contract Move carries at most this many params ...
-MOVE_STR_MAX = 64            # ... each string (and the id) at most this long
+MOVE_STR_MAX = 64            # ... each string value, key, kind, agent and id at most this long
+MOVE_CALLSIGN_MAX = 16
+MOVE_LABEL_MAX = 200
+MOVE_NUM_MAX = 1440.0        # |a numeric param| (or a numeric string's value), minutes: a day; real moves use <= 240
+
+
+def _bounded_number(k: str, v: object) -> None:
+    """A numeric param (or a string that parses as one, as `moves` would read it) must be finite and within
+    MOVE_NUM_MAX. A huge JSON integer is checked as an int first: float() / isfinite() of it would overflow."""
+    if isinstance(v, bool):
+        raise ValueError(f"move.params.{k} must be a short string or a finite number")
+    if isinstance(v, int):
+        if abs(v) > MOVE_NUM_MAX:
+            raise ValueError(f"move.params.{k} must lie in [-{MOVE_NUM_MAX:g}, {MOVE_NUM_MAX:g}]")
+        return
+    x = v
+    if isinstance(v, str):
+        try:
+            x = float(v)
+        except ValueError:
+            return                   # a name (runway, gate): its own checks are moves.apply's
+    if not isinstance(x, float) or not math.isfinite(x) or abs(x) > MOVE_NUM_MAX:
+        raise ValueError(f"move.params.{k} must be a finite number in [-{MOVE_NUM_MAX:g}, {MOVE_NUM_MAX:g}]")
+
+
+def _short_str(name: str, v: object, n: int, required: bool = True) -> str:
+    if v is None and not required:
+        return ""
+    if not isinstance(v, str) or len(v) > n:
+        raise ValueError(f"{name} must be a string of at most {n} characters")
+    return v
 
 
 def move_from_dict(d: object) -> Move:
-    """A contract Move dict (e.g. a RejectedMove's `move`) -> Move. Raises ValueError on a malformed one: not an
-    object, a missing kind/agent, callsigns not a list of 1-2 strings, params not an object of at most
-    MOVE_PARAMS_MAX short strings or finite numbers. Authority and applicability are `moves.apply`'s checks."""
+    """A contract Move dict (e.g. a RejectedMove's `move`) -> Move. Raises ValueError on a malformed or oversized one
+    (messages never echo the input): not an object; kind / agent / id not strings of <= MOVE_STR_MAX chars, label
+    not one of <= MOVE_LABEL_MAX; callsigns not a list of 1-2 strings of <= MOVE_CALLSIGN_MAX; params not an object
+    of at most MOVE_PARAMS_MAX entries with keys of <= MOVE_STR_MAX chars, each value a string of <= MOVE_STR_MAX
+    chars or a finite number, and every number (or numeric string) within +-MOVE_NUM_MAX. Authority and
+    applicability are `moves.apply`'s checks."""
     if not isinstance(d, dict):
         raise ValueError("move must be an object")
-    kind, agent, cs, params = d.get("kind"), d.get("agent"), d.get("callsigns"), d.get("params", {})
-    if not isinstance(kind, str) or not isinstance(agent, str) or len(kind) > MOVE_STR_MAX or len(agent) > MOVE_STR_MAX:
-        raise ValueError("move needs a kind and an agent")
-    if not isinstance(cs, list) or not 1 <= len(cs) <= 2 or not all(isinstance(x, str) for x in cs):
-        raise ValueError("move.callsigns must be a list of 1 or 2 callsigns")
+    kind = _short_str("move.kind", d.get("kind"), MOVE_STR_MAX)
+    agent = _short_str("move.agent", d.get("agent"), MOVE_STR_MAX)
+    mid = _short_str("move.id", d.get("id"), MOVE_STR_MAX, required=False)
+    label = _short_str("move.label", d.get("label"), MOVE_LABEL_MAX, required=False)
+    cs, params = d.get("callsigns"), d.get("params", {})
+    if not isinstance(cs, list) or not 1 <= len(cs) <= 2 or \
+            not all(isinstance(x, str) and len(x) <= MOVE_CALLSIGN_MAX for x in cs):
+        raise ValueError(f"move.callsigns must be a list of 1 or 2 callsigns of at most {MOVE_CALLSIGN_MAX} characters")
     if not isinstance(params, dict) or len(params) > MOVE_PARAMS_MAX:
         raise ValueError(f"move.params must be an object of at most {MOVE_PARAMS_MAX} entries")
     for k, v in params.items():
-        ok = (isinstance(v, str) and len(v) <= MOVE_STR_MAX) or \
-            (isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v))
-        if not ok:
+        if not isinstance(k, str) or len(k) > MOVE_STR_MAX:
+            raise ValueError(f"move.params keys must be at most {MOVE_STR_MAX} characters")
+        if isinstance(v, str):
+            if len(v) > MOVE_STR_MAX:
+                raise ValueError(f"move.params.{k} must be a short string or a finite number")
+        elif not isinstance(v, int | float):
             raise ValueError(f"move.params.{k} must be a short string or a finite number")
-    return Move(id=str(d.get("id", ""))[:MOVE_STR_MAX], agent=agent, kind=kind, callsigns=list(cs),
-                params=dict(params), label=str(d.get("label", ""))[:200])
+        _bounded_number(k, v)
+    return Move(id=mid, agent=agent, kind=kind, callsigns=list(cs), params=dict(params), label=label)
 
 
 def apply_move(wave: Wave, plan: JointPlan, d: object) -> JointPlan:
@@ -106,8 +145,8 @@ def apply_move(wave: Wave, plan: JointPlan, d: object) -> JointPlan:
     m = move_from_dict(d)
     try:
         moved = moves.apply(wave, plan, m)
-    except (KeyError, TypeError) as e:     # a param of the wrong type for its kind
-        raise ValueError(f"move {m.kind!r} does not apply: {e}") from None
+    except (KeyError, TypeError, ArithmeticError):   # backstop: a param of the wrong type, or one that overflows
+        raise ValueError(f"move {m.kind!r} does not apply to this plan") from None
     return plan_from_dicts([a.to_dict() for a in moved.assignments], wave)
 
 

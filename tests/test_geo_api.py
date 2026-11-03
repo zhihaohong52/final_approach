@@ -342,14 +342,23 @@ def test_trajectories_with_move_are_the_engines_moved_plan():
     {"kind": "shift_slot", "agent": "ATC", "callsigns": ["ZZ9999"], "params": {"minutes": 3}},     # not a wave flight
     {"kind": "reassign_gate", "agent": "ATC", "callsigns": ["{cs}"], "params": {"gate": "A1"}},  # no authority
     {"kind": "teleport", "agent": "ATC", "callsigns": ["{cs}"], "params": {}},
+    # round 3: magnitudes that overflow (math.ceil(inf), isfinite of a huge int) and oversized strings
+    *({"kind": k, "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": v}}
+      for k in ("shift_slot", "speed_reduction", "ground_delay") for v in (1e308, -1e308, "1e308", "-1e308", "RAW_BIG_INT")),
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["X" * 10_000], "params": {"minutes": 3}},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"k" * 10_000: 3}},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": 3}, "id": "i" * 10_000},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": 3}, "label": "l" * 10_000},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": 3}, "label": {"x": 1}},
 ])
 def test_bad_move_is_422(move):
     asg = _sq()
     cs = next(a["callsign"] for a in asg if a["action"] == "land")
-    if isinstance(move, dict):
-        move = json.loads(json.dumps(move).replace("{cs}", cs))
-    r = c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg, "move": move})
-    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (move, r.text[:200])
+    raw = json.dumps({"wave_id": ORD, "assignments": asg, "move": move}).replace("{cs}", cs)
+    raw = raw.replace('"RAW_BIG_INT"', "1" + "0" * 400)        # a JSON integer no float can hold
+    r = c.post("/api/trajectories", content=raw, headers={"Content-Type": "application/json"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (str(move)[:120], r.text[:200])
+    assert len(r.text) < 2_000                                    # the error never echoes a huge input
 
 
 def test_move_hot_path_never_reads_the_store(monkeypatch):
