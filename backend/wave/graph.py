@@ -196,8 +196,9 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
     cs = agent.split(":", 1)[1]
     f, a = wave.flight(cs), plan.get(cs)
     m = metrics_map(wave, plan)[cs]
+    # §6.1: BTS scheduled arrival is a gate (in-block) time; eta_earliest_min is the earliest touchdown
     return {"flight": cs, "type": f.aircraft_type, "airborne": f.airborne, "earliest_touchdown": f.eta_earliest_min,
-            "sched_in_block": f.sched_min,   # §6.1: BTS scheduled arrival is a gate time "fuel": f.fuel, "connections": f.connections[:5],
+            "sched_in_block": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
                            "speed_reduction": a.speed_reduction_min, "ground_delay": a.ground_delay_min},
             "path": _path_line(wave, a),

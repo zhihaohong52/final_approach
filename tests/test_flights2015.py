@@ -117,3 +117,15 @@ def test_queue_slot_survives_wheels_on_day_wrap():
     w = build.build_wave("F2015-37071")
     q = next(x for x in w.queue if x.callsign == "UA1121")
     assert q.slot_min == pytest.approx(744.0, abs=1.0)
+
+
+def test_pilot_view_keeps_fuel_and_connections_with_time_base_labels():
+    from backend.wave import build
+    from backend.wave.graph import _view
+    from backend.wave.moves import fcfs_plan
+    w = build.build_wave("F2015-270287")
+    v = _view(w, fcfs_plan(w), f"PILOT:{w.focus}")
+    f = w.flight(w.focus)
+    assert v["fuel"] == f.fuel and v["connections"] == f.connections[:5]
+    assert v["earliest_touchdown"] == f.eta_earliest_min and v["sched_in_block"] == f.sched_min   # §6.1 labels
+    assert "eta_earliest" not in v and "sched" not in v
