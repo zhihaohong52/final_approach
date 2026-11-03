@@ -132,11 +132,13 @@ LIMITS = [
     {"limit": "fixed departures vs plan landings", "value": "landing priority; a fixed takeoff less than "
      f"{ground_traffic.LANDING_TAKEOFF_GAP_MIN:g} min before a plan landing on its strip would be held",
      "source": "assumption",
-     "note": "the fixed takeoffs are spaced from the queue and FCFS landings when the wave is built, not from the "
-             "plan's landings. A plan landing less than the landing / takeoff gap after a fixed takeoff on the same "
-             "strip does not fail ATC-TAXI-CONFLICT: a controller would hold the departure. It is an informational "
-             "conflict (kind fixed_departure_holds: fixed callsign, strip, the hold until the gap after the landing; "
-             "evidence fixed_departure_holds); the fixed departure is not re-timed"},
+     "note": "the fixed takeoffs are timed once when the wave is built (takeoff spacing, the queue arrivals' "
+             "landings, scheduled crossings), never from any wave flight's landing, FCFS or plan. A plan landing "
+             "less than the landing / takeoff gap after a fixed takeoff on the same strip does not fail "
+             "ATC-TAXI-CONFLICT: a controller would hold the departure. It is an informational conflict (kind "
+             "fixed_departure_holds: fixed callsign, strip, the hold until the gap after the landing; evidence "
+             "fixed_departure_holds); the fixed departure is not re-timed for it. A fixed takeoff at or after the "
+             "landing while the wave flight is still on the runway fails the runway-vacate rule"},
     {"limit": "taxi search horizon", "value": f"{surface.HORIZON_MIN:g} min", "source": "assumption",
      "note": "a wave flight whose total taxi wait exceeds it (or whose route starts inside another strip's zone "
              "during a landing or takeoff) fails ATC-TAXI-CONFLICT; shorter waits never fail, they add to in-block"},
