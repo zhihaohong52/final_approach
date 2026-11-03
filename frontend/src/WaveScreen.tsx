@@ -10,10 +10,10 @@ import { Radar, SCAN_MIN, type Tone } from "./components/Radar";
 import { Strips } from "./components/Strips";
 import { Surface } from "./components/Surface";
 import { agentName, clock, clockSec, dateLabel, signed } from "./format";
+import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
 
 const SCAN_S = SCAN_MIN * 60;       // the radar picture updates once per antenna revolution
-const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side are offered from this width
-type Panel = "auto" | "radar" | "surface" | "both";
+const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side from this width
 const SPEEDS = [1, 10, 60];
 
 const UNDO_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘Z" : "Ctrl+Z";
@@ -85,7 +85,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
   const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
   const [pathsBusy, setPathsBusy] = useState(false);
-  const [panel, setPanel] = useState<Panel>("auto");             // radar, surface, both, or the automatic hand-off at the focus touchdown
+  const [panel, setPanel] = useState<Panel | null>(null);        // the duty manager's pick of picture; null = the default (see panel.ts)
   const [wideScreen, setWideScreen] = useState(() => typeof matchMedia !== "undefined" && matchMedia(BOTH_MQ).matches);
   useEffect(() => {
     const mq = matchMedia(BOTH_MQ);
@@ -96,6 +96,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   // a bar being dragged on the timeline, and the server's re-check of where it is now (hold laps and taxi included)
   const [dragAt, setDragAt] = useState<{ cs: string; patch: Patch } | null>(null);
   const [preview, setPreview] = useState<DragPreview | null>(null);
+  const [previewErr, setPreviewErr] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const tableRef = useRef<JointPlan | null>(null);
   const showTable = (p: JointPlan | null) => { tableRef.current = p; setTable(p); };
@@ -267,14 +268,18 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   // while a bar is dragged its hold laps and taxi follow it: the drag position is re-checked with trajectories,
   // debounced, one request in flight (a newer position aborts the older request)
   useEffect(() => {
-    if (!dragAt || !result || !wave) { setPreview(null); return; }
+    if (!dragAt || !result || !wave) { setPreview(null); setPreviewErr(false); return; }
     const ctl = new AbortController();
     const { cs, patch } = dragAt;
     const plan = applyEdits(result.final_plan, { ...edits, [cs]: { ...edits[cs], ...patch } }, null);
     const timer = setTimeout(() => {
       api.postEvaluate({ wave_id: wave.id, assignments: plan.assignments }, { includeTrajectories: true, signal: ctl.signal })
-        .then((r) => { if (r) setPreview({ cs, patch, metrics: r.plan.assignments.find((a) => a.callsign === cs)?.metrics ?? null, set: r.trajectories ?? null }); })
-        .catch(() => { /* aborted by a newer position, or the re-check failed: the bar keeps its local preview */ });
+        .then((r) => { setPreviewErr(false); if (r) setPreview({ cs, patch, metrics: r.plan.assignments.find((a) => a.callsign === cs)?.metrics ?? null, set: r.trajectories ?? null }); })
+        .catch((e) => {
+          if ((e as Error).name === "AbortError") return;      // a newer drag position replaced this request
+          console.warn("drag preview: re-check failed", e);   // the bar keeps its local preview, marked as such
+          setPreviewErr(true);
+        });
     }, 90);
     return () => { clearTimeout(timer); ctl.abort(); };
   }, [dragAt, result, wave]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -340,9 +345,9 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const surf = geo?.surface ?? null;
   const focusAir = paths?.air.find((a) => a.callsign === wave?.focus);
   const focusDown = focusA?.action === "land" ? focusA.slot_min ?? focusAir?.points[focusAir.points.length - 1]?.t_min ?? null : null;
-  const handOff: "radar" | "surface" = surf?.status === "real" && focusDown != null && tNow >= focusDown ? "surface" : "radar";
   const canBoth = wideScreen && !!surf;
-  const shownPanel: "radar" | "surface" | "both" = !surf ? "radar" : panel === "auto" || (panel === "both" && !canBoth) ? handOff : panel;
+  const choice = effectiveChoice({ choice: panel, surface: surf?.status ?? null, canBoth });
+  const shownPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);
   const onTabKey = (e: React.KeyboardEvent) => {
@@ -428,11 +433,11 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               <h2 className={surf ? "sr-only" : undefined}>{shownPanel === "surface" ? "Surface" : shownPanel === "both" ? "Approach and surface" : "Approach"}</h2>
               {surf && (
                 <div className="seg panel-seg" role="group" aria-label="Picture shown">
-                  <button aria-pressed={panel === "auto" || (panel === "both" && !canBoth)} onClick={() => setPanel("auto")}
+                  <button aria-pressed={choice === "auto"} onClick={() => setPanel("auto")}
                     title={`Approach until ${wave.focus ? icao(wave.focus) : "the disrupted flight"} touches down, then the surface`}>Auto</button>
-                  <button aria-pressed={panel === "radar"} className={shownPanel !== "surface" ? "showing" : undefined} onClick={() => setPanel("radar")}>Approach</button>
-                  <button aria-pressed={panel === "surface"} className={shownPanel !== "radar" ? "showing" : undefined} onClick={() => setPanel("surface")}>Surface</button>
-                  {canBoth && <button aria-pressed={panel === "both"} onClick={() => setPanel("both")} title="Approach radar and surface side by side">Both</button>}
+                  <button aria-pressed={choice === "radar"} className={shownPanel !== "surface" ? "showing" : undefined} onClick={() => setPanel("radar")}>Approach</button>
+                  <button aria-pressed={choice === "surface"} className={shownPanel !== "radar" ? "showing" : undefined} onClick={() => setPanel("surface")}>Surface</button>
+                  {canBoth && <button aria-pressed={choice === "both"} onClick={() => setPanel("both")} title="Approach radar and surface side by side">Both</button>}
                 </div>
               )}
             </div>
@@ -452,12 +457,12 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
             {/* both stay mounted, so the radar keeps its range and the map its zoom across the hand-off */}
             <div className={`pane${shownPanel === "surface" ? " off" : ""}`}>
               <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-                geo={geo} paths={paths} pathsNote={pathsNote} updating={pathsBusy && !!paths} />
+                geo={geo} paths={paths} pathsNote={pathsNote} updating={pathsBusy && !!paths} fill={shownPanel === "both"} />
             </div>
             {surf && (
               <div className={`pane${shownPanel === "radar" ? " off" : ""}`}>
                 <Surface geo={geo!} traj={pathsNote ? null : paths} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-                  focus={wave.focus} updating={pathsBusy && !!paths} />
+                  focus={wave.focus} updating={pathsBusy && !!paths} active={shownPanel !== "radar"} />
               </div>
             )}
           </div>
@@ -467,7 +472,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
             {nEdits > 0 && <span><i className="k k-edited" />Your edit</span>}
             {red.length > 0 && <span><i className="k k-alert" />Breaks a rule</span>}
             {shownPanel !== "surface" && <span><i className="k k-fixed" />Other traffic</span>}
-            {shownPanel !== "radar" && <span><i className="k k-ground" />{shownPanel === "both" ? "Other ground traffic" : "Other traffic, departures"}</span>}
+            {shownPanel !== "radar" && <span><i className="k k-ground" />{shownPanel === "both" ? "Ground traffic" : "Other traffic, departures"}</span>}
           </div>
         </section>
 
@@ -584,7 +589,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         <Gantt wave={wave} plan={shown} baseline={baseline} agreed={nEdits ? agreed : null} view={result ? view : "after"} turn={turn}
           rejection={view !== "before" ? rejection : null} tone={tone} involved={involved} editable={canEdit} onEdit={edit}
           t={tNow} onTime={(v) => { setPlaying(false); setT(v); }} selected={selected} onSelect={setSelected}
-          paths={pathsNote ? null : paths} onDrag={(cs, p) => setDragAt(p ? { cs, patch: p } : null)} preview={preview} />
+          paths={pathsNote ? null : paths} onDrag={(cs, p) => setDragAt(p ? { cs, patch: p } : null)} preview={preview} previewFailed={previewErr} />
         <div className="gantt-foot">
           <GanttLegend view={result ? view : "after"} negotiated={!!result} focus={wave.focus ?? undefined} edited={nEdits > 0}
             simulated={wave.gates.some((g) => g.busy.some((b) => /simulated/i.test(b.label)))}

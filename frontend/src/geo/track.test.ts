@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, endOfLine, holdLap, levelLabel, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { bearing, endOfLine, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -87,4 +87,13 @@ describe("surface helpers", () => {
     expect(endOfLine("22L", ne, sw)).toBe(0);
     expect(endOfLine("36", [0, 0], [0, 100])).toBe(0);
   });
+});
+it("the radar's NM plane is the surface map's metre plane / 1852, and keeps the classic 60·cos(lat) NM", () => {
+  const lat0 = 41.98, lon0 = -87.9, m = projector(lat0, lon0), n = nmProjector(lat0, lon0);
+  for (const [la, lo] of [[42.3, -88.4], [41.5, -87.2], [41.98, -87.9]]) {
+    const [e, no] = n(la, lo), [em, nm] = m(la, lo);
+    expect(e).toBeCloseTo(em / 1852, 9); expect(no).toBeCloseTo(nm / 1852, 9);
+    expect(e).toBeCloseTo((lo - lon0) * 60 * Math.cos((lat0 * Math.PI) / 180), 9);
+    expect(no).toBeCloseTo((la - lat0) * 60, 9);
+  }
 });

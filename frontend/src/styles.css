@@ -426,7 +426,7 @@ tbody tr:hover { background: #18171c; }
 .scope-body > .pane.off { display: none; }
 .scope-body.both { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .scope-body.both > .pane + .pane { border-left: 1px solid #1b2128; }
-.scope-body.both .radar:not(.fill) { margin-top: auto; margin-bottom: auto; }
+.scope-body.both ~ .scope-key { flex-direction: column; gap: 2px; bottom: 46px; }   /* side by side: a column bottom left of the radar, above its notes, clear of the wind */
 
 /* airport surface: to scale from OSM, aircraft on the engine's taxi tracks */
 .surface-map { position: relative; flex: 1; min-height: 460px; }

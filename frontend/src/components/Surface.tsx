@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { TrajectorySet, WaveGeo } from "../api/types";
 import { icao } from "../callsign";
 import { endOfLine, bearing, positionAt, projector, secondFloor } from "../geo/track";
@@ -32,6 +32,7 @@ interface Props {
   onSelect: (cs: string | null) => void;
   focus?: string | null;           // the disrupted flight: the zoomed map centres on it when nothing is selected
   updating?: boolean;
+  active?: boolean;                // false while its pane is hidden: it then skips rendering entirely
 }
 
 /** Everything static about the surface, in metres around the field's centre. Computed once per wave. */
@@ -68,14 +69,85 @@ function prepare(s: Surf) {
   return { pj, runways, taxiways, stands, holds, box };
 }
 
-export function Surface({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false }: Props) {
+type Prepared = ReturnType<typeof prepare>;
+
+/** Screen position of a point in metres: the view is the scale (px per metre) and the centre (metres). */
+const screen = (W: number, H: number, S: number, cx: number, cy: number) => (q: XY): XY =>
+  [W / 2 + (q[0] - cx) * S, TOP + (H - TOP - BOTTOM) / 2 - (q[1] - cy) * S];
+const polyline = (P: (q: XY) => XY, xy: XY[]) => xy.map((q) => P(q).map((v) => v.toFixed(1)).join(",")).join(" ");
+
+/** The airfield itself: taxiways, runways, holding positions and stands. It depends only on the surface and the
+ *  view, so the once-a-second clock re-renders just the aircraft and their routes. */
+const Airfield = memo(function Airfield({ g, W, H, S, cx, cy }: { g: Prepared; W: number; H: number; S: number; cx: number; cy: number }) {
+  const P = screen(W, H, S, cx, cy);
+  const tw = (m: number, min: number) => Math.max(min, m * S);
+  const inView = ([x, y]: XY) => x > -40 && x < W + 40 && y > -40 && y < H + 40;
+  // runway end labels: the designator at the end it is landed from
+  const ends = g.runways.flatMap((r) => {
+    if (r.xy.length < 2) return [];
+    const first = r.xy[0], last = r.xy[r.xy.length - 1];
+    return r.ids.map((id) => {
+      const at = endOfLine(id, first, last) === 0 ? first : last, other = at === first ? last : first;
+      const L = Math.hypot(at[0] - other[0], at[1] - other[1]) || 1;
+      return { id, xy: [at[0] + ((at[0] - other[0]) / L) * 14 / S, at[1] + ((at[1] - other[1]) / L) * 14 / S] as XY };
+    });
+  });
+  const r = Math.max(1.5, Math.min(4, 9 * S));
+  return (
+    <>
+      <g className="sf-taxi">
+        {g.taxiways.map((w, i) => (
+          <polyline key={i} className={w.kind} points={polyline(P, w.xy)} strokeWidth={w.kind === "taxilane" ? tw(TAXILANE_M, 0.8) : tw(TAXIWAY_M, 1.4)}>
+            {w.name && <title>{`${w.kind === "taxilane" ? "Taxilane" : "Taxiway"} ${w.name}`}</title>}
+          </polyline>
+        ))}
+      </g>
+      <g className="sf-rwy">
+        {g.runways.map((rw, i) => (
+          <g key={i}>
+            <polyline points={polyline(P, rw.xy)} strokeWidth={tw(rw.width_m ?? RUNWAY_M, 3)}><title>{`Runway ${rw.ids.join("/")}${rw.width_m ? ` · ${Math.round(rw.width_m)} m wide` : ""}`}</title></polyline>
+            {(rw.width_m ?? RUNWAY_M) * S >= 5 && <polyline className="cl" points={polyline(P, rw.xy)} />}
+          </g>
+        ))}
+        {ends.filter((e) => inView(P(e.xy))).map((e) => { const [x, y] = P(e.xy); return <text key={e.id} className="rw-end" x={x} y={y + 4} textAnchor="middle">{e.id}</text>; })}
+      </g>
+      <g className="sf-hold">
+        {g.holds.map((h) => {
+          const [x, y] = P(h.xy);
+          if (!inView([x, y])) return null;
+          const half = Math.max(3, (HOLD_BAR_M * S) / 2);
+          const d = h.dir ? [h.dir[1], h.dir[0]] : null;          // across the taxiway (screen y is flipped)
+          return (
+            <g key={h.id}>
+              <title>{`Runway holding position${h.runway ? ` · ${h.runway}` : ""}`}</title>
+              {d ? <line x1={x - d[0] * half} y1={y - d[1] * half} x2={x + d[0] * half} y2={y + d[1] * half} /> : <circle cx={x} cy={y} r={1.6} />}
+            </g>
+          );
+        })}
+      </g>
+      <g className="sf-stand">
+        {g.stands.map((st) => {
+          const [x, y] = P(st.xy);
+          if (!inView([x, y])) return null;
+          return <rect key={st.id} x={x - r} y={y - r} width={2 * r} height={2 * r}><title>{`Stand ${st.gate ?? st.id}${st.geo_src ? ` · ${st.geo_src}` : ""}`}</title></rect>;
+        })}
+      </g>
+    </>
+  );
+});
+
+/** Hidden behind the radar it does not re-render at all; shown, only the aircraft layer follows the clock. */
+export const Surface = memo(SurfaceMap, (a, b) => a.active === false && b.active === false);
+
+function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, H], setSize] = useState([720, 480]);
   const [zoom, setZoom] = useState(1);
+  const centre = useRef<{ who: string | null; xy: XY } | null>(null);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setSize([Math.max(280, Math.round(e.contentRect.width)), Math.max(320, Math.round(e.contentRect.height))]));
+    const ro = new ResizeObserver(([e]) => { if (e.contentRect.width > 0) setSize([Math.max(280, Math.round(e.contentRect.width)), Math.max(320, Math.round(e.contentRect.height))]); });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -116,20 +188,29 @@ export function Surface({ geo, traj, t, tone, selected, onSelect, focus = null, 
   // the field fits between the top band (clock, toggles, zoom) and the bottom band (key, scale, notes)
   const S = Math.min((W - 2 * PAD) / bw, (H - TOP - BOTTOM) / bh) * zoom;     // px per metre
   const who = selected ?? focus;
-  const follow = zoom > 1 ? acs.find((a) => a.x.callsign === who)?.p ?? standXY(who) : null;
-  const c: XY = follow ?? [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2];
+  const target = zoom > 1 ? acs.find((a) => a.x.callsign === who)?.p ?? standXY(who) : null;
   function standXY(cs: string | null): XY | null {
     const x = tracks.find((tr) => tr.callsign === cs);
     const st = x && g!.stands.find((s) => s.id === x.stand || s.gate === x.stand);
     return st ? st.xy : null;
   }
-  const P = (q: XY): XY => [W / 2 + (q[0] - c[0]) * S, TOP + (H - TOP - BOTTOM) / 2 - (q[1] - c[1]) * S];
-  const line = (xy: XY[]) => xy.map((q) => P(q).map((v) => v.toFixed(1)).join(",")).join(" ");
+  // zoomed in, the view re-centres only when the followed aircraft nears the edge (as a ground display pages),
+  // so the airfield layer is redrawn on those pages, not every second
+  if (!target) centre.current = null;
+  else {
+    const cur = centre.current;
+    const off = cur && cur.who === who ? Math.max(Math.abs(target[0] - cur.xy[0]) * S / (W / 2), Math.abs(target[1] - cur.xy[1]) * S / ((H - TOP - BOTTOM) / 2)) : Infinity;
+    if (off > 0.6) centre.current = { who, xy: target };
+  }
+  const c: XY = centre.current?.xy ?? [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2];
+  const P = screen(W, H, S, c[0], c[1]);
+  const line = (xy: XY[]) => polyline(P, xy);
 
   // ---------- what the tracks on screen use: stands and taxiway names get labels, the rest stay quiet ----------
   const shownTracks = tracks.filter((x) => x.wave && x.kind === "arrival");
   const standUsed = new Map<string, Tone>();
   for (const x of shownTracks) standUsed.set(x.stand, toneOf(x));
+  const usedStands = g.stands.flatMap((st) => { const tn = standUsed.get(st.id) ?? (st.gate ? standUsed.get(st.gate) : undefined); return tn ? [{ st, tn }] : []; });
   const labelTrack = shownTracks.find((x) => x.callsign === who) ?? null;
   const twLabels: { name: string; at: XY }[] = [];
   if (labelTrack) {
@@ -151,23 +232,10 @@ export function Surface({ geo, traj, t, tone, selected, onSelect, focus = null, 
   });
   const anySynth = routes.some((r) => r.dashed);
 
-  // runway end labels: the designator at the end it is landed from
-  const ends = g.runways.flatMap((r) => {
-    if (r.xy.length < 2) return [];
-    const first = r.xy[0], last = r.xy[r.xy.length - 1];
-    return r.ids.map((id) => {
-      const at = endOfLine(id, first, last) === 0 ? first : last, other = at === first ? last : first;
-      const L = Math.hypot(at[0] - other[0], at[1] - other[1]) || 1;
-      const u: XY = [(at[0] - other[0]) / L, (at[1] - other[1]) / L];
-      return { id, xy: [at[0] + u[0] * 14 / S, at[1] + u[1] * 14 / S] as XY };
-    });
-  });
-
   // a scale bar: the largest of 100/250/500/1000 m that fits in ~120 px
   const bar = [1000, 500, 250, 100].find((mm) => mm * S <= 130) ?? 100;
-  const tw = (m: number, min: number) => Math.max(min, m * S);
-  const inView = ([x, y]: XY) => x > -40 && x < W + 40 && y > -40 && y < H + 40;
   const nOnGround = acs.filter((a) => a.tone !== "fixed").length;
+  const sr = Math.max(1.5, Math.min(4, 9 * S));
 
   return (
     <div ref={box} className="surface-map">
@@ -177,47 +245,16 @@ export function Surface({ geo, traj, t, tone, selected, onSelect, focus = null, 
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" onClick={() => onSelect(null)}
         aria-label={`Airport surface: ${nOnGround} negotiated aircraft taxiing`}>
         <rect width={W} height={H} fill="var(--scope)" />
-        <g className="sf-taxi">
-          {g.taxiways.map((w, i) => (
-            <polyline key={i} className={w.kind} points={line(w.xy)} strokeWidth={w.kind === "taxilane" ? tw(TAXILANE_M, 0.8) : tw(TAXIWAY_M, 1.4)}>
-              {w.name && <title>{`${w.kind === "taxilane" ? "Taxilane" : "Taxiway"} ${w.name}`}</title>}
-            </polyline>
-          ))}
-        </g>
-        <g className="sf-rwy">
-          {g.runways.map((r, i) => (
-            <g key={i}>
-              <polyline points={line(r.xy)} strokeWidth={tw(r.width_m ?? RUNWAY_M, 3)}><title>{`Runway ${r.ids.join("/")}${r.width_m ? ` · ${Math.round(r.width_m)} m wide` : ""}`}</title></polyline>
-              {(r.width_m ?? RUNWAY_M) * S >= 5 && <polyline className="cl" points={line(r.xy)} />}
-            </g>
-          ))}
-          {ends.filter((e) => inView(P(e.xy))).map((e) => { const [x, y] = P(e.xy); return <text key={e.id} className="rw-end" x={x} y={y + 4} textAnchor="middle">{e.id}</text>; })}
-        </g>
-        <g className="sf-hold">
-          {g.holds.map((h) => {
-            const [x, y] = P(h.xy);
-            if (!inView([x, y])) return null;
-            const half = Math.max(3, (HOLD_BAR_M * S) / 2);
-            const d = h.dir ? [h.dir[1], h.dir[0]] : null;          // across the taxiway (screen y is flipped)
-            return (
-              <g key={h.id}>
-                <title>{`Runway holding position${h.runway ? ` · ${h.runway}` : ""}`}</title>
-                {d ? <line x1={x - d[0] * half} y1={y - d[1] * half} x2={x + d[0] * half} y2={y + d[1] * half} /> : <circle cx={x} cy={y} r={1.6} />}
-              </g>
-            );
-          })}
-        </g>
+        <Airfield g={g} W={W} H={H} S={S} cx={c[0]} cy={c[1]} />
+        {/* the stands the plan's taxiing aircraft are bound for */}
         <g className="sf-stand">
-          {g.stands.map((st) => {
+          {usedStands.map(({ st, tn }) => {
             const [x, y] = P(st.xy);
-            if (!inView([x, y])) return null;
-            const used = standUsed.get(st.id) ?? (st.gate ? standUsed.get(st.gate) : undefined);
-            const r = Math.max(1.5, Math.min(4, 9 * S));
             return (
-              <g key={st.id} className={used ? `used blip ${used}` : undefined}>
+              <g key={st.id} className={`used blip ${tn}`}>
                 <title>{`Stand ${st.gate ?? st.id}${st.geo_src ? ` · ${st.geo_src}` : ""}`}</title>
-                <rect x={x - r} y={y - r} width={2 * r} height={2 * r} />
-                {used && <text className="stand-label" x={x + r + 3} y={y + 4}>{st.gate ?? st.id}</text>}
+                <rect x={x - sr} y={y - sr} width={2 * sr} height={2 * sr} />
+                <text className="stand-label" x={x + sr + 3} y={y + 4}>{st.gate ?? st.id}</text>
               </g>
             );
           })}

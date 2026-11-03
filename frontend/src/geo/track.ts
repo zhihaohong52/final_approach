@@ -77,3 +77,11 @@ export function endOfLine(id: string, first: [number, number], last: [number, nu
   const d = Math.abs(((bearing(first, last) - hdg + 540) % 360) - 180);
   return d <= 90 ? 0 : 1;
 }
+
+export const NM_M = 1852;
+
+/** The radar's projection: `projector` in nautical miles (east, north). Same plane as the surface map. */
+export function nmProjector(lat0: number, lon0: number): (lat: number, lon: number) => [number, number] {
+  const p = projector(lat0, lon0);
+  return (lat, lon) => { const [e, n] = p(lat, lon); return [e / NM_M, n / NM_M]; };
+}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Assignment, JointPlan, Runway, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
-import { holdLap, levelLabel, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
+import { holdLap, levelLabel, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
 
 // An approach-radar picture of the plan at one moment. The scope is centred on the airport reference point,
 // runways are drawn to scale from their end coordinates and range rings are true nautical miles.
@@ -39,11 +39,12 @@ interface Props {
   paths?: TrajectorySet | null;                // the engine's trajectories for `plan`; null = none
   pathsNote?: string | null;                   // set when a recorded run has no paths: no targets are drawn
   updating?: boolean;                          // trajectories for an edited plan are being recomputed
+  fill?: boolean;                              // fill the parent's height also when narrow (half of a side-by-side panel)
 }
 
 interface Blip { cs: string; x: number; y: number; tone: Tone; l1: string; l2: string; out: number | null; title: string; trail: [number, number][]; ahead: [number, number] }
 
-export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false }: Props) {
+export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false, fill = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, boxH], setSize] = useState([960, 0]);
   const [range, setRange] = useState(20);
@@ -56,15 +57,15 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     return () => ro.disconnect();
   }, []);
   const wide = W >= 700;
-  const H = wide ? Math.max(460, boxH) : Math.round(Math.min(560, Math.max(360, W * 1.05)));
+  const H = wide || fill ? Math.max(460, boxH) : Math.round(Math.min(560, Math.max(360, W * 1.05)));
 
   const ends = wave.airport.runways.filter(hasGeo);
   if (!ends.length) return <div ref={box} className="radar empty-radar"><p className="empty">No runway coordinates for {wave.airport.iata}, so the scope can't be drawn.</p></div>;
 
   // local flat projection in nautical miles around the airport reference point
   const lat0 = wave.airport.lat ?? ends[0].le_lat, lon0 = wave.airport.lon ?? ends[0].le_lon;
-  const k = Math.cos((lat0 * Math.PI) / 180);
-  const nm = (lat: number, lon: number): [number, number] => [(lon - lon0) * 60 * k, -(lat - lat0) * 60];
+  const toNm = nmProjector(lat0, lon0);                  // the same plane as the surface map, in NM
+  const nm = (lat: number, lon: number): [number, number] => { const [e, n] = toNm(lat, lon); return [e, -n]; };   // screen y points south
   const cx = W / 2, cy = H / 2;
   const S = (Math.min(W, H) / 2 - 18) / range;         // px per NM: the chosen range fits the short side
   const step = range / 5;
@@ -265,11 +266,11 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   const approachDirs = [...usedEnds].map((id) => approach(id, 1)?.u).filter(Boolean) as [number, number][];
   const diag = ([[1, -1], [-1, -1], [1, 1], [-1, 1]] as [number, number][]).map(([dx, dy]) => [dx * 0.707, dy * 0.707] as [number, number])
     .sort((p, q) => Math.max(...approachDirs.map((u) => p[0] * u[0] + p[1] * u[1]), -1) - Math.max(...approachDirs.map((u) => q[0] * u[0] + q[1] * u[1]), -1))[0];
-  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1]; const underWind = x > W - 140 && y > H - 116;   // the wind compass box, bottom right
+  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1]; const underWind = x > W - 140 && y > H - (wide ? 116 : 158);   // the wind compass box, bottom right
     return x > 24 && x < W - 24 && y > TOP && y < H - BOTTOM && !underWind; };
 
   return (
-    <div ref={box} className={`radar${wide ? " fill" : ""}`}>
+    <div ref={box} className={`radar${wide || fill ? " fill" : ""}`}>
       <div className="range seg" role="group" aria-label="Scope range">
         {RANGES.map((r) => <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} NM</button>)}
       </div>
@@ -392,7 +393,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
           );
         })}
 
-        <g transform={`translate(${W - 74} ${H - 76})`}>
+        <g transform={`translate(${W - 74} ${H - (wide ? 76 : 118)})`}>{/* narrow: lifted clear of the full-width notes below */}
           <circle r={22} fill="none" stroke="#2a2d33" />
           {calm ? <text className="ring" textAnchor="middle" y={4}>calm</text>
             : dir == null ? <text className="ring" textAnchor="middle" y={4}>VRB</text>

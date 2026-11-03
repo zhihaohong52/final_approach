@@ -54,6 +54,7 @@ interface Props {
   paths?: TrajectorySet | null;        // the engine's paths for `plan`: hold laps and taxi tracks
   onDrag?: (cs: string, p: Patch | null) => void;   // where a dragged bar is now (null when the drag ends)
   preview?: DragPreview | null;        // the server's answer for a drag position
+  previewFailed?: boolean;             // the last drag re-check failed: the bar shows its local estimate
   selected: string | null;
   onSelect: (cs: string | null) => void;
 }
@@ -74,7 +75,7 @@ const TONE_FILL: Record<Tone, string> = { focus: "var(--hue)", flight: "var(--fl
 const TONE_INK: Record<Tone, string> = { focus: "#ffffff", flight: "#0e0d11", edited: "#1b1404", alert: "#ffffff", fixed: "#0e0d11" };
 const TONE_TEXT: Record<Tone, string> = { focus: "var(--hue)", flight: "var(--text)", edited: "var(--human)", alert: "var(--negative)", fixed: "var(--soft)" };
 
-export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, tone, involved, editable, onEdit, t, onTime, selected, onSelect, paths = null, onDrag, preview = null }: Props) {
+export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, tone, involved, editable, onEdit, t, onTime, selected, onSelect, paths = null, onDrag, preview = null, previewFailed = false }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const [W, setW] = useState(1100);
@@ -511,7 +512,7 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
           const la = live(a), lin = la.metrics.in_block_min ?? 0;
           const endX = drag.kind === "land" ? gx + 4 : x(lin + turn);
           const startX = drag.kind === "land" ? gx - 4 : x(lin);
-          const msg = `${icao(drag.cs)} → ${drag.lane}${drag.kind === "land" ? ` ${clock(wave.window_start, drag.slot)}` : drag.slot !== drag.slot0 ? ` · lands ${clock(wave.window_start, drag.slot)}` : ""} · ${q.text.replace(/^lands \d\d:\d\d · /, "")}`;
+          const msg = `${icao(drag.cs)} → ${drag.lane}${drag.kind === "land" ? ` ${clock(wave.window_start, drag.slot)}` : drag.slot !== drag.slot0 ? ` · lands ${clock(wave.window_start, drag.slot)}` : ""} · ${q.text.replace(/^lands \d\d:\d\d · /, "")}${previewFailed ? " · preview unavailable" : ""}`;
           const noteW = msg.length * 7.3 + 16;
           const right = endX + 8 + noteW < W - 4;
           return (
