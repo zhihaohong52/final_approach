@@ -61,3 +61,15 @@ def test_matches_arinc424_decode():
         dec = json.loads(rec.json())
         assert parse_leg(x).pt == _field(dec, "Path and Termination").strip()
         assert (parse_leg(x).fix or "") == _field(dec, "Fix Identifier").strip()
+
+
+def test_rf_center_fix_resolves():
+    # the fixture holds PADL's procedure and PC records but not its PA record; borrow KORD's
+    pa = next(x for x in LINES if x[4] == "P" and x[6:10] == "KORD" and x[12] == "A")
+    rf = next(x for x in LINES if x[47:49] == "RF")
+    final = rf[:19] + "H" + rf[20:]   # the fixture has only the transition leg; make it a final-segment RF leg
+    d = extract_airport([*LINES, pa[:6] + "PADL" + pa[10:], final], "PADL", "2611")
+    centers = {g["center"] for a in d["approaches"].values()
+               for legs in (*a["transitions"].values(), a["final"]) for g in legs if g["center"]}
+    assert "CFNPX" in centers
+    assert d["fixes"]["CFNPX"] is not None

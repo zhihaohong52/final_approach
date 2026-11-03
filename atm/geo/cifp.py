@@ -261,7 +261,7 @@ def extract_airport(lines: Iterable[str], icao: str, cycle: str, fetched_at: str
         if _c(ln, 48, 49) == "RF":
             ct = _c(ln, 107, 111).strip()
             if ct in refs:
-                raw_ref.setdefault(ct, _c(ln, 112, 115))
+                raw_ref.setdefault(ct, _c(ln, 113, 116))   # centre: ident 107-111, region 113-114, sec/sub 115-116
     runways = {}
     for ident, ln in pg.items():
         rwy = ident[2:] if ident.startswith("RW") else ident
