@@ -376,6 +376,7 @@ def _build_from_row(row_id: int) -> Wave:
         Provenance("gate_occupancy", "simulated", constraints.SOURCE, f"only {lim.spare_gates} gates free at "
                    f"window start; seed={wid}"),
     ]
-    return Wave(id=wid, airport=airport, window_start=f"{date}T{hour:02d}:00:00", metar=metar,
-                runway_wind=rwinds, queue=B._queue(rest, runways, rwinds), flights=flights, gates=gates,
-                provenance=prov, focus=focus_cs)
+    from backend.wave import ground_traffic   # appends the ground_traffic provenance (real BTS 2015 movements / partial)
+    return ground_traffic.annotate(Wave(id=wid, airport=airport, window_start=f"{date}T{hour:02d}:00:00", metar=metar,
+                                        runway_wind=rwinds, queue=B._queue(rest, runways, rwinds), flights=flights,
+                                        gates=gates, provenance=prov, focus=focus_cs), ground_traffic.SRC_PARTIAL)

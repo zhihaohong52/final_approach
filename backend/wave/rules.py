@@ -116,6 +116,14 @@ LIMITS = [
      "earliest landing is t_entry + SR + GD + T_route(runway) with t_entry = ETA - T_route(FCFS runway)"},
     {"limit": "procedures cycle", "value": "FAA CIFP 2611", "source": "real data",
      "note": "current procedures (CIFP 2611) flown over 2015 traffic; not for navigation"},
+    {"limit": "departure runway", "value": "free parallel end nearest the stand, else the arrival runway (mixed mode)",
+     "source": "assumption",
+     "note": "fixed ground traffic (real BTS 2015 departures, wheels-off T-30..T+120): mixed mode iff no open runway "
+             "end parallel to the majority FCFS arrival runway (heading within 10 deg, same direction, another strip) "
+             "is free of arrivals; departures then share the arrival runway, else use the free parallel end whose "
+             "threshold is nearest their (seeded, simulated) stand. Pushback = WHEELS_OFF - TAXI_OUT; the departure "
+             "holds 30 s at the holding point (line-up buffer); takeoff at WHEELS_OFF, later only if taxi waits "
+             "delay it"},
 ]
 
 

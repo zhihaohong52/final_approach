@@ -532,9 +532,12 @@ def _build_wave(wave_id: str) -> Wave:
         Provenance("gate_occupancy", "simulated", "seeded model", f"seed={wave_id}"),
     ]
     focus = max((f for f in flights if f.disrupted), key=lambda f: f.delays["arr_delay"], default=None)
-    return Wave(id=wave_id, airport=airport, window_start=f"{date}T{hour:02d}:00:00",
-                metar=metar, runway_wind=rwinds, queue=_queue(rest, runways, rwinds),
-                flights=flights, gates=gates, provenance=prov, focus=focus.callsign if focus else None)
+    from backend.wave import ground_traffic   # 2024 waves: queue arrivals only (movements cover 2015), badged partial
+    return ground_traffic.annotate(Wave(id=wave_id, airport=airport, window_start=f"{date}T{hour:02d}:00:00",
+                                        metar=metar, runway_wind=rwinds, queue=_queue(rest, runways, rwinds),
+                                        flights=flights, gates=gates, provenance=prov,
+                                        focus=focus.callsign if focus else None),
+                                   f"BTS On-Time {month} queue")
 
 
 def _summary(row: dict, replay_ids: set[str] | None = None) -> dict:
