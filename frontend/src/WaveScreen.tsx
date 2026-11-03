@@ -10,6 +10,7 @@ import { Radar, SCAN_MIN, type Tone } from "./components/Radar";
 import { Strips } from "./components/Strips";
 import { Surface, type RejectedGround } from "./components/Surface";
 import { agentName, clock, clockSec, dateLabel, signed } from "./format";
+import { chipLabel as chipOf } from "./scope";
 import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
 import { vetoConflicts } from "./veto";
 
@@ -86,6 +87,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [t, setT] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [ranReplay, setRanReplay] = useState(false);   // the result on screen was streamed from a recording
   const [speed, setSpeed] = useState(10);          // replay speed: replayed seconds per real second
   const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
   const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
@@ -146,7 +148,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     if (!wave) return;
     abort.current?.abort();
     const ctl = new AbortController(); abort.current = ctl;
-    setStatus("running"); setMessages([]); showTable(wave.status_quo?.plan ?? null); setResult(null); setRejection(null); setRunErr(null); setDecision(null); setView("after"); setOpening(wave.status_quo ?? null); resetEdits();
+    setRanReplay(replay); setStatus("running"); setMessages([]); showTable(wave.status_quo?.plan ?? null); setResult(null); setRejection(null); setRunErr(null); setDecision(null); setView("after"); setOpening(wave.status_quo ?? null); resetEdits();
     let ended = false;
     try {
       await api.negotiate({ wave_id: wave.id, mode, model: mode === "formulas" ? undefined : model, replay }, (ev) => {
@@ -388,9 +390,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const canBoth = wideScreen && !!surf;
   const choice = effectiveChoice({ choice: panel, surface: surf?.status ?? null, canBoth });
   // a replay names the run that was recorded (its own mode and model), not the picker's default
-  const chipLabel = replay && result
-    ? (result.mode === "formulas" ? "Formulas" : config?.models.find((x) => x.id === result.model)?.label ?? result.model ?? MODE_LABEL[result.mode as Mode])
-    : mode === "formulas" ? "Formulas" : config?.models.find((x) => x.id === model)?.label ?? MODE_LABEL[mode];
+  const chipLabel = chipOf({ fromReplay: ranReplay, result, models: config?.models ?? [], mode, model, modeLabel: MODE_LABEL });
   const shownPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);

@@ -3,6 +3,7 @@ import type { Assignment, FlightMetrics, JointPlan, Move, RuleCheck, TrajectoryS
 import { icao } from "../callsign";
 import { clock } from "../format";
 import type { Tone } from "./Radar";
+import { axisEnd, axisStart } from "../scope";
 
 // pointer capture throws when the pointer is already gone (lifted before the handler ran); the drag still works without it
 const capture = (el: Element | null, id: number) => { try { el?.setPointerCapture(id); } catch { /* pointer already released */ } };
@@ -114,9 +115,14 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   // the axis also covers the start of every hold in the shown plan, so a lap is on the scrubber
   const holdStart = (paths?.air ?? []).flatMap((a) => a.points.filter((p) => p.kind === "hold").slice(0, 1).map((p) => p.t_min));
   const firstPlan = times.length ? Math.min(...times, ...holdStart) : 0;
-  const START = firstPlan > 45 ? Math.floor((firstPlan - 15) / 15) * 15 : Math.min(0, Math.floor((Math.min(0, ...times, ...holdStart) - 3) / 15) * 15);
+  // never narrower than it has been for this wave, so the axis does not jump when paths load or a tab changes
+  const startSeen = useRef<{ id: string; v: number }>({ id: wave.id, v: Infinity });
+  const computedStart = axisStart(times, holdStart);
+  if (startSeen.current.id !== wave.id) startSeen.current = { id: wave.id, v: Infinity };
+  const START = Math.min(computedStart, startSeen.current.v);
+  startSeen.current.v = START;
   const lastAll = Math.max(START, ...lastPlan, ...(firstPlan > 45 ? [] : lastQueue));
-  const END = Math.min(START + 180, Math.max(START + 75, Math.ceil((lastAll + 3) / 15) * 15));
+  const END = axisEnd(START, lastAll);
   const inView = (from: number, to: number) => to >= START && from <= END;
   // flights landing after the window are named in a gutter on the right, clear of every bar
   // fixed for the length of a drag, so the time scale never shifts under the pointer

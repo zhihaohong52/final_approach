@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Assignment, JointPlan, Runway, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
+import { autoRange as pickRange, RANGES } from "../scope";
 import { entryFix, holdLap, levelLabel, matchHold, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
 
 // An approach-radar picture of the plan at one moment. The scope is centred on the airport reference point,
@@ -13,7 +14,6 @@ import { entryFix, holdLap, levelLabel, matchHold, nmProjector, positionAt, scan
 // centreline of its runway end at a typical final-approach groundspeed, and says so.
 // Positions are replayed from the plan, not from surveillance data.
 const GS_NM_PER_MIN = 3;          // ~180 kt over the last 30 NM (schematic only)
-const RANGES = [10, 20, 40, 80];       // NM from centre to the short edge, as on a scope range knob
 const LEAD = 22;                   // leader line length, px
 export const SCAN_MIN = 4.8 / 60;  // one radar update, minutes: a terminal antenna turns at 12.5 rpm
 const TRAIL = 5;                   // history dots: where the target was on the last five scans
@@ -83,9 +83,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
         for (const p of hs) holdNow.push(nm(p.lat, p.lon));
     }
   }
-  const autoRange = holdNow.length
-    ? RANGES.find((r) => { const q = limOf(r); return holdNow.every(([x, y]) => x * 1.12 >= q.l && x * 1.12 <= q.r && y * 1.12 >= q.t && y * 1.12 <= q.b); }) ?? RANGES[RANGES.length - 1]
-    : 20;
+  const autoRange = pickRange(holdNow, limOf);
   const range = userRange ?? autoRange;
   const S = scaleOf(range);
   const step = range / 5;
@@ -323,6 +321,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   return (
     <div ref={box} className={`radar${wide || fill ? " fill" : ""}`}>
       <div className="range seg" role="group" aria-label="Scope range">
+        <button aria-pressed={userRange === null} onClick={() => setRange(null)} title="20 NM, wider while a hold is on the scope">Auto</button>
         {RANGES.map((r) => <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} NM</button>)}
       </div>
       {(beyond.length > 0 || awaiting.length > 0) && (
