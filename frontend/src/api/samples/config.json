@@ -1,5 +1,5 @@
 {
-  "jev_available": false,
+  "jev_available": true,
   "model": "claude-opus-5-5",
   "policies": [
     "rule",
@@ -17,31 +17,31 @@
   "default_mode": "decision",
   "models": [
     {
+      "id": "baseten/elephant-1",
+      "provider": "openrouter",
+      "label": "Baseten elephant-1",
+      "available": true,
+      "benchmark_rank": 1
+    },
+    {
       "id": "typesafe/jev-1.14",
       "provider": "openrouter",
       "label": "Typesafe jev-1.14",
-      "available": false,
+      "available": true,
       "benchmark_rank": 1
     },
     {
       "id": "liquid/d1-ultra",
       "provider": "openrouter",
       "label": "Liquid d1-ultra",
-      "available": false,
+      "available": true,
       "benchmark_rank": 2
-    },
-    {
-      "id": "baseten/elephant-1",
-      "provider": "openrouter",
-      "label": "Baseten elephant-1",
-      "available": false,
-      "benchmark_rank": 3
     },
     {
       "id": "typesafe/jev",
       "provider": "typesafe",
       "label": "Typesafe jev",
-      "available": false
+      "available": true
     },
     {
       "id": "formula",
@@ -51,8 +51,8 @@
       "benchmark_rank": 4
     }
   ],
-  "default_model": "typesafe/jev-1.14",
-  "llm_available": false,
+  "default_model": "baseten/elephant-1",
+  "llm_available": true,
   "tracing": false,
   "replay_available": true,
   "store": {

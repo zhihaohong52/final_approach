@@ -1,5 +1,5 @@
 {
-  "id": "F2015-310938",
+  "id": "F2015-7053",
   "airport": {
     "iata": "ORD",
     "icao": "KORD",
@@ -11,8 +11,8 @@
         "id": "04L",
         "heading_true": 39.0,
         "length_ft": 7500,
-        "open": false,
-        "closed_reason": "crosswind 21.5 kt > 20 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.9817008972168,
         "le_lon": -87.91390228271484,
         "he_lat": 41.997501373291016,
@@ -22,8 +22,8 @@
         "id": "04R",
         "heading_true": 42.0,
         "length_ft": 8075,
-        "open": false,
-        "closed_reason": "crosswind 21.9 kt > 20 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.95330047607422,
         "le_lon": -87.89939880371094,
         "he_lat": 41.96989822387695,
@@ -33,8 +33,8 @@
         "id": "09L",
         "heading_true": 90.0,
         "length_ft": 7500,
-        "open": true,
-        "closed_reason": null,
+        "open": false,
+        "closed_reason": "tailwind 9 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
         "le_lat": 42.002830505371094,
         "le_lon": -87.92667388916016,
         "he_lat": 42.002830505371094,
@@ -44,8 +44,8 @@
         "id": "09R",
         "heading_true": 90.0,
         "length_ft": 7967,
-        "open": true,
-        "closed_reason": null,
+        "open": false,
+        "closed_reason": "tailwind 9 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
         "le_lat": 41.983897,
         "le_lon": -87.918352,
         "he_lat": 41.9839,
@@ -55,8 +55,8 @@
         "id": "10C",
         "heading_true": 90.0,
         "length_ft": 10800,
-        "open": true,
-        "closed_reason": null,
+        "open": false,
+        "closed_reason": "tailwind 9 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
         "le_lat": 41.96569824,
         "le_lon": -87.9315033,
         "he_lat": 41.96569824,
@@ -66,30 +66,19 @@
         "id": "10L",
         "heading_true": 90.0,
         "length_ft": 13000,
-        "open": true,
-        "closed_reason": null,
+        "open": false,
+        "closed_reason": "tailwind 9 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
         "le_lat": 41.96900177001953,
         "le_lon": -87.93150329589844,
         "he_lat": 41.96910095214844,
         "he_lon": -87.88369750976562
       },
       {
-        "id": "10R",
-        "heading_true": 90.0,
-        "length_ft": 7500,
-        "open": true,
-        "closed_reason": null,
-        "le_lat": 41.95719909667969,
-        "le_lon": -87.92790222167969,
-        "he_lat": 41.957244873046875,
-        "he_lon": -87.9002914428711
-      },
-      {
         "id": "22L",
         "heading_true": 222.0,
         "length_ft": 8075,
-        "open": false,
-        "closed_reason": "crosswind 21.9 kt > 20 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.96989822387695,
         "le_lon": -87.87979888916016,
         "he_lat": 41.95330047607422,
@@ -99,8 +88,8 @@
         "id": "22R",
         "heading_true": 219.0,
         "length_ft": 7500,
-        "open": false,
-        "closed_reason": "crosswind 21.5 kt > 20 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.997501373291016,
         "le_lon": -87.89640045166016,
         "he_lat": 41.9817008972168,
@@ -110,8 +99,8 @@
         "id": "27L",
         "heading_true": 270.0,
         "length_ft": 7967,
-        "open": false,
-        "closed_reason": "tailwind 11.5 kt > 5 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.9839,
         "le_lon": -87.889051,
         "he_lat": 41.983897,
@@ -121,8 +110,8 @@
         "id": "27R",
         "heading_true": 270.0,
         "length_ft": 7500,
-        "open": false,
-        "closed_reason": "tailwind 11.5 kt > 5 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 42.002830505371094,
         "le_lon": -87.89908599853516,
         "he_lat": 42.002830505371094,
@@ -132,41 +121,52 @@
         "id": "28C",
         "heading_true": 270.0,
         "length_ft": 10800,
-        "open": false,
-        "closed_reason": "tailwind 11.5 kt > 5 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.96569824,
         "le_lon": -87.89179993,
         "he_lat": 41.96569824,
         "he_lon": -87.9315033
       },
       {
-        "id": "28L",
-        "heading_true": 270.0,
-        "length_ft": 7500,
-        "open": false,
-        "closed_reason": "tailwind 11.5 kt > 5 kt (FAA Order 8400.9 \u00a76d (dry))",
-        "le_lat": 41.957244873046875,
-        "le_lon": -87.9002914428711,
-        "he_lat": 41.95719909667969,
-        "he_lon": -87.92790222167969
-      },
-      {
         "id": "28R",
         "heading_true": 270.0,
         "length_ft": 13000,
-        "open": false,
-        "closed_reason": "tailwind 11.5 kt > 5 kt (FAA Order 8400.9 \u00a76d (dry))",
+        "open": true,
+        "closed_reason": null,
         "le_lat": 41.96910095214844,
         "le_lon": -87.88369750976562,
         "he_lat": 41.96900177001953,
         "he_lon": -87.93150329589844
       },
       {
+        "id": "14L",
+        "heading_true": 140.1,
+        "length_ft": 10005,
+        "open": false,
+        "closed_reason": "tailwind 14 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
+        "le_lat": 42.002435,
+        "le_lon": -87.915368,
+        "he_lat": 41.981405,
+        "he_lon": -87.891713
+      },
+      {
+        "id": "32R",
+        "heading_true": 320.1,
+        "length_ft": 10005,
+        "open": true,
+        "closed_reason": null,
+        "le_lat": 41.981405,
+        "le_lon": -87.891713,
+        "he_lat": 42.002435,
+        "he_lon": -87.915368
+      },
+      {
         "id": "14R",
         "heading_true": 140.1,
         "length_ft": 9686,
-        "open": true,
-        "closed_reason": null,
+        "open": false,
+        "closed_reason": "tailwind 14 kt > 0 kt (FAA Order 8400.9 \u00a76d (wet))",
         "le_lat": 41.990435,
         "le_lon": -87.93314,
         "he_lat": 41.970083,
@@ -185,309 +185,327 @@
       }
     ]
   },
-  "window_start": "2015-11-17T19:00:00",
+  "window_start": "2015-01-04T12:00:00",
   "metar": {
-    "raw": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117",
+    "raw": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034",
     "station": "ORD",
-    "observed_at": "2015-11-18T00:51:00Z",
-    "wind_dir_deg": 150.0,
-    "wind_kt": 18.0,
-    "gust_kt": 23.0,
-    "visibility_sm": 10.0,
-    "ceiling_ft": 5500.0,
-    "wx_codes": [],
-    "surface": "dry"
+    "observed_at": "2015-01-04T17:51:00Z",
+    "wind_dir_deg": 320.0,
+    "wind_kt": 14.0,
+    "gust_kt": null,
+    "visibility_sm": 2.5,
+    "ceiling_ft": 2100.0,
+    "wx_codes": [
+      "-SN"
+    ],
+    "surface": "wet"
   },
   "runway_wind": [
     {
       "runway": "04L",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 21.5,
-      "tailwind_kt": 8.2,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
+      "headwind_kt": 2.7,
+      "crosswind_kt": 13.7,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
     },
     {
       "runway": "04R",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 21.9,
-      "tailwind_kt": 7.1,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
+      "headwind_kt": 1.9,
+      "crosswind_kt": 13.9,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
     },
     {
       "runway": "09L",
-      "headwind_kt": 9.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": true
+      "headwind_kt": 0.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 9.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": false
     },
     {
       "runway": "09R",
-      "headwind_kt": 9.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": true
+      "headwind_kt": 0.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 9.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": false
     },
     {
       "runway": "10C",
-      "headwind_kt": 9.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": true
+      "headwind_kt": 0.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 9.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": false
     },
     {
       "runway": "10L",
-      "headwind_kt": 9.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": true
-    },
-    {
-      "runway": "10R",
-      "headwind_kt": 9.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": true
+      "headwind_kt": 0.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 9.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": false
     },
     {
       "runway": "22L",
-      "headwind_kt": 5.6,
-      "crosswind_kt": 21.9,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "22R",
-      "headwind_kt": 6.5,
-      "crosswind_kt": 21.5,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "27L",
       "headwind_kt": 0.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 11.5,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "27R",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 11.5,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "28C",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 11.5,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "28L",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 11.5,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "28R",
-      "headwind_kt": 0.0,
-      "crosswind_kt": 19.9,
-      "tailwind_kt": 11.5,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
-      "within_limits": false
-    },
-    {
-      "runway": "14R",
-      "headwind_kt": 17.7,
-      "crosswind_kt": 4.0,
-      "tailwind_kt": 0.0,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
+      "crosswind_kt": 13.9,
+      "tailwind_kt": 1.9,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
       "within_limits": true
     },
     {
-      "runway": "32L",
+      "runway": "22R",
       "headwind_kt": 0.0,
-      "crosswind_kt": 4.0,
-      "tailwind_kt": 22.7,
-      "limit_crosswind_kt": 20.0,
-      "limit_tailwind_kt": 5.0,
-      "limit_source": "FAA Order 8400.9 \u00a76d (dry)",
+      "crosswind_kt": 13.7,
+      "tailwind_kt": 2.7,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "27L",
+      "headwind_kt": 9.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "27R",
+      "headwind_kt": 9.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "28C",
+      "headwind_kt": 9.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "28R",
+      "headwind_kt": 9.0,
+      "crosswind_kt": 10.7,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "14L",
+      "headwind_kt": 0.0,
+      "crosswind_kt": 0.0,
+      "tailwind_kt": 14.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
       "within_limits": false
+    },
+    {
+      "runway": "32R",
+      "headwind_kt": 14.0,
+      "crosswind_kt": 0.0,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
+    },
+    {
+      "runway": "14R",
+      "headwind_kt": 0.0,
+      "crosswind_kt": 0.0,
+      "tailwind_kt": 14.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": false
+    },
+    {
+      "runway": "32L",
+      "headwind_kt": 14.0,
+      "crosswind_kt": 0.0,
+      "tailwind_kt": 0.0,
+      "limit_crosswind_kt": 15.0,
+      "limit_tailwind_kt": 0.0,
+      "limit_source": "FAA Order 8400.9 \u00a76d (wet)",
+      "within_limits": true
     }
   ],
   "queue": [
     {
-      "callsign": "MQ3312",
+      "callsign": "EV6112",
       "aircraft_type": null,
       "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 21.0,
-      "origin": "BNA"
+      "runway": "32R",
+      "slot_min": 30.0,
+      "origin": "STL"
     },
     {
-      "callsign": "MQ3043",
+      "callsign": "MQ3255",
       "aircraft_type": null,
       "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 22.0,
-      "origin": "HSV"
+      "runway": "27L",
+      "slot_min": 67.0,
+      "origin": "CMH"
     },
     {
-      "callsign": "MQ3363",
+      "callsign": "EV4731",
       "aircraft_type": null,
       "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 25.0,
+      "runway": "32R",
+      "slot_min": 81.0,
+      "origin": "ATW"
+    },
+    {
+      "callsign": "OO5359",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "27L",
+      "slot_min": 194.0,
+      "origin": "MKG"
+    },
+    {
+      "callsign": "MQ3128",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "32R",
+      "slot_min": 34.0,
+      "origin": "CVG"
+    },
+    {
+      "callsign": "EV3946",
+      "aircraft_type": "E145",
+      "wake": "LARGE",
+      "runway": "27L",
+      "slot_min": 70.0,
+      "origin": "MSN"
+    },
+    {
+      "callsign": "MQ3151",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "32R",
+      "slot_min": 42.0,
+      "origin": "XNA"
+    },
+    {
+      "callsign": "MQ2990",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "27L",
+      "slot_min": 70.0,
       "origin": "LEX"
     },
     {
-      "callsign": "MQ3102",
+      "callsign": "OO5361",
       "aircraft_type": null,
       "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 35.0,
+      "runway": "32R",
+      "slot_min": 128.0,
+      "origin": "FWA"
+    },
+    {
+      "callsign": "OO5447",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "27L",
+      "slot_min": 153.0,
+      "origin": "MKE"
+    },
+    {
+      "callsign": "MQ3460",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "32R",
+      "slot_min": 169.0,
+      "origin": "DSM"
+    },
+    {
+      "callsign": "MQ3437",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "27L",
+      "slot_min": 166.0,
+      "origin": "TVC"
+    },
+    {
+      "callsign": "MQ2981",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "runway": "32R",
+      "slot_min": 79.0,
       "origin": "RIC"
     },
     {
-      "callsign": "EV4184",
-      "aircraft_type": "E145",
+      "callsign": "MQ3138",
+      "aircraft_type": null,
       "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 38.0,
-      "origin": "TUL"
+      "runway": "27L",
+      "slot_min": 212.0,
+      "origin": "DTW"
     },
     {
-      "callsign": "OO5597",
+      "callsign": "OO6229",
       "aircraft_type": "CRJ7",
       "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 46.0,
-      "origin": "SGF"
-    },
-    {
-      "callsign": "EV4234",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 48.0,
-      "origin": "MEM"
-    },
-    {
-      "callsign": "UA282",
-      "aircraft_type": "A319",
-      "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 49.0,
-      "origin": "SMF"
-    },
-    {
-      "callsign": "OO5168",
-      "aircraft_type": "E170",
-      "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 54.0,
-      "origin": "BNA"
-    },
-    {
-      "callsign": "UA1195",
-      "aircraft_type": "B738",
-      "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 55.0,
-      "origin": "IAH"
-    },
-    {
-      "callsign": "EV5810",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 56.0,
-      "origin": "OKC"
-    },
-    {
-      "callsign": "EV5947",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "runway": "09L",
-      "slot_min": 58.0,
-      "origin": "ICT"
-    },
-    {
-      "callsign": "OO4990",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "runway": "14R",
-      "slot_min": 59.0,
-      "origin": "PIA"
+      "runway": "32R",
+      "slot_min": 130.0,
+      "origin": "BOS"
     }
   ],
   "flights": [
     {
-      "callsign": "UA226",
-      "carrier": "UA",
-      "airline": "United Air Lines Inc.",
-      "flight_no": 226,
-      "tail": "N437UA",
-      "aircraft_type": "A320",
+      "callsign": "OO6254",
+      "carrier": "OO",
+      "airline": "Skywest Airlines Inc.",
+      "flight_no": 6254,
+      "tail": "N113SY",
+      "aircraft_type": "E170",
       "wake": "LARGE",
       "gate_size": "narrow",
-      "origin": "MSP",
-      "sched_arr": "2015-11-17T19:03:00",
-      "sched_min": 3.0,
-      "eta_earliest_min": 88.0,
+      "origin": "MCI",
+      "sched_arr": "2015-01-04T12:32:00",
+      "sched_min": 32.0,
+      "eta_earliest_min": 76.0,
       "airborne": true,
       "disrupted": false,
       "delays": {
         "weather": 0.0,
-        "late_aircraft": 72.0,
+        "late_aircraft": 52.0,
         "nas": 0.0,
-        "carrier": 13.0,
-        "arr_delay": 85.0
+        "carrier": 0.0,
+        "arr_delay": 52.0
       },
       "fuel": {
         "extra_min": 45,
@@ -497,31 +515,31 @@
       },
       "connections": [
         {
-          "flight": "UA2087",
-          "pax": 37,
-          "departs_min": 43.0
+          "flight": "OO1280",
+          "pax": 38,
+          "departs_min": 80.0
         },
         {
-          "flight": "UA2368",
-          "pax": 14,
-          "departs_min": 112.0
+          "flight": "OO2440",
+          "pax": 26,
+          "departs_min": 134.0
         }
       ],
-      "scheduled_gate": "B15",
-      "crew_shift_end_min": 139.0,
-      "next_departure_min": 90.0,
+      "scheduled_gate": "B19",
+      "crew_shift_end_min": 125.40922294569947,
+      "next_departure_min": 127.0,
       "provenance": [
         {
           "layer": "flights",
           "status": "real",
           "source": "real (DOT 2015 flights.csv)",
-          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local"
+          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local; scheduled times are gate times (BTS); landing = wheels-on; taxi-in 8 min (real TAXI_IN)"
         },
         {
           "layer": "aircraft",
           "status": "real",
           "source": "FAA registry (current)",
-          "detail": "AIRBUS INDUSTRIE A320-232"
+          "detail": "EMBRAER S A ERJ 170-200 LL"
         },
         {
           "layer": "fuel",
@@ -533,7 +551,7 @@
           "layer": "crew",
           "status": "simulated",
           "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "ground shift 8 h, elapsed at sched arrival 418 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+622 min"
+          "detail": "ground shift 8 h, elapsed at sched arrival 387 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+660 min"
         },
         {
           "layer": "connections",
@@ -542,188 +560,30 @@
           "detail": null
         }
       ],
-      "crew_duty_end_min": 622
+      "crew_duty_end_min": 660,
+      "taxi_in_ref_min": 8.0
     },
     {
-      "callsign": "AA1444",
-      "carrier": "AA",
-      "airline": "American Airlines Inc.",
-      "flight_no": 1444,
-      "tail": "N3CWAA",
+      "callsign": "MQ3269",
+      "carrier": "MQ",
+      "airline": "American Eagle Airlines Inc.",
+      "flight_no": 3269,
+      "tail": "N502MQ",
       "aircraft_type": null,
       "wake": "LARGE",
       "gate_size": "narrow",
-      "origin": "PHX",
-      "sched_arr": "2015-11-17T19:05:00",
-      "sched_min": 5.0,
-      "eta_earliest_min": 473.0,
+      "origin": "BNA",
+      "sched_arr": "2015-01-04T12:35:00",
+      "sched_min": 35.0,
+      "eta_earliest_min": 426.0,
       "airborne": true,
       "disrupted": true,
       "delays": {
         "weather": 0.0,
-        "late_aircraft": 466.0,
-        "nas": 0.0,
-        "carrier": 2.0,
-        "arr_delay": 468.0
-      },
-      "fuel": {
-        "extra_min": 45,
-        "alternate": "MDW",
-        "alternate_min": 11,
-        "final_reserve_min": 30
-      },
-      "connections": [
-        {
-          "flight": "AA1048",
-          "pax": 5,
-          "departs_min": 76.0
-        },
-        {
-          "flight": "AA1141",
-          "pax": 18,
-          "departs_min": 69.0
-        },
-        {
-          "flight": "AA2530",
-          "pax": 10,
-          "departs_min": 54.0
-        }
-      ],
-      "scheduled_gate": "B14",
-      "crew_shift_end_min": 524.0,
-      "next_departure_min": 99.0,
-      "provenance": [
-        {
-          "layer": "flights",
-          "status": "real",
-          "source": "real (DOT 2015 flights.csv)",
-          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local"
-        },
-        {
-          "layer": "aircraft",
-          "status": "generic",
-          "source": "assumed narrow-body",
-          "detail": "tail not in FAA registry"
-        },
-        {
-          "layer": "fuel",
-          "status": "simulated",
-          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "spare fuel on arrival = 45 min holding; final reserve 30 min"
-        },
-        {
-          "layer": "crew",
-          "status": "simulated",
-          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "ground shift 8 h, elapsed at sched arrival 400 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+455 min"
-        },
-        {
-          "layer": "connections",
-          "status": "simulated",
-          "source": "seeded model",
-          "detail": null
-        }
-      ],
-      "crew_duty_end_min": 455
-    },
-    {
-      "callsign": "AA2234",
-      "carrier": "AA",
-      "airline": "American Airlines Inc.",
-      "flight_no": 2234,
-      "tail": "N467AA",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "gate_size": "narrow",
-      "origin": "MCI",
-      "sched_arr": "2015-11-17T19:06:00",
-      "sched_min": 6.0,
-      "eta_earliest_min": 72.0,
-      "airborne": true,
-      "disrupted": false,
-      "delays": {
-        "weather": 0.0,
-        "late_aircraft": 40.0,
-        "nas": 10.0,
-        "carrier": 16.0,
-        "arr_delay": 66.0
-      },
-      "fuel": {
-        "extra_min": 45,
-        "alternate": "MDW",
-        "alternate_min": 11,
-        "final_reserve_min": 30
-      },
-      "connections": [
-        {
-          "flight": "AA186",
-          "pax": 31,
-          "departs_min": 113.0
-        },
-        {
-          "flight": "AA1786",
-          "pax": 20,
-          "departs_min": 59.0
-        }
-      ],
-      "scheduled_gate": "B15",
-      "crew_shift_end_min": 283.9789555496358,
-      "next_departure_min": 103.0,
-      "provenance": [
-        {
-          "layer": "flights",
-          "status": "real",
-          "source": "real (DOT 2015 flights.csv)",
-          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local"
-        },
-        {
-          "layer": "aircraft",
-          "status": "generic",
-          "source": "assumed narrow-body",
-          "detail": "tail not in FAA registry"
-        },
-        {
-          "layer": "fuel",
-          "status": "simulated",
-          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "spare fuel on arrival = 45 min holding; final reserve 30 min"
-        },
-        {
-          "layer": "crew",
-          "status": "simulated",
-          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "ground shift 8 h, elapsed at sched arrival 202 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+630 min"
-        },
-        {
-          "layer": "connections",
-          "status": "simulated",
-          "source": "seeded model",
-          "detail": null
-        }
-      ],
-      "crew_duty_end_min": 630
-    },
-    {
-      "callsign": "AA1425",
-      "carrier": "AA",
-      "airline": "American Airlines Inc.",
-      "flight_no": 1425,
-      "tail": "N472AA",
-      "aircraft_type": null,
-      "wake": "LARGE",
-      "gate_size": "narrow",
-      "origin": "STL",
-      "sched_arr": "2015-11-17T19:21:00",
-      "sched_min": 21.0,
-      "eta_earliest_min": 119.0,
-      "airborne": true,
-      "disrupted": false,
-      "delays": {
-        "weather": 0.0,
-        "late_aircraft": 97.0,
-        "nas": 1.0,
+        "late_aircraft": 384.0,
+        "nas": 35.0,
         "carrier": 0.0,
-        "arr_delay": 98.0
+        "arr_delay": 419.0
       },
       "fuel": {
         "extra_min": 45,
@@ -733,20 +593,166 @@
       },
       "connections": [
         {
-          "flight": "AA1782",
-          "pax": 24,
-          "departs_min": 118.0
+          "flight": "MQ1092",
+          "pax": 25,
+          "departs_min": 120.0
         }
       ],
-      "scheduled_gate": "B14",
-      "crew_shift_end_min": 170.0,
+      "scheduled_gate": "B22",
+      "crew_shift_end_min": 473.52274551048,
+      "next_departure_min": 107.0,
+      "provenance": [
+        {
+          "layer": "flights",
+          "status": "real",
+          "source": "real (DOT 2015 flights.csv)",
+          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local; scheduled times are gate times (BTS); landing = wheels-on; taxi-in 28 min (real TAXI_IN)"
+        },
+        {
+          "layer": "aircraft",
+          "status": "generic",
+          "source": "assumed narrow-body",
+          "detail": "tail not in FAA registry"
+        },
+        {
+          "layer": "fuel",
+          "status": "simulated",
+          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
+          "detail": "spare fuel on arrival = 45 min holding; final reserve 30 min"
+        },
+        {
+          "layer": "crew",
+          "status": "simulated",
+          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
+          "detail": "ground shift 8 h, elapsed at sched arrival 311 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+655 min"
+        },
+        {
+          "layer": "connections",
+          "status": "simulated",
+          "source": "seeded model",
+          "detail": null
+        }
+      ],
+      "crew_duty_end_min": 655,
+      "taxi_in_ref_min": 28.0
+    },
+    {
+      "callsign": "EV3273",
+      "carrier": "EV",
+      "airline": "Atlantic Southeast Airlines",
+      "flight_no": 3273,
+      "tail": "N13161",
+      "aircraft_type": "E145",
+      "wake": "LARGE",
+      "gate_size": "narrow",
+      "origin": "JAX",
+      "sched_arr": "2015-01-04T12:40:00",
+      "sched_min": 40.0,
+      "eta_earliest_min": 187.0,
+      "airborne": true,
+      "disrupted": false,
+      "delays": {
+        "weather": 0.0,
+        "late_aircraft": 143.0,
+        "nas": 29.0,
+        "carrier": 24.0,
+        "arr_delay": 196.0
+      },
+      "fuel": {
+        "extra_min": 45,
+        "alternate": "MDW",
+        "alternate_min": 11,
+        "final_reserve_min": 30
+      },
+      "connections": [
+        {
+          "flight": "EV1482",
+          "pax": 32,
+          "departs_min": 158.0
+        }
+      ],
+      "scheduled_gate": "M9",
+      "crew_shift_end_min": 235.61069964705734,
+      "next_departure_min": 150.0,
+      "provenance": [
+        {
+          "layer": "flights",
+          "status": "real",
+          "source": "real (DOT 2015 flights.csv)",
+          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local; scheduled times are gate times (BTS); landing = wheels-on; taxi-in 49 min (real TAXI_IN)"
+        },
+        {
+          "layer": "aircraft",
+          "status": "real",
+          "source": "FAA registry (current)",
+          "detail": "EMBRAER EMB-145XR"
+        },
+        {
+          "layer": "fuel",
+          "status": "simulated",
+          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
+          "detail": "spare fuel on arrival = 45 min holding; final reserve 30 min"
+        },
+        {
+          "layer": "crew",
+          "status": "simulated",
+          "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
+          "detail": "ground shift 8 h, elapsed at sched arrival 301 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+662 min"
+        },
+        {
+          "layer": "connections",
+          "status": "simulated",
+          "source": "seeded model",
+          "detail": null
+        }
+      ],
+      "crew_duty_end_min": 662,
+      "taxi_in_ref_min": 49.0
+    },
+    {
+      "callsign": "EV4125",
+      "carrier": "EV",
+      "airline": "Atlantic Southeast Airlines",
+      "flight_no": 4125,
+      "tail": "N13970",
+      "aircraft_type": null,
+      "wake": "LARGE",
+      "gate_size": "narrow",
+      "origin": "SAV",
+      "sched_arr": "2015-01-04T12:40:00",
+      "sched_min": 40.0,
+      "eta_earliest_min": 77.0,
+      "airborne": true,
+      "disrupted": false,
+      "delays": {
+        "weather": 0.0,
+        "late_aircraft": 26.0,
+        "nas": 16.0,
+        "carrier": 19.0,
+        "arr_delay": 61.0
+      },
+      "fuel": {
+        "extra_min": 45,
+        "alternate": "MDW",
+        "alternate_min": 11,
+        "final_reserve_min": 30
+      },
+      "connections": [
+        {
+          "flight": "EV2516",
+          "pax": 24,
+          "departs_min": 113.0
+        }
+      ],
+      "scheduled_gate": "B18",
+      "crew_shift_end_min": 373.41458427240946,
       "next_departure_min": 106.0,
       "provenance": [
         {
           "layer": "flights",
           "status": "real",
           "source": "real (DOT 2015 flights.csv)",
-          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local"
+          "detail": "airborne inferred from scheduled departure vs window start; DOT times are local; scheduled times are gate times (BTS); landing = wheels-on; taxi-in 24 min (real TAXI_IN)"
         },
         {
           "layer": "aircraft",
@@ -764,7 +770,7 @@
           "layer": "crew",
           "status": "simulated",
           "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-          "detail": "ground shift 8 h, elapsed at sched arrival 336 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+654 min"
+          "detail": "ground shift 8 h, elapsed at sched arrival 147 min (seeded), floored at earliest turnaround end; flight crew report = sched dep - 60 min, 13 h duty ends T+681 min"
         },
         {
           "layer": "connections",
@@ -773,7 +779,8 @@
           "detail": null
         }
       ],
-      "crew_duty_end_min": 654
+      "crew_duty_end_min": 681,
+      "taxi_in_ref_min": 24.0
     }
   ],
   "gates": [
@@ -782,16 +789,10 @@
       "size": "narrow",
       "pier": "M",
       "remote": false,
-      "busy": [
-        {
-          "from_min": -60,
-          "to_min": 54,
-          "label": "other-flight (simulated)"
-        }
-      ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "busy": [],
+      "lat": 41.9756576,
+      "lon": -87.8925185,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B22",
@@ -801,13 +802,13 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 69,
+          "to_min": 17,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9822448,
+      "lon": -87.9041787,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B21",
@@ -817,13 +818,13 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 75,
+          "to_min": 55,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9822264,
+      "lon": -87.9046646,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B20",
@@ -833,29 +834,23 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 29,
+          "to_min": 59,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9822277,
+      "lon": -87.9051486,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B19",
       "size": "narrow",
       "pier": "B",
       "remote": false,
-      "busy": [
-        {
-          "from_min": -60,
-          "to_min": 32,
-          "label": "other-flight (simulated)"
-        }
-      ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "busy": [],
+      "lat": 41.9822218,
+      "lon": -87.9056334,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B18",
@@ -865,13 +860,13 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 73,
+          "to_min": 35,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9821336,
+      "lon": -87.9060917,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B17",
@@ -881,13 +876,13 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 21,
+          "to_min": 49,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9821,
+      "lon": -87.9067634,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B16",
@@ -897,33 +892,45 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 61,
+          "to_min": 45,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9814466,
+      "lon": -87.9070457,
+      "geo_src": "osm-ref"
     },
     {
       "id": "B15",
       "size": "narrow",
       "pier": "B",
       "remote": false,
-      "busy": [],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "busy": [
+        {
+          "from_min": -60,
+          "to_min": 35,
+          "label": "other-flight (simulated)"
+        }
+      ],
+      "lat": 41.9814615,
+      "lon": -87.9070095,
+      "geo_src": "osm-near"
     },
     {
       "id": "B14",
       "size": "narrow",
       "pier": "B",
       "remote": false,
-      "busy": [],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "busy": [
+        {
+          "from_min": -60,
+          "to_min": 26,
+          "label": "other-flight (simulated)"
+        }
+      ],
+      "lat": 41.9808934,
+      "lon": -87.9071158,
+      "geo_src": "osm-ref"
     },
     {
       "id": "W1",
@@ -931,9 +938,9 @@
       "pier": "W",
       "remote": false,
       "busy": [],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9756464,
+      "lon": -87.9016063,
+      "geo_src": "osm-generic"
     },
     {
       "id": "W2",
@@ -943,13 +950,13 @@
       "busy": [
         {
           "from_min": -60,
-          "to_min": 61,
+          "to_min": 35,
           "label": "other-flight (simulated)"
         }
       ],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.9754371,
+      "lon": -87.9019958,
+      "geo_src": "osm-generic"
     },
     {
       "id": "RS",
@@ -957,9 +964,9 @@
       "pier": "R",
       "remote": true,
       "busy": [],
-      "lat": null,
-      "lon": null,
-      "geo_src": null
+      "lat": 41.999268,
+      "lon": -87.9217246,
+      "geo_src": "osm-generic"
     }
   ],
   "provenance": [
@@ -967,7 +974,7 @@
       "layer": "flights",
       "status": "real",
       "source": "real (DOT 2015 flights.csv)",
-      "detail": "row 310938"
+      "detail": "row 7053"
     },
     {
       "layer": "queue",
@@ -985,7 +992,7 @@
       "layer": "weather",
       "status": "real",
       "source": "IEM METAR",
-      "detail": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117"
+      "detail": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034"
     },
     {
       "layer": "gates",
@@ -997,186 +1004,203 @@
       "layer": "gate_occupancy",
       "status": "simulated",
       "source": "challenge2_operational_constraints.xlsx (synthetic planning limits)",
-      "detail": "only 3 gates free at window start; seed=F2015-310938"
+      "detail": "only 3 gates free at window start; seed=F2015-7053"
+    },
+    {
+      "layer": "surface",
+      "status": "real",
+      "source": "OpenStreetMap 2026-11-02T23:46:51Z",
+      "detail": "real quality gate: every open runway end in OSM reaches >= 80% of the wave's 13 OSM-bound stands; open ends missing from today's OSM (32R) use the straight-line estimate"
+    },
+    {
+      "layer": "ground_traffic",
+      "status": "generic",
+      "source": "challenge flights.csv subset",
+      "detail": "partial: 15 queue arrivals only, no departures (no BTS 2015 movements for this airport and day); scheduled over the 30-min horizon or with an unresolved conflict (still reserved): 0; not routed on the OSM taxi graph (runway events only): 8 (EV6112, MQ3128, MQ3151, MQ2981, EV4731, OO5361, OO6229, MQ3460)"
     }
   ],
   "severity": null,
-  "focus": "AA1444",
-  "engine_version": "v3-air",
+  "focus": "MQ3269",
+  "engine_version": "v3-taxi",
   "geo_available": true,
   "status_quo": {
     "plan": {
-      "id": "6e2885f240",
-      "label": "UA226 R14R T+88 B15 \u00b7 AA1444 R14R T+473 B14 \u00b7 AA2234 R14R T+72 B15 \u00b7 AA1425 R14R T+119 B14",
+      "id": "f8919a1abf",
+      "label": "OO6254 R32R T+76 B19 \u00b7 MQ3269 R32R T+426 B22 \u00b7 EV3273 R32R T+187 M9 \u00b7 EV4125 R32R T+82.7 B18",
       "assignments": [
         {
-          "callsign": "UA226",
+          "callsign": "OO6254",
           "action": "land",
-          "runway": "14R",
-          "slot_min": 88.0,
-          "gate": "B15",
+          "runway": "32R",
+          "slot_min": 76.0,
+          "gate": "B19",
           "speed_reduction_min": 0.0,
           "ground_delay_min": 0.0,
           "metrics": {
             "hold_min": 0.0,
             "fuel_kg": 0.0,
-            "delay_min": 89.0,
-            "in_block_min": 98.0,
-            "pax_protected": 0,
-            "pax_total": 51,
-            "overtime_min": 4.0,
-            "next_dep_delay_min": 53.0,
-            "hold_laps": 0,
-            "hold_fix": null,
-            "hold_level_ft": null,
-            "lap_min": 5.359877142506221,
-            "vector_min": 0.0,
-            "route_min": 46.10954148273063,
-            "route_extra_min": 0.0,
-            "exit": null,
-            "rot_s": null,
-            "taxi_unimpeded_min": null,
-            "taxi_wait_min": 0.0,
-            "taxi_min": null
-          }
-        },
-        {
-          "callsign": "AA1444",
-          "action": "land",
-          "runway": "14R",
-          "slot_min": 473.0,
-          "gate": "B14",
-          "speed_reduction_min": 0.0,
-          "ground_delay_min": 0.0,
-          "metrics": {
-            "hold_min": 0.0,
-            "fuel_kg": 0.0,
-            "delay_min": 472.0,
-            "in_block_min": 483.0,
-            "pax_protected": 0,
-            "pax_total": 33,
-            "overtime_min": 4.0,
-            "next_dep_delay_min": 429.0,
-            "hold_laps": 0,
-            "hold_fix": null,
-            "hold_level_ft": null,
-            "lap_min": 5.359877142506221,
-            "vector_min": 0.0,
-            "route_min": 44.78702503588325,
-            "route_extra_min": 0.0,
-            "exit": null,
-            "rot_s": null,
-            "taxi_unimpeded_min": null,
-            "taxi_wait_min": 0.0,
-            "taxi_min": null
-          }
-        },
-        {
-          "callsign": "AA2234",
-          "action": "land",
-          "runway": "14R",
-          "slot_min": 72.0,
-          "gate": "B15",
-          "speed_reduction_min": 0.0,
-          "ground_delay_min": 0.0,
-          "metrics": {
-            "hold_min": 0.0,
-            "fuel_kg": 0.0,
-            "delay_min": 70.0,
-            "in_block_min": 82.0,
-            "pax_protected": 0,
-            "pax_total": 51,
+            "delay_min": 48.1,
+            "in_block_min": 80.1,
+            "pax_protected": 26,
+            "pax_total": 64,
             "overtime_min": 0.0,
-            "next_dep_delay_min": 24.0,
+            "next_dep_delay_min": 0.0,
             "hold_laps": 0,
             "hold_fix": null,
             "hold_level_ft": null,
             "lap_min": 5.359877142506221,
             "vector_min": 0.0,
-            "route_min": 44.78702503588325,
+            "route_min": 50.094162897179714,
             "route_extra_min": 0.0,
             "exit": null,
-            "rot_s": null,
-            "taxi_unimpeded_min": null,
+            "rot_s": 48.59615429473372,
+            "taxi_unimpeded_min": 3.30247246859528,
             "taxi_wait_min": 0.0,
-            "taxi_min": null
+            "taxi_min": 3.30247246859528
           }
         },
         {
-          "callsign": "AA1425",
+          "callsign": "MQ3269",
           "action": "land",
-          "runway": "14R",
-          "slot_min": 119.0,
-          "gate": "B14",
+          "runway": "32R",
+          "slot_min": 426.0,
+          "gate": "B22",
           "speed_reduction_min": 0.0,
           "ground_delay_min": 0.0,
           "metrics": {
             "hold_min": 0.0,
             "fuel_kg": 0.0,
-            "delay_min": 102.0,
-            "in_block_min": 129.0,
+            "delay_min": 395.1,
+            "in_block_min": 430.1,
+            "pax_protected": 0,
+            "pax_total": 25,
+            "overtime_min": 1.5,
+            "next_dep_delay_min": 368.1,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": 5.359877142506221,
+            "vector_min": 0.0,
+            "route_min": 31.914493757226687,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": 48.59615429473372,
+            "taxi_unimpeded_min": 3.256969106068024,
+            "taxi_wait_min": 0.0,
+            "taxi_min": 3.256969106068024
+          }
+        },
+        {
+          "callsign": "EV3273",
+          "action": "land",
+          "runway": "32R",
+          "slot_min": 187.0,
+          "gate": "M9",
+          "speed_reduction_min": 0.0,
+          "ground_delay_min": 0.0,
+          "metrics": {
+            "hold_min": 0.0,
+            "fuel_kg": 0.0,
+            "delay_min": 153.9,
+            "in_block_min": 193.9,
+            "pax_protected": 0,
+            "pax_total": 32,
+            "overtime_min": 3.3,
+            "next_dep_delay_min": 88.9,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": 5.414068709320837,
+            "vector_min": 0.0,
+            "route_min": 34.04200252921927,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": 48.59615429473372,
+            "taxi_unimpeded_min": 6.122415155755302,
+            "taxi_wait_min": 0.0,
+            "taxi_min": 6.122415155755302
+          }
+        },
+        {
+          "callsign": "EV4125",
+          "action": "land",
+          "runway": "32R",
+          "slot_min": 82.7,
+          "gate": "B18",
+          "speed_reduction_min": 0.0,
+          "ground_delay_min": 0.0,
+          "metrics": {
+            "hold_min": 5.7,
+            "fuel_kg": 228.0,
+            "delay_min": 46.9,
+            "in_block_min": 86.9,
             "pax_protected": 0,
             "pax_total": 24,
-            "overtime_min": 4.0,
-            "next_dep_delay_min": 68.0,
-            "hold_laps": 0,
-            "hold_fix": null,
-            "hold_level_ft": null,
-            "lap_min": 5.359877142506221,
-            "vector_min": 0.0,
-            "route_min": 44.44069462608081,
+            "overtime_min": 0.0,
+            "next_dep_delay_min": 25.9,
+            "hold_laps": 1,
+            "hold_fix": "WATSN",
+            "hold_level_ft": 13000,
+            "lap_min": 5.414068709320837,
+            "vector_min": 0.2859312906791658,
+            "route_min": 34.04200252921927,
             "route_extra_min": 0.0,
             "exit": null,
-            "rot_s": null,
-            "taxi_unimpeded_min": null,
+            "rot_s": 48.59615429473372,
+            "taxi_unimpeded_min": 3.351644041007432,
             "taxi_wait_min": 0.0,
-            "taxi_min": null
+            "taxi_min": 3.351644041007432
           }
         }
       ]
     },
     "evaluation": {
-      "plan_id": "6e2885f240",
-      "feasible": false,
+      "plan_id": "f8919a1abf",
+      "feasible": true,
       "checks": [
         {
           "rule": "ATC-RWY-OPEN",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226: runway 14R open, landing with the flow",
+          "detail": "OO6254: runway 32R open, landing with the flow",
           "source": "airport runway status",
           "evidence": {
-            "runway": "14R",
+            "runway": "32R",
             "open": "yes",
-            "strip": "14R/32L"
+            "strip": "14L/32R"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-WAKE-SEP",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226 on 14R (strip 14R/32L) at T+88: wake separation met (weather factor x1)",
+          "detail": "OO6254 on 32R (strip 14L/32R) at T+76: wake separation met (weather factor x1.25)",
           "source": "challenge2_operational_constraints.xlsx wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "slot_min": 88.0,
+            "runway": "32R",
+            "strip": "14L/32R",
+            "slot_min": 76.0,
             "wake": "LARGE",
-            "weather_factor": 1.0,
-            "leader": "AA2234",
+            "weather_factor": 1.25,
+            "leader": "MQ3151",
             "leader_wake": "LARGE",
-            "leader_runway": "14R",
-            "gap_behind_min": 16.0,
-            "required_behind_min": 1.28
+            "leader_runway": "32R",
+            "gap_behind_min": 34.0,
+            "required_behind_min": 1.6,
+            "follower": "MQ2981",
+            "follower_wake": "LARGE",
+            "follower_runway": "32R",
+            "gap_ahead_min": 3.0,
+            "required_ahead_min": 1.6
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-HOLD-STACK",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226: no whole holding lap, not in a stack",
+          "detail": "OO6254: no whole holding lap, not in a stack",
           "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
           "evidence": {
             "hold_fix": "none",
@@ -1185,66 +1209,72 @@
             "holders": 0,
             "levels": 5
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226: taxi route 14R -> pier B available (10 min); no taxiway closures in data",
-          "source": "ops rule",
+          "detail": "OO6254: taxi 32R -> gate B19 3.3 min, straight-line estimate (runway end not in today's OSM)",
+          "source": "generic surface (straight line x1.4 at 15 kt)",
           "evidence": {
-            "runway": "14R",
-            "gate": "B15",
-            "taxi_min": 10.0
+            "runway": "32R",
+            "exit": "generic",
+            "gate": "B19",
+            "stand": "B19",
+            "route": "none",
+            "crossings": "none",
+            "unimpeded_min": 3.3,
+            "tier": "generic",
+            "rot_s": 48.6
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-WIND-LIMITS",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226 (A320) on 14R: crosswind 4/20 kt, tailwind 0/5 kt within limits [METAR KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117]",
-          "source": "FAA Order 8400.9 \u00a76d (dry)",
+          "detail": "OO6254 (E170) on 32R: crosswind 0/15 kt, tailwind 0/0 kt within limits [METAR KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034]",
+          "source": "FAA Order 8400.9 \u00a76d (wet)",
           "evidence": {
-            "metar": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117",
-            "runway": "14R",
-            "surface": "dry",
-            "headwind_kt": 17.7,
-            "crosswind_kt": 4.0,
+            "metar": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034",
+            "runway": "32R",
+            "surface": "wet",
+            "headwind_kt": 14.0,
+            "crosswind_kt": 0.0,
             "tailwind_kt": 0.0,
-            "limit_crosswind_kt": 20.0,
-            "limit_tailwind_kt": 5.0,
-            "aircraft_type": "A320"
+            "limit_crosswind_kt": 15.0,
+            "limit_tailwind_kt": 0.0,
+            "aircraft_type": "E170"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "UA226: slot T+88 >= earliest achievable T+88.00 on 14R (entry T+41.89 at MCW + 46.11 min route to 14R + speed reduction 0 + ground delay 0)",
+          "detail": "OO6254: slot T+76 >= earliest achievable T+76.00 on 32R (entry T+25.91 at IRK + 50.09 min route to 32R + speed reduction 0 + ground delay 0)",
           "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
-            "slot_min": 88.0,
-            "eta_earliest_min": 88.0,
-            "earliest_min": 88.0,
-            "runway": "14R",
-            "route_min": 46.11,
+            "slot_min": 76.0,
+            "eta_earliest_min": 76.0,
+            "earliest_min": 76.0,
+            "runway": "32R",
+            "route_min": 50.09,
             "route_extra_min": 0.0,
-            "entry_fix": "MCW",
-            "t_entry": 41.89,
+            "entry_fix": "IRK",
+            "t_entry": 25.91,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "PLT-FUEL-RESERVE",
           "owner": "PILOT",
           "passed": true,
-          "detail": "UA226: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
+          "detail": "OO6254: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
@@ -1257,136 +1287,134 @@
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "PLT-CREW-DUTY",
           "owner": "PILOT",
           "passed": true,
-          "detail": "UA226: in-block T+98 <= crew duty end T+622",
+          "detail": "OO6254: in-block T+80.1 <= crew duty end T+660",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)",
           "evidence": {
-            "arrival_min": 98.0,
-            "crew_duty_end_min": 622,
+            "arrival_min": 80.1,
+            "crew_duty_end_min": 660,
             "earliest_arrival_min": 78.0,
-            "earliest_runway": "10L",
+            "earliest_runway": "27L",
+            "taxi": 2.33,
             "unavoidable_bust": "no"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "GND-GATE-SIZE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "UA226: gate B15 (narrow-body) fits A320 (narrow-body)",
+          "detail": "OO6254: gate B19 (narrow-body) fits E170 (narrow-body)",
           "source": "ops rule",
           "evidence": {
-            "gate": "B15",
+            "gate": "B19",
             "gate_size": "narrow",
             "aircraft_size": "narrow"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "GND-GATE-FREE",
           "owner": "GROUND",
-          "passed": false,
-          "detail": "Gate B15 occupied by AA2234 T+82..T+127, UA226 needs T+98..T+143",
+          "passed": true,
+          "detail": "Gate B19 free T+80.1..T+125.1",
           "source": "ops rule",
           "evidence": {
-            "gate": "B15",
-            "need_from_min": 98.0,
-            "need_to_min": 143.0,
-            "turnaround_min": 45.0,
-            "conflict": "AA2234",
-            "conflict_from_min": 82.0,
-            "conflict_to_min": 127.0
+            "gate": "B19",
+            "need_from_min": 80.1,
+            "need_to_min": 125.1,
+            "turnaround_min": 45.0
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "GND-GATE-NOTICE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "UA226: keeps scheduled gate B15",
+          "detail": "OO6254: keeps scheduled gate B19",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (gate change notice >= 20 min before arrival)",
           "evidence": {
-            "scheduled_gate": "B15",
-            "gate": "B15",
-            "arrival_min": 88.0,
+            "scheduled_gate": "B19",
+            "gate": "B19",
+            "arrival_min": 76.0,
             "notice_min": 20.0,
             "remote": "no"
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "GND-CREW-DUTY",
           "owner": "GROUND",
           "passed": true,
-          "detail": "UA226: turnaround ends T+143, crew shift ends T+139 (4 min overtime at x1.5 cost = 6 paid min)",
+          "detail": "OO6254: turnaround ends T+125.1, crew shift ends T+125.409 (no overtime)",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (ground crew shift 8 h, overtime 1.5x)",
           "evidence": {
-            "turnaround_end_min": 143.0,
-            "crew_shift_end_min": 139.0,
-            "overtime_min": 4.0,
+            "turnaround_end_min": 125.1,
+            "crew_shift_end_min": 125.40922294569947,
+            "overtime_min": 0.0,
             "overtime_mult": 1.5
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-RWY-CAPACITY",
           "owner": "ATC",
           "passed": true,
-          "detail": "UA226: 7 landings on runway 14R/32L in the 60 min to T+88 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
+          "detail": "OO6254: 4 landings on runway 14L/32R in the 60 min to T+76 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
           "source": "challenge2_operational_constraints.xlsx airport_capacity (max_runway_ops_per_hour / active_runways)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "landings_60min": 7,
+            "runway": "32R",
+            "strip": "14L/32R",
+            "landings_60min": 4,
             "cap_per_runway_h": 22,
             "max_runway_ops_per_hour": 90,
             "active_runways": 4
           },
-          "callsign": "UA226"
+          "callsign": "OO6254"
         },
         {
           "rule": "ATC-RWY-OPEN",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444: runway 14R open, landing with the flow",
+          "detail": "MQ3269: runway 32R open, landing with the flow",
           "source": "airport runway status",
           "evidence": {
-            "runway": "14R",
+            "runway": "32R",
             "open": "yes",
-            "strip": "14R/32L"
+            "strip": "14L/32R"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-WAKE-SEP",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444 on 14R (strip 14R/32L) at T+473: wake separation met (weather factor x1)",
+          "detail": "MQ3269 on 32R (strip 14L/32R) at T+426: wake separation met (weather factor x1.25)",
           "source": "challenge2_operational_constraints.xlsx wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "slot_min": 473.0,
+            "runway": "32R",
+            "strip": "14L/32R",
+            "slot_min": 426.0,
             "wake": "LARGE",
-            "weather_factor": 1.0,
-            "leader": "AA1425",
+            "weather_factor": 1.25,
+            "leader": "EV3273",
             "leader_wake": "LARGE",
-            "leader_runway": "14R",
-            "gap_behind_min": 354.0,
-            "required_behind_min": 1.28
+            "leader_runway": "32R",
+            "gap_behind_min": 239.0,
+            "required_behind_min": 1.6
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-HOLD-STACK",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444: no whole holding lap, not in a stack",
+          "detail": "MQ3269: no whole holding lap, not in a stack",
           "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
           "evidence": {
             "hold_fix": "none",
@@ -1395,66 +1423,72 @@
             "holders": 0,
             "levels": 5
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444: taxi route 14R -> pier B available (10 min); no taxiway closures in data",
-          "source": "ops rule",
+          "detail": "MQ3269: taxi 32R -> gate B22 3.3 min, straight-line estimate (runway end not in today's OSM)",
+          "source": "generic surface (straight line x1.4 at 15 kt)",
           "evidence": {
-            "runway": "14R",
-            "gate": "B14",
-            "taxi_min": 10.0
+            "runway": "32R",
+            "exit": "generic",
+            "gate": "B22",
+            "stand": "B22",
+            "route": "none",
+            "crossings": "none",
+            "unimpeded_min": 3.26,
+            "tier": "generic",
+            "rot_s": 48.6
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-WIND-LIMITS",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444 (unknown type) on 14R: crosswind 4/20 kt, tailwind 0/5 kt within limits [METAR KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117]",
-          "source": "FAA Order 8400.9 \u00a76d (dry)",
+          "detail": "MQ3269 (unknown type) on 32R: crosswind 0/15 kt, tailwind 0/0 kt within limits [METAR KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034]",
+          "source": "FAA Order 8400.9 \u00a76d (wet)",
           "evidence": {
-            "metar": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117",
-            "runway": "14R",
-            "surface": "dry",
-            "headwind_kt": 17.7,
-            "crosswind_kt": 4.0,
+            "metar": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034",
+            "runway": "32R",
+            "surface": "wet",
+            "headwind_kt": 14.0,
+            "crosswind_kt": 0.0,
             "tailwind_kt": 0.0,
-            "limit_crosswind_kt": 20.0,
-            "limit_tailwind_kt": 5.0,
+            "limit_crosswind_kt": 15.0,
+            "limit_tailwind_kt": 0.0,
             "aircraft_type": "unknown"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA1444: slot T+473 >= earliest achievable T+473.00 on 14R (entry T+428.21 at IRK + 44.79 min route to 14R + speed reduction 0 + ground delay 0)",
+          "detail": "MQ3269: slot T+426 >= earliest achievable T+426.00 on 32R (entry T+394.09 at PNTAC + 31.91 min route to 32R + speed reduction 0 + ground delay 0)",
           "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
-            "slot_min": 473.0,
-            "eta_earliest_min": 473.0,
-            "earliest_min": 473.0,
-            "runway": "14R",
-            "route_min": 44.79,
+            "slot_min": 426.0,
+            "eta_earliest_min": 426.0,
+            "earliest_min": 426.0,
+            "runway": "32R",
+            "route_min": 31.91,
             "route_extra_min": 0.0,
-            "entry_fix": "IRK",
-            "t_entry": 428.21,
+            "entry_fix": "PNTAC",
+            "t_entry": 394.09,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "PLT-FUEL-RESERVE",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA1444: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
+          "detail": "MQ3269: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
@@ -1467,133 +1501,134 @@
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "PLT-CREW-DUTY",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA1444: in-block T+483 > crew duty end T+455: unavoidable duty bust (data), earliest landing in-block T+483.0 (on 14R) is already past it",
+          "detail": "MQ3269: in-block T+430.1 <= crew duty end T+655",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)",
           "evidence": {
-            "arrival_min": 483.0,
-            "crew_duty_end_min": 455,
-            "earliest_arrival_min": 483.0,
-            "earliest_runway": "14R",
-            "unavoidable_bust": "yes"
+            "arrival_min": 430.1,
+            "crew_duty_end_min": 655,
+            "earliest_arrival_min": 424.9,
+            "earliest_runway": "04L",
+            "taxi": 2.52,
+            "unavoidable_bust": "no"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "GND-GATE-SIZE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA1444: gate B14 (narrow-body) fits  (narrow-body)",
+          "detail": "MQ3269: gate B22 (narrow-body) fits  (narrow-body)",
           "source": "ops rule",
           "evidence": {
-            "gate": "B14",
+            "gate": "B22",
             "gate_size": "narrow",
             "aircraft_size": "narrow"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "GND-GATE-FREE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "Gate B14 free T+483..T+528",
+          "detail": "Gate B22 free T+430.1..T+475.1",
           "source": "ops rule",
           "evidence": {
-            "gate": "B14",
-            "need_from_min": 483.0,
-            "need_to_min": 528.0,
+            "gate": "B22",
+            "need_from_min": 430.1,
+            "need_to_min": 475.1,
             "turnaround_min": 45.0
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "GND-GATE-NOTICE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA1444: keeps scheduled gate B14",
+          "detail": "MQ3269: keeps scheduled gate B22",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (gate change notice >= 20 min before arrival)",
           "evidence": {
-            "scheduled_gate": "B14",
-            "gate": "B14",
-            "arrival_min": 473.0,
+            "scheduled_gate": "B22",
+            "gate": "B22",
+            "arrival_min": 426.0,
             "notice_min": 20.0,
             "remote": "no"
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "GND-CREW-DUTY",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA1444: turnaround ends T+528, crew shift ends T+524 (4 min overtime at x1.5 cost = 6 paid min)",
+          "detail": "MQ3269: turnaround ends T+475.1, crew shift ends T+473.523 (1.5 min overtime at x1.5 cost = 2.25 paid min)",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (ground crew shift 8 h, overtime 1.5x)",
           "evidence": {
-            "turnaround_end_min": 528.0,
-            "crew_shift_end_min": 524.0,
-            "overtime_min": 4.0,
+            "turnaround_end_min": 475.1,
+            "crew_shift_end_min": 473.52274551048,
+            "overtime_min": 1.5,
             "overtime_mult": 1.5
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-RWY-CAPACITY",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA1444: 1 landings on runway 14R/32L in the 60 min to T+473 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
+          "detail": "MQ3269: 1 landings on runway 14L/32R in the 60 min to T+426 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
           "source": "challenge2_operational_constraints.xlsx airport_capacity (max_runway_ops_per_hour / active_runways)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
+            "runway": "32R",
+            "strip": "14L/32R",
             "landings_60min": 1,
             "cap_per_runway_h": 22,
             "max_runway_ops_per_hour": 90,
             "active_runways": 4
           },
-          "callsign": "AA1444"
+          "callsign": "MQ3269"
         },
         {
           "rule": "ATC-RWY-OPEN",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234: runway 14R open, landing with the flow",
+          "detail": "EV3273: runway 32R open, landing with the flow",
           "source": "airport runway status",
           "evidence": {
-            "runway": "14R",
+            "runway": "32R",
             "open": "yes",
-            "strip": "14R/32L"
+            "strip": "14L/32R"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "ATC-WAKE-SEP",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234 on 14R (strip 14R/32L) at T+72: wake separation met (weather factor x1)",
+          "detail": "EV3273 on 32R (strip 14L/32R) at T+187: wake separation met (weather factor x1.25)",
           "source": "challenge2_operational_constraints.xlsx wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "slot_min": 72.0,
+            "runway": "32R",
+            "strip": "14L/32R",
+            "slot_min": 187.0,
             "wake": "LARGE",
-            "weather_factor": 1.0,
-            "leader": "OO4990",
+            "weather_factor": 1.25,
+            "leader": "MQ3460",
             "leader_wake": "LARGE",
-            "leader_runway": "14R",
-            "gap_behind_min": 13.0,
-            "required_behind_min": 1.28
+            "leader_runway": "32R",
+            "gap_behind_min": 18.0,
+            "required_behind_min": 1.6
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "ATC-HOLD-STACK",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234: no whole holding lap, not in a stack",
+          "detail": "EV3273: no whole holding lap, not in a stack",
           "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
           "evidence": {
             "hold_fix": "none",
@@ -1602,66 +1637,72 @@
             "holders": 0,
             "levels": 5
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234: taxi route 14R -> pier B available (10 min); no taxiway closures in data",
-          "source": "ops rule",
+          "detail": "EV3273: taxi 32R -> gate M9 6.1 min, straight-line estimate (runway end not in today's OSM)",
+          "source": "generic surface (straight line x1.4 at 15 kt)",
           "evidence": {
-            "runway": "14R",
-            "gate": "B15",
-            "taxi_min": 10.0
+            "runway": "32R",
+            "exit": "generic",
+            "gate": "M9",
+            "stand": "M9",
+            "route": "none",
+            "crossings": "none",
+            "unimpeded_min": 6.12,
+            "tier": "generic",
+            "rot_s": 48.6
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "ATC-WIND-LIMITS",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234 (unknown type) on 14R: crosswind 4/20 kt, tailwind 0/5 kt within limits [METAR KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117]",
-          "source": "FAA Order 8400.9 \u00a76d (dry)",
+          "detail": "EV3273 (E145) on 32R: crosswind 0/15 kt, tailwind 0/0 kt within limits [METAR KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034]",
+          "source": "FAA Order 8400.9 \u00a76d (wet)",
           "evidence": {
-            "metar": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117",
-            "runway": "14R",
-            "surface": "dry",
-            "headwind_kt": 17.7,
-            "crosswind_kt": 4.0,
+            "metar": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034",
+            "runway": "32R",
+            "surface": "wet",
+            "headwind_kt": 14.0,
+            "crosswind_kt": 0.0,
             "tailwind_kt": 0.0,
-            "limit_crosswind_kt": 20.0,
-            "limit_tailwind_kt": 5.0,
-            "aircraft_type": "unknown"
+            "limit_crosswind_kt": 15.0,
+            "limit_tailwind_kt": 0.0,
+            "aircraft_type": "E145"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA2234: slot T+72 >= earliest achievable T+72.00 on 14R (entry T+27.21 at IRK + 44.79 min route to 14R + speed reduction 0 + ground delay 0)",
+          "detail": "EV3273: slot T+187 >= earliest achievable T+187.00 on 32R (entry T+152.96 at BONNT + 34.04 min route to 32R + speed reduction 0 + ground delay 0)",
           "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
-            "slot_min": 72.0,
-            "eta_earliest_min": 72.0,
-            "earliest_min": 72.0,
-            "runway": "14R",
-            "route_min": 44.79,
+            "slot_min": 187.0,
+            "eta_earliest_min": 187.0,
+            "earliest_min": 187.0,
+            "runway": "32R",
+            "route_min": 34.04,
             "route_extra_min": 0.0,
-            "entry_fix": "IRK",
-            "t_entry": 27.21,
+            "entry_fix": "BONNT",
+            "t_entry": 152.96,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "PLT-FUEL-RESERVE",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA2234: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
+          "detail": "EV3273: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
@@ -1669,322 +1710,337 @@
             "need_min": 0.0,
             "extra_min": 45.0,
             "laps": 0,
-            "lap_min": 5.36,
+            "lap_min": 5.41,
             "hold_fix": "none",
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "PLT-CREW-DUTY",
           "owner": "PILOT",
           "passed": true,
-          "detail": "AA2234: in-block T+82 <= crew duty end T+630",
+          "detail": "EV3273: in-block T+193.9 <= crew duty end T+662",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)",
           "evidence": {
-            "arrival_min": 82.0,
-            "crew_duty_end_min": 630,
-            "earliest_arrival_min": 82.0,
-            "earliest_runway": "14R",
+            "arrival_min": 193.9,
+            "crew_duty_end_min": 662,
+            "earliest_arrival_min": 193.9,
+            "earliest_runway": "32R",
+            "taxi": 3.61,
             "unavoidable_bust": "no"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "GND-GATE-SIZE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA2234: gate B15 (narrow-body) fits  (narrow-body)",
+          "detail": "EV3273: gate M9 (narrow-body) fits E145 (narrow-body)",
           "source": "ops rule",
           "evidence": {
-            "gate": "B15",
+            "gate": "M9",
             "gate_size": "narrow",
             "aircraft_size": "narrow"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "GND-GATE-FREE",
           "owner": "GROUND",
-          "passed": false,
-          "detail": "Gate B15 occupied by UA226 T+98..T+143, AA2234 needs T+82..T+127",
+          "passed": true,
+          "detail": "Gate M9 free T+193.9..T+238.9",
           "source": "ops rule",
           "evidence": {
-            "gate": "B15",
-            "need_from_min": 82.0,
-            "need_to_min": 127.0,
-            "turnaround_min": 45.0,
-            "conflict": "UA226",
-            "conflict_from_min": 98.0,
-            "conflict_to_min": 143.0
+            "gate": "M9",
+            "need_from_min": 193.9,
+            "need_to_min": 238.9,
+            "turnaround_min": 45.0
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "GND-GATE-NOTICE",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA2234: keeps scheduled gate B15",
+          "detail": "EV3273: keeps scheduled gate M9",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (gate change notice >= 20 min before arrival)",
           "evidence": {
-            "scheduled_gate": "B15",
-            "gate": "B15",
-            "arrival_min": 72.0,
+            "scheduled_gate": "M9",
+            "gate": "M9",
+            "arrival_min": 187.0,
             "notice_min": 20.0,
             "remote": "no"
           },
-          "callsign": "AA2234"
+          "callsign": "EV3273"
         },
         {
           "rule": "GND-CREW-DUTY",
           "owner": "GROUND",
           "passed": true,
-          "detail": "AA2234: turnaround ends T+127, crew shift ends T+283.979 (no overtime)",
+          "detail": "EV3273: turnaround ends T+238.9, crew shift ends T+235.611 (3.3 min overtime at x1.5 cost = 4.95 paid min)",
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (ground crew shift 8 h, overtime 1.5x)",
           "evidence": {
-            "turnaround_end_min": 127.0,
-            "crew_shift_end_min": 283.9789555496358,
+            "turnaround_end_min": 238.9,
+            "crew_shift_end_min": 235.61069964705734,
+            "overtime_min": 3.3,
+            "overtime_mult": 1.5
+          },
+          "callsign": "EV3273"
+        },
+        {
+          "rule": "ATC-RWY-CAPACITY",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV3273: 4 landings on runway 14L/32R in the 60 min to T+187 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
+          "source": "challenge2_operational_constraints.xlsx airport_capacity (max_runway_ops_per_hour / active_runways)",
+          "evidence": {
+            "runway": "32R",
+            "strip": "14L/32R",
+            "landings_60min": 4,
+            "cap_per_runway_h": 22,
+            "max_runway_ops_per_hour": 90,
+            "active_runways": 4
+          },
+          "callsign": "EV3273"
+        },
+        {
+          "rule": "ATC-RWY-OPEN",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV4125: runway 32R open, landing with the flow",
+          "source": "airport runway status",
+          "evidence": {
+            "runway": "32R",
+            "open": "yes",
+            "strip": "14L/32R"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "ATC-WAKE-SEP",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV4125 on 32R (strip 14L/32R) at T+82.7: wake separation met (weather factor x1.25)",
+          "source": "challenge2_operational_constraints.xlsx wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)",
+          "evidence": {
+            "runway": "32R",
+            "strip": "14L/32R",
+            "slot_min": 82.7,
+            "wake": "LARGE",
+            "weather_factor": 1.25,
+            "leader": "EV4731",
+            "leader_wake": "LARGE",
+            "leader_runway": "32R",
+            "gap_behind_min": 1.7,
+            "required_behind_min": 1.6,
+            "follower": "OO5361",
+            "follower_wake": "LARGE",
+            "follower_runway": "32R",
+            "gap_ahead_min": 45.3,
+            "required_ahead_min": 1.6
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "ATC-HOLD-STACK",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV4125: 1 laps at WATSN (5.41 min/lap), level 13000 ft, T+51.1..T+56.5: 1 of 5 levels in use on entry, leaves bottom-first",
+          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
+          "evidence": {
+            "hold_fix": "WATSN",
+            "laps": 1,
+            "level_ft": 13000,
+            "holders": 1,
+            "levels": 5,
+            "base_ft": 13000,
+            "lap_min": 5.41,
+            "holders_at_fix": "EV4125",
+            "entry_min": 51.13,
+            "exit_min": 56.54
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "ATC-TAXI-ROUTE",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV4125: taxi 32R -> gate B18 3.4 min, straight-line estimate (runway end not in today's OSM)",
+          "source": "generic surface (straight line x1.4 at 15 kt)",
+          "evidence": {
+            "runway": "32R",
+            "exit": "generic",
+            "gate": "B18",
+            "stand": "B18",
+            "route": "none",
+            "crossings": "none",
+            "unimpeded_min": 3.35,
+            "tier": "generic",
+            "rot_s": 48.6
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "ATC-WIND-LIMITS",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "EV4125 (unknown type) on 32R: crosswind 0/15 kt, tailwind 0/0 kt within limits [METAR KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034]",
+          "source": "FAA Order 8400.9 \u00a76d (wet)",
+          "evidence": {
+            "metar": "KORD 041751Z 32014KT 2 1/2SM -SN SCT016 BKN021 OVC039 M04/M07 A2998 RMK AO2 SLP159 4/001 P0000 60002 T10441072 10000 21044 51034",
+            "runway": "32R",
+            "surface": "wet",
+            "headwind_kt": 14.0,
+            "crosswind_kt": 0.0,
+            "tailwind_kt": 0.0,
+            "limit_crosswind_kt": 15.0,
+            "limit_tailwind_kt": 0.0,
+            "aircraft_type": "unknown"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "PLT-EARLIEST-ETA",
+          "owner": "PILOT",
+          "passed": true,
+          "detail": "EV4125: slot T+82.7 >= earliest achievable T+77.00 on 32R (entry T+42.96 at BONNT + 34.04 min route to 32R + speed reduction 0 + ground delay 0)",
+          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
+          "evidence": {
+            "slot_min": 82.7,
+            "eta_earliest_min": 77.0,
+            "earliest_min": 77.0,
+            "runway": "32R",
+            "route_min": 34.04,
+            "route_extra_min": 0.0,
+            "entry_fix": "BONNT",
+            "t_entry": 42.96,
+            "speed_reduction_min": 0.0,
+            "ground_delay_min": 0.0,
+            "airborne": "yes"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "PLT-FUEL-RESERVE",
+          "owner": "PILOT",
+          "passed": true,
+          "detail": "EV4125: hold 5.7 min (1 laps x 5.41 min at WATSN + 0.29 min vectors) <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
+          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
+          "evidence": {
+            "hold_min": 5.7,
+            "route_extra_min": 0.0,
+            "need_min": 5.7,
+            "extra_min": 45.0,
+            "laps": 1,
+            "lap_min": 5.41,
+            "hold_fix": "WATSN",
+            "alternate": "MDW",
+            "final_reserve_min": 30.0
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "PLT-CREW-DUTY",
+          "owner": "PILOT",
+          "passed": true,
+          "detail": "EV4125: in-block T+86.9 <= crew duty end T+681",
+          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)",
+          "evidence": {
+            "arrival_min": 86.9,
+            "crew_duty_end_min": 681,
+            "earliest_arrival_min": 81.2,
+            "earliest_runway": "32R",
+            "taxi": 2.27,
+            "unavoidable_bust": "no"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "GND-GATE-SIZE",
+          "owner": "GROUND",
+          "passed": true,
+          "detail": "EV4125: gate B18 (narrow-body) fits  (narrow-body)",
+          "source": "ops rule",
+          "evidence": {
+            "gate": "B18",
+            "gate_size": "narrow",
+            "aircraft_size": "narrow"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "GND-GATE-FREE",
+          "owner": "GROUND",
+          "passed": true,
+          "detail": "Gate B18 free T+86.9..T+131.9",
+          "source": "ops rule",
+          "evidence": {
+            "gate": "B18",
+            "need_from_min": 86.9,
+            "need_to_min": 131.9,
+            "turnaround_min": 45.0
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "GND-GATE-NOTICE",
+          "owner": "GROUND",
+          "passed": true,
+          "detail": "EV4125: keeps scheduled gate B18",
+          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (gate change notice >= 20 min before arrival)",
+          "evidence": {
+            "scheduled_gate": "B18",
+            "gate": "B18",
+            "arrival_min": 82.7,
+            "notice_min": 20.0,
+            "remote": "no"
+          },
+          "callsign": "EV4125"
+        },
+        {
+          "rule": "GND-CREW-DUTY",
+          "owner": "GROUND",
+          "passed": true,
+          "detail": "EV4125: turnaround ends T+131.9, crew shift ends T+373.415 (no overtime)",
+          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (ground crew shift 8 h, overtime 1.5x)",
+          "evidence": {
+            "turnaround_end_min": 131.9,
+            "crew_shift_end_min": 373.41458427240946,
             "overtime_min": 0.0,
             "overtime_mult": 1.5
           },
-          "callsign": "AA2234"
+          "callsign": "EV4125"
         },
         {
           "rule": "ATC-RWY-CAPACITY",
           "owner": "ATC",
           "passed": true,
-          "detail": "AA2234: 8 landings on runway 14R/32L in the 60 min to T+72 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
+          "detail": "EV4125: 7 landings on runway 14L/32R in the 60 min to T+82.7 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
           "source": "challenge2_operational_constraints.xlsx airport_capacity (max_runway_ops_per_hour / active_runways)",
           "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "landings_60min": 8,
+            "runway": "32R",
+            "strip": "14L/32R",
+            "landings_60min": 7,
             "cap_per_runway_h": 22,
             "max_runway_ops_per_hour": 90,
             "active_runways": 4
           },
-          "callsign": "AA2234"
-        },
-        {
-          "rule": "ATC-RWY-OPEN",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425: runway 14R open, landing with the flow",
-          "source": "airport runway status",
-          "evidence": {
-            "runway": "14R",
-            "open": "yes",
-            "strip": "14R/32L"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "ATC-WAKE-SEP",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425 on 14R (strip 14R/32L) at T+119: wake separation met (weather factor x1)",
-          "source": "challenge2_operational_constraints.xlsx wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)",
-          "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "slot_min": 119.0,
-            "wake": "LARGE",
-            "weather_factor": 1.0,
-            "leader": "UA226",
-            "leader_wake": "LARGE",
-            "leader_runway": "14R",
-            "gap_behind_min": 31.0,
-            "required_behind_min": 1.28
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "ATC-HOLD-STACK",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425: no whole holding lap, not in a stack",
-          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
-          "evidence": {
-            "hold_fix": "none",
-            "laps": 0,
-            "level_ft": "none",
-            "holders": 0,
-            "levels": 5
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "ATC-TAXI-ROUTE",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425: taxi route 14R -> pier B available (10 min); no taxiway closures in data",
-          "source": "ops rule",
-          "evidence": {
-            "runway": "14R",
-            "gate": "B14",
-            "taxi_min": 10.0
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "ATC-WIND-LIMITS",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425 (unknown type) on 14R: crosswind 4/20 kt, tailwind 0/5 kt within limits [METAR KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117]",
-          "source": "FAA Order 8400.9 \u00a76d (dry)",
-          "evidence": {
-            "metar": "KORD 180051Z 15018G23KT 10SM FEW024 OVC055 14/12 A2974 RMK AO2 PK WND 15028/0022 RAE2353 SLP071 P0000 T01440117",
-            "runway": "14R",
-            "surface": "dry",
-            "headwind_kt": 17.7,
-            "crosswind_kt": 4.0,
-            "tailwind_kt": 0.0,
-            "limit_crosswind_kt": 20.0,
-            "limit_tailwind_kt": 5.0,
-            "aircraft_type": "unknown"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "PLT-EARLIEST-ETA",
-          "owner": "PILOT",
-          "passed": true,
-          "detail": "AA1425: slot T+119 >= earliest achievable T+119.00 on 14R (entry T+74.56 at STL + 44.44 min route to 14R + speed reduction 0 + ground delay 0)",
-          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
-          "evidence": {
-            "slot_min": 119.0,
-            "eta_earliest_min": 119.0,
-            "earliest_min": 119.0,
-            "runway": "14R",
-            "route_min": 44.44,
-            "route_extra_min": 0.0,
-            "entry_fix": "STL",
-            "t_entry": 74.56,
-            "speed_reduction_min": 0.0,
-            "ground_delay_min": 0.0,
-            "airborne": "yes"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "PLT-FUEL-RESERVE",
-          "owner": "PILOT",
-          "passed": true,
-          "detail": "AA1425: hold 0 min <= 45 min extra fuel above alternate (MDW) + 30 min final reserve",
-          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
-          "evidence": {
-            "hold_min": 0.0,
-            "route_extra_min": 0.0,
-            "need_min": 0.0,
-            "extra_min": 45.0,
-            "laps": 0,
-            "lap_min": 5.36,
-            "hold_fix": "none",
-            "alternate": "MDW",
-            "final_reserve_min": 30.0
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "PLT-CREW-DUTY",
-          "owner": "PILOT",
-          "passed": true,
-          "detail": "AA1425: in-block T+129 <= crew duty end T+654",
-          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)",
-          "evidence": {
-            "arrival_min": 129.0,
-            "crew_duty_end_min": 654,
-            "earliest_arrival_min": 123.0,
-            "earliest_runway": "10C",
-            "unavoidable_bust": "no"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "GND-GATE-SIZE",
-          "owner": "GROUND",
-          "passed": true,
-          "detail": "AA1425: gate B14 (narrow-body) fits  (narrow-body)",
-          "source": "ops rule",
-          "evidence": {
-            "gate": "B14",
-            "gate_size": "narrow",
-            "aircraft_size": "narrow"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "GND-GATE-FREE",
-          "owner": "GROUND",
-          "passed": true,
-          "detail": "Gate B14 free T+129..T+174",
-          "source": "ops rule",
-          "evidence": {
-            "gate": "B14",
-            "need_from_min": 129.0,
-            "need_to_min": 174.0,
-            "turnaround_min": 45.0
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "GND-GATE-NOTICE",
-          "owner": "GROUND",
-          "passed": true,
-          "detail": "AA1425: keeps scheduled gate B14",
-          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (gate change notice >= 20 min before arrival)",
-          "evidence": {
-            "scheduled_gate": "B14",
-            "gate": "B14",
-            "arrival_min": 119.0,
-            "notice_min": 20.0,
-            "remote": "no"
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "GND-CREW-DUTY",
-          "owner": "GROUND",
-          "passed": true,
-          "detail": "AA1425: turnaround ends T+174, crew shift ends T+170 (4 min overtime at x1.5 cost = 6 paid min)",
-          "source": "challenge2_operational_constraints.xlsx fuel_and_crew (ground crew shift 8 h, overtime 1.5x)",
-          "evidence": {
-            "turnaround_end_min": 174.0,
-            "crew_shift_end_min": 170.0,
-            "overtime_min": 4.0,
-            "overtime_mult": 1.5
-          },
-          "callsign": "AA1425"
-        },
-        {
-          "rule": "ATC-RWY-CAPACITY",
-          "owner": "ATC",
-          "passed": true,
-          "detail": "AA1425: 3 landings on runway 14R/32L in the 60 min to T+119 <= cap 22 (90 ops/h / 4 active runways, Large hub)",
-          "source": "challenge2_operational_constraints.xlsx airport_capacity (max_runway_ops_per_hour / active_runways)",
-          "evidence": {
-            "runway": "14R",
-            "strip": "14R/32L",
-            "landings_60min": 3,
-            "cap_per_runway_h": 22,
-            "max_runway_ops_per_hour": 90,
-            "active_runways": 4
-          },
-          "callsign": "AA1425"
+          "callsign": "EV4125"
         }
       ],
       "utilities": {
-        "ATC": 0.6,
-        "PILOT:AA1444": 0.45,
-        "GROUND": 0.598
+        "ATC": 0.686,
+        "PILOT:MQ3269": 0.45,
+        "GROUND": 0.629
       },
       "totals": {
-        "delay_min": 733.0,
-        "fuel_kg": 0.0,
-        "hold_min": 0.0,
-        "pax_protected_pct": 0.0,
-        "overtime_min": 12.0,
+        "delay_min": 644.0,
+        "fuel_kg": 228.0,
+        "hold_min": 5.7,
+        "pax_protected_pct": 17.9,
+        "overtime_min": 4.8,
         "diversions": 0
       }
     }
