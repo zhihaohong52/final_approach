@@ -5,7 +5,8 @@ synthetic fallbacks: vectors (downwind 5 NM abeam, base, 30 deg intercept) when 
 approach IAF/IF, a corner-post entry (40 NM at 045/135/225/315 true) when the airport has no STAR, and a
 10 NM 3 deg straight-in when the runway end has no approach. Every point carries `src` ("cifp" or "synth")
 and `alt_src` ("constraint" or "interp"). Times come from the terminal speed profile (global constraints)
-converted to TAS with `holding.tas_kt`. Pure geometry: nothing here decides legality, and the rules,
+converted to TAS with `holding.tas_kt`. CIFP altitude constraints are treated as exact altitudes
+("+"/"-" at-or-above/below use the published value; "B" between uses the mean). Pure geometry: nothing here decides legality, and the rules,
 utility and negotiation layers read routes from the cache, never the store.
 """
 from __future__ import annotations
@@ -13,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from atm.geo import store
@@ -33,7 +34,11 @@ STRAIGHT_IN_NM = 10.0
 GLIDE_DEG = 3.0
 TCH_FT = 50.0                          # threshold crossing height when CIFP has no runway fix altitude
 HOLD_AGL_FT = 6000.0                   # default hold base above elevation
-ENTRY_CAP_FT = 18000.0                 # unconstrained entry altitude cap (US transition altitude)
+ENTRY_PROFILE_CAP_FT = 18000.0         # cap on the 3 deg profile for an unconstrained entry (US transition
+                                       # altitude); a higher downstream constraint still wins (e.g. FL340)
+CIFP_CENTRELINE_XTRACK_NM = 0.1        # a CIFP runway end must sit on the wave end's centreline,
+CIFP_CENTRELINE_OUT_NM = 1.0           # at most this far out from the wave threshold,
+CIFP_HDG_TOL_DEG = 30.0                # and point within this of the wave heading, else it is not used
 DESCENT_FT_PER_NM = math.tan(math.radians(GLIDE_DEG)) * NM_FT   # ~318 ft/NM
 IAS_HIGH, IAS_LOW, IAS_IAF, IAS_FAF, IAS_FINAL = 280.0, 250.0, 210.0, 170.0, 140.0
 MIN_GS_KT = 60.0
@@ -73,6 +78,7 @@ class Route:
     hold: HoldSpec
     hold_index: int
     tier: Literal["star+iap", "iap", "straight-in"]
+    notes: list[str] = field(default_factory=list)   # why a fallback was used (runway mismatch, chorded RF)
 
 
 # --------------------------------------------------------------------------- geometry
@@ -241,16 +247,51 @@ def select_star(proc: dict, origin_latlon: tuple[float, float] | None, runway: s
     return best[1], best[2]
 
 
-def _current_id(wave: Wave, runway: str) -> str:
-    """The runway end's designator today (the CIFP cycle's), undoing `renamed` events after the wave date:
-    the wave keeps its dated designator (e.g. KAUS 17L in 2015), CIFP 2611 uses the current one (18L)."""
+def _current_id(wave: Wave, runway: str) -> str | None:
+    """The runway end's designator today (the CIFP cycle's), applying `renamed` events after the wave date:
+    the wave keeps its dated designator (e.g. KAUS 17L in 2015), CIFP 2611 uses the current one (18L).
+    None when the dated end was closed later, or its name was later given to another runway (KMDW 13L in
+    2015 is closed today; today's 13L is the old 13C): today's procedures for that name are not its own."""
     from atm.wave import build   # lazy: build imports the wave modules
     date = wave.window_start[:10]
+    later = sorted((h for h in build._runway_history().get(wave.airport.iata, []) if date < h["date"]),
+                   key=lambda h: h["date"])
     cur = runway
-    for h in sorted(build._runway_history().get(wave.airport.iata, []), key=lambda h: h["date"]):
-        if h["event"] == "renamed" and date < h["date"] and _norm_rwy(h["old_id"]) == _norm_rwy(cur):
-            cur = h["runway"]
+    for h in later:
+        if h["event"] == "closed" and _norm_rwy(h["runway"]) == _norm_rwy(cur):
+            return None
+        if h["event"] == "renamed":
+            if _norm_rwy(h["old_id"]) == _norm_rwy(cur):
+                cur = h["runway"]
+            elif _norm_rwy(h["runway"]) == _norm_rwy(cur):
+                return None
     return cur
+
+
+def _cifp_end_check(proc: dict, pid: str | None, rw: Runway) -> str | None:
+    """None if CIFP runway end `pid` is the wave's physical end `rw`, else the reason it is not used.
+
+    The CIFP threshold must lie on the wave end's centreline (<= 0.1 NM cross-track; measured over 1,226
+    current ends: p99 0.021 NM, while ORD 10L/10C thresholds are 0.2 NM apart), between the far end and
+    1 NM out (a displaced threshold, or a runway extended since the wave date: KORD 09R is 0.59 NM out in
+    2015), with a true heading (heading_mag + magvar) within 30 deg."""
+    if pid is None:
+        return f"runway {rw.id}: closed or renamed after the wave date; today's procedures do not apply"
+    c = next((v for k, v in (proc.get("runways") or {}).items() if _norm_rwy(k) == _norm_rwy(pid)), None)
+    if c is None or c.get("lat") is None or c.get("lon") is None:
+        return f"runway {rw.id}: CIFP has no runway end {pid}"
+    x, y = _Frame(float(rw.le_lat), float(rw.le_lon), rw.heading_true).xy(float(c["lat"]), float(c["lon"]))
+    length_nm = (rw.length_ft or 0) / NM_FT
+    if abs(y) > CIFP_CENTRELINE_XTRACK_NM or not (-length_nm <= x <= CIFP_CENTRELINE_OUT_NM):
+        d = _nm(float(c["lat"]), float(c["lon"]), float(rw.le_lat), float(rw.le_lon))
+        return (f"runway {rw.id}: CIFP {pid} threshold is {d:.2f} NM from the wave threshold "
+                f"({x:+.2f} NM along, {y:+.2f} NM across the centreline)")
+    if c.get("heading_mag") is not None:
+        mv = float(((proc.get("airport") or {}).get("magvar_deg")) or 0.0)
+        dh = _angdiff(float(c["heading_mag"]) + mv, rw.heading_true)
+        if dh > CIFP_HDG_TOL_DEG:
+            return f"runway {rw.id}: CIFP {pid} heading differs by {dh:.0f} deg"
+    return None
 
 
 def _approach(proc: dict | None, runway: str) -> dict | None:
@@ -260,6 +301,36 @@ def _approach(proc: dict | None, runway: str) -> dict | None:
     if hit is None:
         hit = next((k for k in sorted(apps) if _rwy_key_matches(k, runway) and _norm_rwy(k) != "ALL"), None)
     return apps.get(hit) if hit is not None else None
+
+
+def rf_arc(start: tuple[float, float], end: tuple[float, float], center: tuple[float, float] | None,
+           end_course_true: float | None, turn: str) -> list[tuple[float, float]] | None:
+    """Intermediate points (every 10 deg) of an RF arc from `start` to `end` turning `turn` ("R"/"L").
+
+    The centre is the CIFP centre fix when known; otherwise it is derived from the course at the end of the
+    leg (the arc's tangent there): the centre lies on the perpendicular to that course at `end`, on the turn
+    side, at the radius that puts `start` on the same circle. None when neither is possible."""
+    if center is None:
+        if end_course_true is None:
+            return None
+        f = _Frame(end[0], end[1], 0.0)            # x = south NM, y = east NM at `end`
+        e_x, e_y = f.xy(*start)
+        px, py = e_y, -e_x                          # start relative to end: (east, north)
+        side = math.radians(end_course_true + (90.0 if turn == "R" else -90.0))
+        nx, ny = math.sin(side), math.cos(side)     # unit vector from end towards the centre
+        dot = nx * px + ny * py
+        if dot <= 1e-6:
+            return None
+        r = (px * px + py * py) / (2.0 * dot)
+        if not (0.05 < r < 50.0):
+            return None
+        center = _dest(end[0], end[1], math.degrees(side) % 360.0, r)
+    b0 = _bearing(center[0], center[1], *start)
+    b1 = _bearing(center[0], center[1], *end)
+    r = (_nm(center[0], center[1], *start) + _nm(center[0], center[1], *end)) / 2.0
+    sweep = (b1 - b0) % 360.0 if turn == "R" else -((b0 - b1) % 360.0)
+    n = max(1, int(math.ceil(abs(sweep) / RF_STEP_DEG - 0.01)))   # tolerate a derived centre's rounding
+    return [_dest(center[0], center[1], b0 + sweep * k / n, r) for k in range(1, n)]
 
 
 # --------------------------------------------------------------------------- route assembly
@@ -280,7 +351,15 @@ class _P:
 class _Builder:
     def __init__(self, wave: Wave, callsign: str, rw: Runway, proc: dict | None):
         self.wave, self.cs, self.rw, self.proc = wave, callsign, rw, proc
-        self.pid = _current_id(wave, rw.id) if proc else rw.id   # designator in the procedures document
+        self.notes: list[str] = []
+        self.pid: str | None = None   # designator in the procedures document; None: no approach/runway transition
+        if proc:
+            pid = _current_id(wave, rw.id)
+            why = _cifp_end_check(proc, pid, rw)
+            if why is None:
+                self.pid = pid
+            else:
+                self.notes.append(why + " (synthetic straight-in)")
         ap = (proc or {}).get("airport") or {}
         self.elev = float(ap.get("elev_ft") or 0.0)
         self.magvar = float(ap.get("magvar_deg") or 0.0)
@@ -334,26 +413,27 @@ class _Builder:
                              _leg_alt(g) if _leg_alt(g) is not None else self.elev + TCH_FT,
                              "constraint" if _leg_alt(g) is not None else "interp", g.get("speed_kt")))
                 return False
+            src = "cifp"
             if pt == "RF" and self.pts:
-                self._arc(g, c, kind)
+                src = self._arc(g, c, kind)
             alt = _leg_alt(g)
-            self._add(_P(c[0], c[1], kind, fix, "cifp", alt, "constraint" if alt is not None else "interp",
+            self._add(_P(c[0], c[1], kind, fix, src, alt, "constraint" if alt is not None else "interp",
                          g.get("speed_kt"), faf=(kind == "final" and _desc(g, 3) == "F")))
         return ends_vectors
 
-    def _arc(self, g: dict, end: tuple[float, float], kind: str) -> None:
-        ctr = _coord(self.fixes, g.get("center"))
-        if ctr is None:
-            return   # no centre fix: fly the chord
+    def _arc(self, g: dict, end: tuple[float, float], kind: str) -> str:
+        """Chord points of an RF arc into `end`; returns the src of the end point: "cifp" for an arc,
+        "synth" when the arc cannot be built and a straight chord is flown instead (recorded in notes)."""
         prev = self.pts[-1]
-        b0 = _bearing(ctr[0], ctr[1], prev.lat, prev.lon)
-        b1 = _bearing(ctr[0], ctr[1], *end)
-        r = (_nm(ctr[0], ctr[1], prev.lat, prev.lon) + _nm(ctr[0], ctr[1], *end)) / 2.0
-        sweep = (b1 - b0) % 360.0 if (g.get("turn") or "R") == "R" else -((b0 - b1) % 360.0)
-        n = max(1, int(math.ceil(abs(sweep) / RF_STEP_DEG)))
-        for k in range(1, n):
-            lat, lon = _dest(ctr[0], ctr[1], b0 + sweep * k / n, r)
+        crs = g.get("course_mag")
+        mids = rf_arc((prev.lat, prev.lon), end, _coord(self.fixes, g.get("center")),
+                      None if crs is None else (float(crs) + self.magvar) % 360.0, g.get("turn") or "R")
+        if mids is None:
+            self.notes.append(f"RF leg to {g.get('fix')}: no centre fix and no usable end course; flown as a chord")
+            return "synth"
+        for lat, lon in mids:
             self._add(_P(lat, lon, kind, None, "cifp"))
+        return "cifp"
 
     def _vectors_to(self, j: tuple[float, float]) -> None:
         """Synthetic vectors from the last point to join point `j` on the final course: downwind 5 NM abeam,
@@ -387,15 +467,15 @@ class _Builder:
     def build(self) -> Route:
         proc, rw, f = self.proc, self.rw, self.frame
         origin = self._origin_ll()
-        app = _approach(proc, self.pid)
-        sel = select_star(proc, origin, self.pid) if proc and proc.get("stars") else None
+        app = _approach(proc, self.pid) if self.pid else None
+        sel = select_star(proc, origin, self.pid or "") if proc and proc.get("stars") else None
         star_id = trans = hold_fix = None
         ends_vectors = False
         if sel is not None:
             star_id, trans = sel
             star = next(s for s in proc["stars"] if s["id"] == star_id)
             enr = (star.get("enroute") or {}).get(trans, []) if trans else []
-            rkey = _pick_key(star.get("runway") or {}, self.pid)
+            rkey = _pick_key(star.get("runway") or {}, self.pid) if self.pid else None
             rlegs = star["runway"][rkey] if rkey is not None else []
             common = star.get("common") or []
             ends_vectors = self._legs([*enr, *common, *rlegs], "fix")
@@ -441,8 +521,17 @@ class _Builder:
                     self._legs(legs[idx + 1:], "fix")
                     self._final_from(final, 0)
                     return
-            idx = next((i for i, g in enumerate(final) if g.get("fix") == last and _desc(g, 3) in IF_CODES), None)
-            if idx is not None:
+            i_faf = next((i for i, g in enumerate(final) if _desc(g, 3) == "F"), len(final) - 1)
+            idx = next((i for i, g in enumerate(final[:i_faf + 1])
+                        if g.get("fix") == last and not str(last).startswith("RW")), None)
+            if idx is not None:   # the STAR ends on the final (IF, a step-down fix, or the FAF): join there
+                q = self.pts[-1]
+                q.kind, q.faf = "final", q.faf or _desc(final[idx], 3) == "F"
+                if q.alt is None and _leg_alt(final[idx]) is not None:
+                    q.alt, q.alt_src = _leg_alt(final[idx]), "constraint"
+                self._mark_app()
+                if self.i_if is None:
+                    self.i_if = len(self.pts) - 1
                 self._final_from(final, idx + 1)
                 return
         if corner and trans:
@@ -529,7 +618,7 @@ class _Builder:
         # altitudes: constraints, unconstrained entry on a 3 deg profile (capped), linear in between
         if pts[0].alt is None:
             k = next(i for i in range(n) if pts[i].alt is not None)
-            pts[0].alt = max(pts[k].alt, min(ENTRY_CAP_FT, self.elev + DESCENT_FT_PER_NM * cum[-1]))
+            pts[0].alt = max(pts[k].alt, min(ENTRY_PROFILE_CAP_FT, self.elev + DESCENT_FT_PER_NM * cum[-1]))
         known = [i for i in range(n) if pts[i].alt is not None]
         for a, b in zip(known, known[1:]):
             for i in range(a + 1, b):
@@ -564,7 +653,7 @@ class _Builder:
                           alt_src=p.alt_src, t_min=t[i]) for i, p in enumerate(pts)]
         return Route(callsign=self.cs, runway=self.rw.id, star=star_id, transition=trans or None,
                      approach=app["id"] if app is not None else None, entry_fix=pts[0].fix or "ENTRY",
-                     points=out, t_route_min=t[-1], hold=hold, hold_index=hi, tier=tier)
+                     points=out, t_route_min=t[-1], hold=hold, hold_index=hi, tier=tier, notes=list(self.notes))
 
 
 def build_route(wave: Wave, callsign: str, runway_end: str) -> Route | None:
@@ -592,7 +681,9 @@ _CACHE: dict[str, dict[tuple[str, str], Route]] = {}
 
 
 def routes_for_wave(wave: Wave) -> dict[tuple[str, str], Route]:
-    """Routes keyed by (callsign, runway end) for every wave and queue flight over every open runway end."""
+    """Routes keyed by (callsign, runway end) for every wave and queue flight over every open runway end.
+
+    The returned dict and its Route objects are the shared cache entry: treat them as read-only."""
     k = wave_key(wave)
     hit = _CACHE.get(k)
     if hit is not None:

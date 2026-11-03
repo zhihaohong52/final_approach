@@ -57,6 +57,7 @@ def test_corner_post_when_no_star(monkeypatch):
     w = build.build_wave(f"F2015-{row}")
     r = route.build_route(w, w.flights[0].callsign, next(x.id for x in w.airport.runways if x.open))
     assert r.tier == "iap" and r.points[0].src == "synth" and r.hold.src in ("cifp", "synth")
+    assert r.hold.src == "synth" and r.hold.fix.startswith("CP") and r.points[0].fix == r.hold.fix
 
 
 def test_straight_in_when_no_procedures(monkeypatch):
@@ -107,13 +108,14 @@ def test_select_star_prefers_origin_bearing_and_lower_id_without_origin():
     assert route.select_star(proc, None, "27L") == ("BBB1", "S1")          # AAA1 has no 27 transition
 
 
-def test_ord_hold_at_benky_meter_fix():
+def test_ord_hold_at_benky_meter_fix(monkeypatch):
+    # an origin due along BENKY6's BFORD transition (SHAIN2 shares BFORD; the tie goes to the lower id)
+    from atm.geo import store
     w = build.build_wave(ORD)
-    rs = route.routes_for_wave(w)
-    benky = [r for r in rs.values() if r.star == "BENKY6"]
-    if not benky:
-        pytest.skip("no flight in this wave is routed via BENKY6")
-    r = benky[0]
+    bford = store.load_procedures("KORD")["fixes"]["BFORD"]
+    monkeypatch.setattr(build, "_airport_coords", lambda iata: tuple(bford))
+    r = route.build_route(w, w.flights[0].callsign, "27L")
+    assert r.star == "BENKY6" and r.transition == "BFORD"
     assert r.hold.fix == "BENKY" and r.hold.base_ft == 12000 and r.points[r.hold_index].fix == "BENKY"
 
 
@@ -144,3 +146,68 @@ def test_renamed_runway_uses_its_current_cifp_designator():
     rw = next(x for x in w.airport.runways if x.open and x.id.startswith("35"))
     r = route.build_route(w, w.flights[0].callsign, rw.id)
     assert r.runway == rw.id and r.approach is not None and r.approach.endswith("36" + rw.id[2:])
+
+
+def _wave_at(iata, date, rids):
+    from dataclasses import replace
+    from atm.wave.model import Runway
+    w = make_wave()
+    rws = [Runway(x, 0.0, 9000) for x in rids]
+    return replace(w, airport=replace(w.airport, iata=iata, runways=rws), window_start=f"{date}T12:00:00")
+
+
+def test_current_id_refuses_closed_or_reassigned_designators():
+    w = _wave_at("MDW", "2015-06-01", ["13L", "13C", "31R", "31C"])
+    assert route._current_id(w, "13L") is None and route._current_id(w, "31R") is None   # closed 2023
+    assert route._current_id(w, "13C") == "13L" and route._current_id(w, "31C") == "31R"  # renamed 2025
+    assert route._current_id(_wave_at("MDW", "2026-01-01", ["13L"]), "13L") == "13L"
+
+
+def test_clt_2015_routes_land_on_their_own_threshold():
+    from atm.wave import flights2015 as F
+    w = build.build_wave(f"F2015-{F.list_rows(airport='CLT', limit=1)[0]['row_id']}")
+    for (cs, rid), r in route.routes_for_wave(w).items():
+        rw = w.runway(rid)
+        if r.approach is None:
+            assert r.tier == "straight-in" and r.notes
+            continue
+        fr = route._Frame(rw.le_lat, rw.le_lon, rw.heading_true)
+        last_fix = [p for p in r.points if p.kind == "final" and p.src == "cifp"][-1]
+        assert fr.xy(last_fix.lat, last_fix.lon)[0] > 0.3     # on the approach side of its threshold
+        assert _nm(last_fix, rw) < 12
+
+
+def test_star_ending_on_the_final_joins_there():
+    # KMIA FROGZ5 runway 12 transition ends at PIANA, a step-down fix between IF GLRIA and FAF VEPCO
+    w = build.build_wave("F2015-58926")
+    r = route.build_route(w, "MQ2910", "12")
+    assert r.star == "FROGZ5" and not any(p.kind == "vector" for p in r.points)
+    assert [p.fix for p in r.points].count("PIANA") == 1
+    assert [p.fix for p in r.points][-3:] == ["PIANA", "VEPCO", "RW12"]
+
+
+def test_rf_arc_from_end_course_matches_centre_fix():
+    # quarter circle, radius 5 NM around (0, 0): from due west to due north, turning right (end course 090)
+    start, end, ctr = route._dest(0, 0, 270, 5), route._dest(0, 0, 0, 5), (0.0, 0.0)
+    a = route.rf_arc(start, end, ctr, None, "R")
+    b = route.rf_arc(start, end, None, 90.0, "R")
+    assert len(a) == len(b) == 8
+    for (la, loa), (lb, lob) in zip(a, b):
+        assert route._nm(la, loa, 0, 0) == pytest.approx(5, abs=0.01) and route._nm(la, loa, lb, lob) < 0.05
+    assert all(la > 0 or lo < 0 for la, lo in b)                  # north-west quadrant
+    assert route.rf_arc(start, end, None, None, "R") is None      # nothing to build from: caller chords
+    assert route.rf_arc(start, end, None, 270.0, "R") is None     # start on the wrong side: no circle
+
+
+def test_cifp_end_check_accepts_same_centreline_rejects_other_ends():
+    from atm.geo import store
+    w = build.build_wave(ORD)
+    proc = store.load_procedures("KORD")
+    assert route._cifp_end_check(proc, "09R", w.runway("09R")) is None     # 0.59 NM out, on the centreline
+    assert route._cifp_end_check(proc, "10C", w.runway("10C")) is None
+    assert route._cifp_end_check(proc, "28C", w.runway("10C")) is not None   # the opposite end, 1.6 NM away
+    assert route._cifp_end_check(proc, "10L", w.runway("10C")) is not None   # the parallel
+    assert route._cifp_end_check(proc, None, w.runway("10C")) is not None
+    rev = route._cifp_end_check({**proc, "runways": {"X": {**proc["runways"]["10C"], "heading_mag": 273.0}}},
+                                "X", w.runway("10C"))
+    assert "heading" in rev                                                  # same spot, reversed course
