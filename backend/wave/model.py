@@ -252,7 +252,7 @@ class JointPlan(_Dict):
 class Move(_Dict):
     id: str
     agent: str              # ATC | GROUND | PILOT:<callsign>
-    kind: str               # swap_order|change_runway|shift_slot|speed_reduction|ground_delay|request_divert|accept|reassign_gate|remote_stand|swap_gates
+    kind: str               # swap_order|change_runway|shift_slot|hold|speed_reduction|ground_delay|request_divert|accept|reassign_gate|remote_stand|swap_gates
     callsigns: list[str]
     params: dict
     label: str

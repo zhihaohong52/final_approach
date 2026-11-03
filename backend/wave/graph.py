@@ -49,9 +49,10 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from backend.decide import DEFAULT_CHAIN, Decider, DecisionResult
-from backend.wave import baseline, fallback, moves, rules, wind
+from backend.wave import baseline, fallback, moves, route, rules, trajectory, wind
 from backend.wave.model import JointPlan, Move, Wave
-from backend.wave.utility import agent_terms, agent_utility, evaluate, focus_callsign, metrics_map, negotiators
+from backend.wave.utility import (agent_terms, agent_utility, evaluate, focus_callsign, hold_burn, metrics_map,
+                               negotiators)
 
 MAX_TURNS = 3
 MAX_ROUNDS = MAX_TURNS  # back-compat alias
@@ -148,6 +149,23 @@ def _meta(kind: str, r: DecisionResult) -> dict:
 
 # ---------------------------------------------------------------- private views (kept small)
 
+def _path_line(wave: Wave, a) -> str:
+    """One line on the flight's engine-chosen path (spec §6.7): STAR (or approach tier), shared hold fix and
+    base, lap time and the fuel one lap burns (laps x lap_min x holding burn, as metrics_map charges)."""
+    if a.action != "land" or not a.runway:
+        return "no path (not landing)"
+    r = route.routes_for_wave(wave).get((a.callsign, a.runway))
+    if r is None:
+        return f"no route geometry for {a.runway}"
+    if r.star:
+        head = f"STAR {r.star}.{r.transition}" if r.transition else f"STAR {r.star}"
+    else:
+        head = f"{r.approach or r.tier} {a.runway}"
+    h = trajectory.hold_for(wave, r)
+    kg = h.lap_min * hold_burn(wave.flight(a.callsign))
+    return f"{head} · hold {h.fix} base {h.base_ft:,} · lap {h.lap_min:.1f} min = {kg:.0f} kg"
+
+
 def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
     role = _role(agent)
     if role == "ATC":
@@ -163,7 +181,8 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
         return {"metar": m.raw if m else None, "runways": rw,
                 "queue": [[q.callsign, q.wake, q.runway, q.slot_min] for q in wave.queue][:20],
                 "wave": [[a.callsign, wave.flight(a.callsign).wake, a.action, a.runway, a.slot_min]
-                         for a in plan.assignments]}
+                         for a in plan.assignments],
+                "path": {a.callsign: _path_line(wave, a) for a in plan.assignments}}
     if role == "GROUND":
         mm = metrics_map(wave, plan)
         return {"gates": [[g.id, g.size, "remote" if g.remote else g.pier,
@@ -181,6 +200,7 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
             "sched": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
                            "speed_reduction": a.speed_reduction_min, "ground_delay": a.ground_delay_min},
+            "path": _path_line(wave, a),
             "metrics": {"hold": m.hold_min, "fuel_kg": m.fuel_kg, "delay": m.delay_min,
                         "pax_protected": m.pax_protected, "pax_total": m.pax_total}}
 

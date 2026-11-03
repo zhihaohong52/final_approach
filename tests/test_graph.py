@@ -1,5 +1,7 @@
+import json
 import os
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -285,3 +287,39 @@ def test_compact_passes_path_fields():
     r = _result_with_focus_metrics(hold_laps=2, hold_fix="BENKY", taxi_wait_min=1.5)
     c = narrate._compact(r)
     assert (c["hold_laps"], c["hold_fix"], c["taxi_wait_min"]) == (2, "BENKY", 1.5)
+
+
+# ---------------------------------------------------------------- agent views and prompt budget (spec §6.7)
+
+REPLAY_IDS = sorted(p.stem for p in Path("data/replay").glob("*.json"))
+
+
+def _prompt_chars(wid, monkeypatch) -> int:
+    from backend.wave import build
+    sizes = []
+    orig = Decider.choice
+
+    def spy(self, state, instructions, options, *a, **kw):
+        sizes.append(len(json.dumps(state)) + len(instructions) + len(json.dumps(options)))
+        return orig(self, state, instructions, options, *a, **kw)
+    monkeypatch.setattr(Decider, "choice", spy)
+    graph.negotiate_wave(build.build_wave(wid), "decision", chain=["formula"])
+    assert sizes
+    return max(sizes)
+
+
+def test_largest_prompt_under_8k_tokens(monkeypatch):
+    # over the replay waves, the biggest prompt any agent receives (chars/4)
+    assert max(_prompt_chars(wid, monkeypatch) for wid in REPLAY_IDS) / 4 <= 8000
+
+
+def test_views_show_each_flights_path():
+    from backend.wave import build, moves
+    from backend.wave.utility import negotiators
+    w = build.build_wave("F2015-270287"); p = moves.fcfs_plan(w)
+    atc, pilot, _ = negotiators(w)
+    v = graph._view(w, p, atc)
+    assert set(v["path"]) == {a.callsign for a in p.assignments}
+    assert any(" · hold " in s and " base " in s and " · lap " in s and s.endswith(" kg") for s in v["path"].values())
+    pv = graph._view(w, p, pilot)
+    assert pv["path"] == v["path"][pilot.split(":", 1)[1]]

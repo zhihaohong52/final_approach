@@ -173,3 +173,76 @@ def test_no_change_runway_against_flow():
     for m in legal_moves(w, p, "ATC"):
         if m.kind == "change_runway":
             assert m.params["runway"] not in ("08L", "09R"), m.label
+
+
+# ---------------------------------------------------------------- hold move and path-aware labels (spec §6.7)
+
+def test_hold_move_offered_and_applied():
+    from backend.wave import build, moves, trajectory
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    hm = [m for m in moves._candidates(w, p, "ATC") if m.kind == "hold"]   # legal_moves caps at MAX_MOVES=12 and may rank holds out
+    assert hm and all(1 <= m.params["laps"] <= 4 for m in hm)
+    m = hm[0]; q = apply(w, p, m)
+    t = next(x for x in trajectory.build(w, q).air if x.callsign == m.callsigns[0])
+    assert t.laps == m.params["laps"] and m.label.startswith(f"Hold {m.callsigns[0]} ")
+
+
+def test_labels_within_120_chars():
+    from backend.wave import build
+    from backend.wave.utility import negotiators
+    w = build.build_wave("F2015-75"); p = fcfs_plan(w)
+    for ag in negotiators(w):
+        assert all(len(m.label) <= 120 for m in legal_moves(w, p, ag))
+
+
+def test_hold_label_states_fix_level_minutes_and_charged_fuel():
+    import re
+    from backend.wave import build, moves, trajectory
+    from backend.wave.utility import hold_burn, metrics_map
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    hm = [m for m in moves._candidates(w, p, "ATC") if m.kind == "hold"]
+    assert hm
+    for m in hm:
+        cs, laps = m.callsigns[0], m.params["laps"]
+        rx = rf"Hold {cs} {laps} laps? at (\S+) \((FL\d{{3}}|\d{{1,2}},\d{{3}} ft), (\d+\.\d) min, ~(\d+) kg\)"
+        g = re.fullmatch(rx, m.label)
+        assert g, m.label
+        q = apply(w, p, m)
+        t = next(x for x in trajectory.build(w, q).air if x.callsign == cs)
+        mm = metrics_map(w, q)[cs]
+        assert g.group(1) == t.hold_fix
+        assert float(g.group(3)) == pytest.approx(laps * t.lap_min, abs=0.05)
+        assert mm.hold_laps == laps
+        # the label's fuel is exactly the laps' share of what metrics_map charges (hold_min x hold_burn)
+        assert g.group(4) == f"{laps * t.lap_min * hold_burn(w.flight(cs)):.0f}"
+
+
+def test_hold_only_with_a_hold_fix_and_validated():
+    from backend.wave import moves
+    w = make_wave(); p = fcfs_plan(w)   # fixture wave: no procedures, no-geometry tier
+    assert not [m for m in moves._candidates(w, p, "ATC") if m.kind == "hold"]
+    a = p.assignments[0]
+    with pytest.raises(ValueError):
+        apply(w, p, _move("ATC", "hold", [a.callsign], {"laps": 2}, "x"))
+
+
+def test_hold_laps_out_of_range_rejected():
+    from backend.wave import build
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    cs = p.assignments[0].callsign
+    for bad in (0, 5, 1.5, "2", None):
+        with pytest.raises(ValueError):
+            apply(w, p, _move("ATC", "hold", [cs], {"laps": bad}, "x"))
+    with pytest.raises(ValueError):
+        apply(w, p, _move(f"PILOT:{cs}", "hold", [cs], {"laps": 1}, "x"))
+
+
+def test_shift_and_change_runway_labels_mention_path():
+    from backend.wave import build, moves
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    c = moves._candidates(w, p, "ATC")
+    sh = [m for m in c if m.kind == "shift_slot"]
+    assert sh and all(m.label in (f"Vector {m.callsigns[0]} +2 min (path stretch)",
+                                  f"Vector {m.callsigns[0]} -2 min (path stretch)") for m in sh)
+    cr = [m for m in c if m.kind == "change_runway"]
+    assert cr and all(m.label.endswith(" min route)") for m in cr)

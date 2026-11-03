@@ -1,7 +1,8 @@
 """FCFS opening plan, legal moves per agent (spec §6 authority) and pure move application.
 
 Authority is enforced here, legality in rules.py:
-  * ATC changes runway / slot / landing order (and may re-slot other flights on the strip); for
+  * ATC changes runway / slot / landing order, or holds a flight 1-4 laps at its hold fix (and may
+    re-slot other flights on the strip); for
     flights without a pilot agent (every flight except wave.focus) it also issues speed control
     (airborne) or a ground delay (not yet airborne) as ATC instructions.
   * PILOT:<cs> changes only its own flight (speed reduction, ground delay, divert, accept); the
@@ -13,10 +14,10 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from backend.wave import rules, trajectory, wind
+from backend.wave import route, rules, trajectory, wind
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Move, Wave
 from backend.wave.rules import has_slot, reciprocal, strip_of, strip_sequence, wake_gap_min, weather_factor
-from backend.wave.utility import agent_utility, metrics_map, turnaround_min
+from backend.wave.utility import agent_utility, hold_burn, metrics_map, turnaround_min
 
 MAX_MOVES = 12
 SPEED_REDUCTIONS = (3.0, 5.0, 8.0)
@@ -25,9 +26,11 @@ SHIFT_STEPS = (-2.0, 2.0)
 SLOT_HORIZON_MIN = 180.0       # ATC re-slot search horizon
 PILOT_SEARCH_MIN = 60.0        # a Pilot's own-slot search horizon
 CALM_KT = 3.0                  # at or below: wind gives no runway preference, follow the queue
+HOLD_LAPS = (1, 2, 3, 4)       # ATC `hold` move: whole laps at the flight's hold fix
+TRANSITION_ALT_FT = 18000      # US transition altitude: flight levels at or above it
 
 AUTHORITY = {
-    "ATC": {"swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay"},
+    "ATC": {"swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold"},
     "PILOT": {"speed_reduction", "ground_delay", "request_divert", "accept"},
     "GROUND": {"reassign_gate", "remote_stand", "swap_gates"},
 }
@@ -193,6 +196,25 @@ def fcfs_plan(wave: Wave) -> JointPlan:
     return JointPlan([out[f.callsign] for f in wave.flights], "FCFS")
 
 
+# ---------------------------------------------------------------- path helpers
+
+def alt_str(ft: float) -> str:
+    """`FL120` at or above the transition altitude (18,000 ft in the US), else `12,000 ft`."""
+    ft = int(round(ft))
+    return f"FL{ft // 100:03d}" if ft >= TRANSITION_ALT_FT else f"{ft:,} ft"
+
+
+def hold_spec(wave: Wave, a: Assignment):
+    """The wave's shared hold (`trajectory.hold_for`) at the hold fix of `a`'s route to its assigned runway;
+    None without a runway or a route (no-geometry tier: no hold fix, no `hold` move)."""
+    if not a.runway:
+        return None
+    r = route.routes_for_wave(wave).get((a.callsign, a.runway))
+    if r is None or getattr(r, "hold", None) is None:
+        return None
+    return trajectory.hold_for(wave, r)
+
+
 # ---------------------------------------------------------------- moves
 
 def _pstr(params: dict) -> str:
@@ -236,12 +258,25 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
             for rw in open_rw:
                 if rw == a.runway or in_use.get(reciprocal(rw) or "", 0) > 0:
                     continue   # never offer landing against the flow already in use on that strip
+                # route delta: earliest landing on rw minus on the current runway (same SR / GD)
+                dr = (_min_slot(wave, replace(a, runway=rw)) - _min_slot(wave, a)) if a.runway else 0.0
                 mv.append(_move("ATC", "change_runway", [a.callsign], {"runway": rw},
-                                f"Move {a.callsign} from {a.runway} to runway {rw}"))
+                                f"Move {a.callsign} from {a.runway} to runway {rw} ({dr:+.1f} min route)"))
             if a.runway and has_slot(a):
                 for d in SHIFT_STEPS:
                     mv.append(_move("ATC", "shift_slot", [a.callsign], {"minutes": d},
-                                    f"Shift {a.callsign} slot {d:+g} min"))
+                                    f"Vector {a.callsign} {d:+g} min (path stretch)"))
+                h = hold_spec(wave, a)
+                if h is not None:
+                    # fuel = what metrics_map charges for these laps: laps x lap_min x holding burn
+                    burn = hold_burn(_flight(wave, a.callsign))
+                    for n in HOLD_LAPS:
+                        if n == mm[a.callsign].hold_laps:
+                            continue   # already holding exactly n laps
+                        mins = n * h.lap_min
+                        mv.append(_move("ATC", "hold", [a.callsign], {"laps": n},
+                                        f"Hold {a.callsign} {n} lap{'s' if n > 1 else ''} at {h.fix} "
+                                        f"({alt_str(h.base_ft)}, {mins:.1f} min, ~{mins * burn:.0f} kg)"))
             if a.callsign != getattr(wave, "focus", None) and a.runway and has_slot(a):
                 # one ATC absorption instruction per holding non-focus flight: the smallest step that
                 # covers its airborne hold (speed control if airborne, ground delay if not)
@@ -364,7 +399,7 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
     for a in asg:
         if a.action != "land":
             raise ValueError(f"{k} not applicable: {a.callsign} is diverted")
-        if k in ("swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay") \
+        if k in ("swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold") \
                 and (not a.runway or not has_slot(a)):
             raise ValueError(f"{k} not applicable: {a.callsign} has no runway/slot")
     if k == "swap_order" and asg[0].runway != asg[1].runway:
@@ -372,6 +407,13 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
                          f"{cs[0]} on {asg[0].runway}, {cs[1]} on {asg[1].runway}")
     if k == "change_runway" and not move.params.get("runway"):
         raise ValueError("change_runway needs params.runway")
+    if k == "hold":
+        laps = move.params.get("laps")
+        if not isinstance(laps, int) or isinstance(laps, bool) or laps not in HOLD_LAPS:
+            raise ValueError(f"hold needs integer params.laps in {HOLD_LAPS[0]}..{HOLD_LAPS[-1]}, got {laps!r}")
+        if hold_spec(wave, asg[0]) is None:
+            raise ValueError(f"hold not applicable: {cs[0]} has no hold fix on runway {asg[0].runway} "
+                             f"(no route geometry)")
     if k in ("reassign_gate", "remote_stand") and not move.params.get("gate"):
         raise ValueError(f"{k} needs params.gate")
     if k in ("shift_slot", "speed_reduction", "ground_delay"):
@@ -408,6 +450,12 @@ def apply(wave: Wave, plan: JointPlan, move: Move) -> JointPlan:
     if k == "shift_slot":
         a = new.get(cs[0])
         return _reslot(wave, new, a.runway, {a.callsign: max(_min_slot(wave, a), a.slot_min + float(p["minutes"]))})
+    if k == "hold":
+        # earliest wake-legal slot >= earliest + laps x lap_min: trajectory snaps exact lap multiples, so
+        # the flight flies exactly `laps` laps (plus any wake-gap stretch as vector)
+        a = new.get(cs[0])
+        floor = _min_slot(wave, a) + int(p["laps"]) * hold_spec(wave, a).lap_min
+        return _reslot(wave, new, a.runway, {a.callsign: floor})
     if k in ("speed_reduction", "ground_delay"):
         a = new.get(cs[0])
         field = "speed_reduction_min" if k == "speed_reduction" else "ground_delay_min"
