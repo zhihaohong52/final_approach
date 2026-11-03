@@ -413,6 +413,51 @@ tbody tr:hover { background: #18171c; }
 .scope-key span { display: inline-flex; align-items: center; gap: 6px; }
 .k { width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); background: #f4f5f6; display: inline-block; }
 .k-focus { background: var(--hue); } .k-edited { background: var(--human); } .k-alert { background: var(--negative); } .k-fixed { background: var(--fixed); border-radius: 50%; transform: none; }
+.k-ground { background: var(--queue); border-radius: 50%; transform: none; }
+
+/* the radar and the surface map share the panel: one shown (automatic hand-off at the focus touchdown), or both */
+.scope-title { display: flex; align-items: baseline; gap: 18px; }
+.scope-head .panel-seg { gap: 12px; }
+.scope-head .panel-seg button { font: 500 12px var(--font); padding: 2px 0; }
+.scope-head .panel-seg button.showing { color: var(--soft); }   /* the picture on screen; the underline marks the chosen mode */
+.scope-head .panel-seg button[aria-pressed="true"] { color: var(--text); }
+.scope-body { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 460px; }
+.scope-body > .pane { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.scope-body > .pane.off { display: none; }
+.scope-body.both { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.scope-body.both > .pane + .pane { border-left: 1px solid #1b2128; }
+.scope-body.both .radar:not(.fill) { margin-top: auto; margin-bottom: auto; }
+
+/* airport surface: to scale from OSM, aircraft on the engine's taxi tracks */
+.surface-map { position: relative; flex: 1; min-height: 460px; }
+.surface-map svg { position: absolute; inset: 0; display: block; user-select: none; -webkit-user-select: none; }
+.surface-map .range { position: absolute; z-index: 1; top: 44px; left: 16px; }
+.surface-map .range button { height: 26px; padding: 0 10px; font: 500 12px var(--mono); }
+.surface-map .sf-taxi polyline { fill: none; stroke: #27313a; stroke-linejoin: round; stroke-linecap: round; }
+.surface-map .sf-taxi polyline.taxilane { stroke: #1f262d; }
+.surface-map .sf-rwy polyline { fill: none; stroke: #474a51; stroke-linecap: butt; stroke-linejoin: round; }
+.surface-map .sf-rwy polyline.cl { stroke: #8d9097; stroke-width: 1; stroke-dasharray: 6 6; pointer-events: none; }
+.surface-map .rw-end { font: 500 11px var(--mono); fill: var(--soft); paint-order: stroke; stroke: var(--scope); stroke-width: 3px; }
+.surface-map .sf-hold line { stroke: #7a6432; stroke-width: 1.2; stroke-linecap: butt; }
+.surface-map .sf-hold circle { fill: #7a6432; }
+.surface-map .sf-stand rect { fill: #3a3f46; }
+.surface-map .sf-stand .used rect { fill: none; stroke: currentColor; stroke-width: 1.2; }
+.surface-map .stand-label { font: 500 11px var(--mono); fill: currentColor; paint-order: stroke; stroke: var(--scope); stroke-width: 3px; }
+.surface-map .tw-label { font: 600 11px var(--mono); fill: #9fb2c1; paint-order: stroke; stroke: var(--scope); stroke-width: 3px; pointer-events: none; }
+.surface-map .path { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-opacity: .45; stroke-linejoin: round; pointer-events: none; }
+.surface-map .path.sel { stroke-opacity: .9; stroke-width: 2; }
+.surface-map .gnd.fixed { color: var(--queue); }
+.surface-map .db1 { font: 600 12px var(--mono); fill: currentColor; paint-order: stroke; stroke: var(--scope); stroke-width: 3px; }
+.surface-map .db2 { font: 12px var(--mono); fill: currentColor; opacity: .85; paint-order: stroke; stroke: var(--scope); stroke-width: 3px; }
+.surface-map .ring { font: 11px var(--mono); fill: #4f5a64; }
+.surface-map .scope-note { font: 11px var(--mono); fill: #5d6670; }
+.surface-map .scope-note.attr { fill: #7d8790; }
+.surface-map .sf-scale path { fill: none; stroke: #6b747d; }
+.surface-map .sf-scale text { font: 11px var(--mono); fill: #6b747d; }
+.surface-map .legend-synth line { stroke: var(--soft); stroke-width: 1.2; }
+.surface-map .legend-synth text { font: 11px var(--mono); fill: var(--muted); }
+.empty-surface { display: grid; place-content: center; gap: 8px; padding: 80px 24px 24px; text-align: center; }
+.empty-surface .surface-attr { font: 11px var(--mono); color: #7d8790; }
 
 .decision { display: flex; flex-direction: column; gap: 14px; min-width: 0; background: var(--surface); border-radius: var(--radius-card); padding: 18px 20px; box-shadow: var(--shadow); }
 .alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -498,6 +543,8 @@ tbody tr:hover { background: #18171c; }
   .scope-head { position: static; padding: 12px 14px 4px; }
   .radar .range { position: static; padding: 0 14px 6px; }
   .radar .beyond { position: static; padding: 0 14px 6px; }
+  .surface-map .range { top: 8px; left: 14px; }
+  .scope-title { flex-wrap: wrap; gap: 4px 14px; }
   .matrix .rule-id { display: none; }
   .wb-meta { gap: 2px 12px; }
   .wb-meta > span + span::before { content: none; }

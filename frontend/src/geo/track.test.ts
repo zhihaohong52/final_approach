@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { holdLap, levelLabel, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { bearing, endOfLine, holdLap, levelLabel, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -59,5 +59,32 @@ describe("display helpers", () => {
     expect(segmentDashed({ src: "cifp" }, { src: "synth" })).toBe(true);
     expect(segmentDashed({ src: "synth" }, { src: "cifp" })).toBe(true);
     expect(segmentDashed({ src: "cifp" }, { src: "cifp" })).toBe(false);
+  });
+});
+
+it("projector is metres east/north", () => {
+  const p = projector(41.98, -87.9); const [x, y] = p(41.98 + 1 / 60, -87.9);
+  expect(x).toBeCloseTo(0, 6); expect(y).toBeCloseTo(1852, 0);
+});
+it("projector scales longitude by cos(lat)", () => {
+  const [x, y] = projector(60, 10)(60, 10 + 1 / 60);
+  expect(x).toBeCloseTo(926, 0); expect(y).toBeCloseTo(0, 6);
+});
+describe("surface helpers", () => {
+  it("secondFloor steps the surface picture once a second", () => {
+    expect(secondFloor(10 + 30.9 / 60)).toBeCloseTo(10.5, 9);
+    expect(secondFloor(10.5)).toBeCloseTo(10.5, 9);
+  });
+  it("bearing is true degrees from north", () => {
+    expect(bearing([0, 0], [0, 1])).toBeCloseTo(0, 6);
+    expect(bearing([0, 0], [1, 0])).toBeCloseTo(90, 6);
+    expect(bearing([0, 0], [-1, 0])).toBeCloseTo(270, 6);
+  });
+  it("a runway designator sits at the end it is landed from", () => {
+    const sw: [number, number] = [0, 0], ne: [number, number] = [700, 800];   // a 04/22 strip drawn SW -> NE
+    expect(endOfLine("04R", sw, ne)).toBe(0);
+    expect(endOfLine("22L", sw, ne)).toBe(1);
+    expect(endOfLine("22L", ne, sw)).toBe(0);
+    expect(endOfLine("36", [0, 0], [0, 100])).toBe(0);
   });
 });

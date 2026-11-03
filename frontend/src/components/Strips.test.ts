@@ -31,4 +31,18 @@ describe("pathLine", () => {
     expect(pathLine(a({ route_extra_min: -0.6, vector_min: 0 }), undefined, 0)).toBe("rte −0.6′");
     expect(pathLine(a({ route_extra_min: 0.04 }), undefined, 0)).toBe("");
   });
+  it("after touchdown shows the taxi: exit, stand and minutes; the exit goes once on blocks", () => {
+    const m = { exit: "B10", taxi_min: 9.4, in_block_min: 40 };
+    expect(pathLine(a(m), air(), 30)).toBe("TXI B10 → C1 9m");
+    expect(pathLine(a(m), air(), 39.9)).toBe("TXI B10 → C1 9m");
+    expect(pathLine(a(m), air(), 40)).toBe("TXI → C1 9m");
+  });
+  it("prefers the engine's ground track for exit, stand, taxi time and in-block", () => {
+    const g: TrajectorySet["ground"][number] = { callsign: "UA1", kind: "arrival", wave: true, exit: "M4", stand: "C3", route_names: ["M", "C"],
+      points: [{ t_min: 31, lat: 0, lon: 0 }, { t_min: 42.6, lat: 0, lon: 1 }], waits: [], unimpeded_min: 10.5, taxi_min: 11.6, src: "osm" };
+    expect(pathLine(a({ exit: "B10", taxi_min: 9, in_block_min: 40 }), air(), 41, g)).toBe("TXI M4 → C3 12m");
+    expect(pathLine(a(), air(), 43, g)).toBe("TXI → C3 12m");
+    expect(pathLine(a(), air(), 41, { ...g, stand: "n9463243357" })).toBe("TXI M4 → C1 12m");
+  });
+  it("says nothing after touchdown without taxi data", () => expect(pathLine(a(), air(), 31)).toBe(""));
 });

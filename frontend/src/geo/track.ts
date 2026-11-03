@@ -52,3 +52,28 @@ export const levelLabel = (alt_ft: number | undefined): string => (alt_ft == nul
 /** A segment is drawn dashed when either end is synthesized: a vector that joins a published fix is still
  *  a vector, and the leg from the 150 NM entry boundary to the first fix is not a published one. */
 export const segmentDashed = (a: { src: string }, b: { src: string }): boolean => a.src === "synth" || b.src === "synth";
+
+/** Earth radius that makes one arc-minute of latitude exactly one nautical mile (1852 m). */
+const R_M = (1852 * 60 * 180) / Math.PI;
+
+/** A flat equirectangular projection around (lat0, lon0): metres east and north of it. Exact enough over an
+ *  airport or a terminal area (< 0.1 % at 100 NM), and shared by the radar and the surface map. */
+export function projector(lat0: number, lon0: number): (lat: number, lon: number) => [number, number] {
+  const k = Math.cos((lat0 * Math.PI) / 180);
+  const r = (Math.PI / 180) * R_M;
+  return (lat, lon) => [(lon - lon0) * r * k, (lat - lat0) * r];
+}
+
+/** The surface map's refresh: the replay time floored to a whole second (surface radar updates about once a second). */
+export const secondFloor = (t: number): number => Math.floor(t * 60 + 1e-9) / 60;
+
+/** True heading, degrees, of the vector from a to b (both [east, north] metres). */
+export const bearing = (a: [number, number], b: [number, number]): number => ((Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI + 360) % 360;
+
+/** Which end of a drawn runway line a designator belongs to: "04R" is landed on heading ~040°, so it sits at
+ *  the end you fly away from. Returns 0 for the line's first point, 1 for its last. */
+export function endOfLine(id: string, first: [number, number], last: [number, number]): 0 | 1 {
+  const hdg = (parseInt(id, 10) || 36) * 10;
+  const d = Math.abs(((bearing(first, last) - hdg + 540) % 360) - 180);
+  return d <= 90 ? 0 : 1;
+}

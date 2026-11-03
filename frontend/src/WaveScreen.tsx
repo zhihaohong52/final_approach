@@ -3,14 +3,17 @@ import { ApiError, api, isOffline } from "./api/client";
 import type { Assignment, Config, EvaluateResponse, FlightRow, JointPlan, Mode, NegotiationMessage, NegotiationResult, PlanEvaluation, TrajectorySet, WaveGeo, WaveScenario, WaveSummary } from "./api/types";
 import { icao, icaoText, spoken } from "./callsign";
 import { AlertList, RULE_NAME, deriveAlerts } from "./components/Alerts";
-import { Gantt, GanttLegend, type Patch, type Rejection, type View } from "./components/Gantt";
+import { Gantt, GanttLegend, type DragPreview, type Patch, type Rejection, type View } from "./components/Gantt";
 import { Log } from "./components/Log";
 import { Checks, Limits, Outcome, PlanTable, Sources, Weather } from "./components/Panels";
 import { Radar, SCAN_MIN, type Tone } from "./components/Radar";
 import { Strips } from "./components/Strips";
+import { Surface } from "./components/Surface";
 import { agentName, clock, clockSec, dateLabel, signed } from "./format";
 
 const SCAN_S = SCAN_MIN * 60;       // the radar picture updates once per antenna revolution
+const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side are offered from this width
+type Panel = "auto" | "radar" | "surface" | "both";
 const SPEEDS = [1, 10, 60];
 
 const UNDO_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘Z" : "Ctrl+Z";
@@ -82,6 +85,17 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
   const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
   const [pathsBusy, setPathsBusy] = useState(false);
+  const [panel, setPanel] = useState<Panel>("auto");             // radar, surface, both, or the automatic hand-off at the focus touchdown
+  const [wideScreen, setWideScreen] = useState(() => typeof matchMedia !== "undefined" && matchMedia(BOTH_MQ).matches);
+  useEffect(() => {
+    const mq = matchMedia(BOTH_MQ);
+    const on = () => setWideScreen(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  // a bar being dragged on the timeline, and the server's re-check of where it is now (hold laps and taxi included)
+  const [dragAt, setDragAt] = useState<{ cs: string; patch: Patch } | null>(null);
+  const [preview, setPreview] = useState<DragPreview | null>(null);
   const abort = useRef<AbortController | null>(null);
   const tableRef = useRef<JointPlan | null>(null);
   const showTable = (p: JointPlan | null) => { tableRef.current = p; setTable(p); };
@@ -250,6 +264,21 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   })();
   const blocked = nEdits > 0 && (checking || !!checkErr && checkErr !== "offline" || (checked != null && !checked.evaluation.feasible));
 
+  // while a bar is dragged its hold laps and taxi follow it: the drag position is re-checked with trajectories,
+  // debounced, one request in flight (a newer position aborts the older request)
+  useEffect(() => {
+    if (!dragAt || !result || !wave) { setPreview(null); return; }
+    const ctl = new AbortController();
+    const { cs, patch } = dragAt;
+    const plan = applyEdits(result.final_plan, { ...edits, [cs]: { ...edits[cs], ...patch } }, null);
+    const timer = setTimeout(() => {
+      api.postEvaluate({ wave_id: wave.id, assignments: plan.assignments }, { includeTrajectories: true, signal: ctl.signal })
+        .then((r) => { if (r) setPreview({ cs, patch, metrics: r.plan.assignments.find((a) => a.callsign === cs)?.metrics ?? null, set: r.trajectories ?? null }); })
+        .catch(() => { /* aborted by a newer position, or the re-check failed: the bar keeps its local preview */ });
+    }, 90);
+    return () => { clearTimeout(timer); ctl.abort(); };
+  }, [dragAt, result, wave]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---------- the engine's paths for the plan on screen ----------
   // A finished run embeds its final and status-quo paths; anything else (the status quo before a run, the
   // proposals as they stream in, the duty manager's edits) is asked of /api/trajectories. A run recorded on
@@ -282,9 +311,12 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const focusA = shown?.assignments.find((a) => a.callsign === wave?.focus);
   const defaultT = focusA?.slot_min != null ? Math.round(focusA.slot_min - 2) : 0;   // ~6 NM out on final
   const tNow = t ?? defaultT;
-  const replayEnd = Math.max(defaultT + 1, ...(shown?.assignments ?? []).filter((a) => a.action === "land" && a.slot_min != null).map((a) => a.slot_min! + 1));
-  // The replay clock runs continuously at the chosen speed, but the picture changes once per radar scan,
-  // as on a controller's display: targets step to a new position on each update rather than gliding.
+  // the replay runs until the last arrival is on blocks (its taxi is on the surface map), not just down
+  const replayEnd = Math.max(defaultT + 1,
+    ...(shown?.assignments ?? []).filter((a) => a.action === "land" && a.slot_min != null).map((a) => Math.max(a.slot_min!, a.metrics.in_block_min ?? 0) + 1),
+    ...(paths?.ground ?? []).filter((g) => g.wave && g.points.length).map((g) => g.points[g.points.length - 1].t_min + 0.5));
+  // The replay clock runs continuously at the chosen speed and ticks in whole seconds. The pictures step, as on a
+  // controller's display: the radar once per scan (it floors t to its 4.8 s scan), the surface map once a second.
   useEffect(() => {
     if (!playing) return;
     let raf = 0, last = performance.now(), sim = t ?? defaultT;
@@ -292,8 +324,8 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
       // a background tab gets no frames; on return, count at most a quarter second so the replay doesn't leap
       sim += (Math.min(now - last, 250) / 1000) * (speed / 60);
       last = now;
-      const scan = (Math.floor((sim * 60) / SCAN_S) * SCAN_S) / 60;
-      setT((prev) => (prev === scan ? prev : scan));      // re-render only when a new scan lands
+      const sec = Math.floor(sim * 60) / 60;
+      setT((prev) => (prev === sec ? prev : sec));        // re-render only when a new second lands
       if (sim >= replayEnd) { setPlaying(false); return; }  // the last arrival is down
       raf = requestAnimationFrame(tick);
     };
@@ -301,6 +333,16 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is read once when play starts; the loop owns it after that
   }, [playing, speed, defaultT, replayEnd]);
+
+  // One panel, two pictures on the same clock: the approach radar until the disrupted flight touches down, the
+  // surface map after it (automatic hand-off), or either by hand; side by side on wide screens. Without a
+  // surface for the wave (M1, or no OSM data) the radar is the only picture and no toggle is offered.
+  const surf = geo?.surface ?? null;
+  const focusAir = paths?.air.find((a) => a.callsign === wave?.focus);
+  const focusDown = focusA?.action === "land" ? focusA.slot_min ?? focusAir?.points[focusAir.points.length - 1]?.t_min ?? null : null;
+  const handOff: "radar" | "surface" = surf?.status === "real" && focusDown != null && tNow >= focusDown ? "surface" : "radar";
+  const canBoth = wideScreen && !!surf;
+  const shownPanel: "radar" | "surface" | "both" = !surf ? "radar" : panel === "auto" || (panel === "both" && !canBoth) ? handOff : panel;
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);
   const onTabKey = (e: React.KeyboardEvent) => {
@@ -379,9 +421,21 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
       <div className="ops-top">
         <Strips wave={wave} plan={shown} agreed={agreed} baseline={baseline} edited={(cs) => editsOn && !!edits[cs]} t={tNow}
           tone={tone} selected={selected} onSelect={setSelected} paths={pathsNote ? null : paths} />
-        <section className="scope-card" aria-label="Approach radar">
+        <section className="scope-card" aria-label={shownPanel === "surface" ? "Airport surface" : shownPanel === "both" ? "Approach radar and airport surface" : "Approach radar"}>
           <div className="scope-head">
-            <h2>Approach</h2>
+            <div className="scope-title">
+              {/* with the toggle on screen it names the picture (the one shown is lit), so the heading is for screen readers */}
+              <h2 className={surf ? "sr-only" : undefined}>{shownPanel === "surface" ? "Surface" : shownPanel === "both" ? "Approach and surface" : "Approach"}</h2>
+              {surf && (
+                <div className="seg panel-seg" role="group" aria-label="Picture shown">
+                  <button aria-pressed={panel === "auto" || (panel === "both" && !canBoth)} onClick={() => setPanel("auto")}
+                    title={`Approach until ${wave.focus ? icao(wave.focus) : "the disrupted flight"} touches down, then the surface`}>Auto</button>
+                  <button aria-pressed={panel === "radar"} className={shownPanel !== "surface" ? "showing" : undefined} onClick={() => setPanel("radar")}>Approach</button>
+                  <button aria-pressed={panel === "surface"} className={shownPanel !== "radar" ? "showing" : undefined} onClick={() => setPanel("surface")}>Surface</button>
+                  {canBoth && <button aria-pressed={panel === "both"} onClick={() => setPanel("both")} title="Approach radar and surface side by side">Both</button>}
+                </div>
+              )}
+            </div>
             <div className="clockctl">
               <button className="icon-btn" onClick={() => { if (!playing && tNow >= replayEnd) setT(defaultT); setPlaying((p) => !p); }} aria-label={playing ? "Pause the replay clock" : "Play the replay clock"} aria-pressed={playing}>
                 {playing ? <svg width="12" height="12" aria-hidden="true"><rect x="2" y="1" width="3" height="10" fill="currentColor" /><rect x="7" y="1" width="3" height="10" fill="currentColor" /></svg>
@@ -389,19 +443,31 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               </button>
               <span className="clock mono">{clockSec(wave.window_start, tNow)}</span>
               <div className="speed seg" role="group" aria-label="Replay speed">
-                {SPEEDS.map((v) => <button key={v} aria-pressed={speed === v} onClick={() => setSpeed(v)} title={v === 1 ? "Real time: one scan every 4.8 s" : `${v} times real time`}>{v}×</button>)}
+                {SPEEDS.map((v) => <button key={v} aria-pressed={speed === v} onClick={() => setSpeed(v)} title={v === 1 ? `Real time: one radar scan every ${SCAN_S} s` : `${v} times real time`}>{v}×</button>)}
               </div>
               {t != null && <button className="btn text sm" onClick={() => { setT(null); setPlaying(false); }}>Reset</button>}
             </div>
           </div>
-          <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-            geo={geo} paths={paths} pathsNote={pathsNote} updating={pathsBusy && !!paths} />
+          <div className={`scope-body ${shownPanel}`}>
+            {/* both stay mounted, so the radar keeps its range and the map its zoom across the hand-off */}
+            <div className={`pane${shownPanel === "surface" ? " off" : ""}`}>
+              <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
+                geo={geo} paths={paths} pathsNote={pathsNote} updating={pathsBusy && !!paths} />
+            </div>
+            {surf && (
+              <div className={`pane${shownPanel === "radar" ? " off" : ""}`}>
+                <Surface geo={geo!} traj={pathsNote ? null : paths} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
+                  focus={wave.focus} updating={pathsBusy && !!paths} />
+              </div>
+            )}
+          </div>
           <div className="scope-key" aria-hidden="true">
             {wave.focus && <span><i className="k k-focus" />Disrupted</span>}
             <span><i className="k k-flight" />Re-planned</span>
             {nEdits > 0 && <span><i className="k k-edited" />Your edit</span>}
             {red.length > 0 && <span><i className="k k-alert" />Breaks a rule</span>}
-            <span><i className="k k-fixed" />Other traffic</span>
+            {shownPanel !== "surface" && <span><i className="k k-fixed" />Other traffic</span>}
+            {shownPanel !== "radar" && <span><i className="k k-ground" />{shownPanel === "both" ? "Other ground traffic" : "Other traffic, departures"}</span>}
           </div>
         </section>
 
@@ -517,10 +583,13 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         </div>
         <Gantt wave={wave} plan={shown} baseline={baseline} agreed={nEdits ? agreed : null} view={result ? view : "after"} turn={turn}
           rejection={view !== "before" ? rejection : null} tone={tone} involved={involved} editable={canEdit} onEdit={edit}
-          t={tNow} onTime={(v) => { setPlaying(false); setT(v); }} selected={selected} onSelect={setSelected} />
+          t={tNow} onTime={(v) => { setPlaying(false); setT(v); }} selected={selected} onSelect={setSelected}
+          paths={pathsNote ? null : paths} onDrag={(cs, p) => setDragAt(p ? { cs, patch: p } : null)} preview={preview} />
         <div className="gantt-foot">
           <GanttLegend view={result ? view : "after"} negotiated={!!result} focus={wave.focus ?? undefined} edited={nEdits > 0}
-            simulated={wave.gates.some((g) => g.busy.some((b) => /simulated/i.test(b.label)))} />
+            simulated={wave.gates.some((g) => g.busy.some((b) => /simulated/i.test(b.label)))}
+            holds={(shown?.assignments ?? []).some((a) => a.metrics.hold_min > 0) || !!paths?.air.some((a) => a.hold && a.hold.laps >= 1)}
+            taxi={(shown?.assignments ?? []).some((a) => a.action === "land" && a.slot_min != null && (a.metrics.in_block_min ?? 0) > a.slot_min)} />
           {result && view === "compare" && <span className="meta">{changes(result.baseline.plan, current, wave.window_start)}</span>}
         </div>
       </section>

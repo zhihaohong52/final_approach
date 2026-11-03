@@ -18,6 +18,9 @@ export class ApiError extends Error {
 
 class NotDeployed extends Error {}
 
+/** `EvaluateResponse.trajectories` lands with contract v2.2 part 2 (Task 16); typed here until types.ts has it. */
+export type EvaluateWithPaths = EvaluateResponse & { trajectories?: TrajectorySet };
+
 async function get<T>(path: string, fallback: () => Promise<T>, valid: (x: any) => boolean = () => true): Promise<T> {
   if (offline) return fallback();
   try {
@@ -65,9 +68,16 @@ export const api = {
   },
 
   /** Re-checks a plan the duty manager edited. Offline there is no rule engine, so this resolves to null. */
-  async evaluate(req: EvaluateRequest, signal?: AbortSignal): Promise<EvaluateResponse | null> {
+  evaluate(req: EvaluateRequest, signal?: AbortSignal): Promise<EvaluateResponse | null> {
+    return api.postEvaluate(req, { signal });
+  },
+
+  /** As `evaluate`, optionally with the edited plan's trajectories (`include_trajectories`, contract v2.2 part 2),
+   *  so the timeline's hold laps and taxi segments follow a bar while it is dragged. */
+  async postEvaluate(req: EvaluateRequest, opts: { includeTrajectories?: boolean; signal?: AbortSignal } = {}): Promise<EvaluateWithPaths | null> {
     if (offline) return null;
-    const r = await fetch("/api/evaluate", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
+    const body = opts.includeTrajectories ? { ...req, include_trajectories: true } : req;
+    const r = await fetch("/api/evaluate", { method: "POST", signal: opts.signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (r.status === 404 && !(await r.clone().json().catch(() => ({})))?.error) return null;   // an older backend without the route
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));

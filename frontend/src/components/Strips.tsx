@@ -7,7 +7,8 @@ import type { Tone } from "./Radar";
 // the replay clock (on final, sequenced, later, down). Each strip carries what the controller reads at a glance:
 // callsign, type and origin; runway and landing time; gate; and on the second line what changed and who changed it.
 // A third line carries the path when the engine has one: the entry fix and time before the target is on the
-// scope, the hold (fix, laps, level), and the route and vector time the runway choice adds.
+// scope, the hold (fix, laps, level), and the route and vector time the runway choice adds; after touchdown, the
+// taxi: exit, stand and taxi minutes ("TXI B10 → C12 9m"), the exit dropped once the aircraft is on blocks.
 const FINAL_MIN = 10;              // ~30 NM out at 180 kt: established on the approach
 const SEQ_MIN = 45;                // inside the wave: already given a runway and a time
 
@@ -24,7 +25,7 @@ interface Props {
   paths?: TrajectorySet | null;    // the engine's trajectories for `plan`, when it has them
 }
 
-type Strip = { cs: string; rem: number; tone: Tone; type: string; from: string; rw: string; time: string; gate: string; note: string; who: "you" | "agents" | null; path: string };
+type Strip = { cs: string; rem: number; inBlock: number | null; tone: Tone; type: string; from: string; rw: string; time: string; gate: string; note: string; who: "you" | "agents" | null; path: string };
 
 const tPlus = (m: number) => `T${m < 0 ? "−" : "+"}${Math.abs(Math.round(m))}`;
 const signedMin = (m: number) => `${m < 0 ? "−" : "+"}${Math.abs(m).toFixed(1)}′`;
@@ -32,7 +33,33 @@ const signedMin = (m: number) => `${m < 0 ? "−" : "+"}${Math.abs(m).toFixed(1)
 /** The strip's path line: "inbound, entry BFORD T+12" before the target appears, "HLD BENKY 2L 120" for a
  *  flight that holds, and the route time its runway adds over the nominal one ("rte +2.1′") plus any vector
  *  stretch ("vec +1.5′"). Empty when there is nothing to say. */
-export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][number] | undefined, t: number): string {
+type Ground = TrajectorySet["ground"][number];
+
+/** Touchdown and in-block, minutes vs T0: the ground track's ends when the engine has one, else the plan's slot
+ *  and in-block. null when the flight does not land. */
+export function groundTimes(a: Assignment | undefined, ground?: Ground): { down: number; inBlock: number | null } | null {
+  if (!a || a.action !== "land" || a.slot_min == null) return null;
+  const last = ground?.points[ground.points.length - 1];
+  return { down: a.slot_min, inBlock: last ? last.t_min : a.metrics.in_block_min ?? null };
+}
+
+// a stand named by an OSM element id ("n9463243357") reads as noise on a strip; the gate it is bound to does not
+const standName = (stand: string | undefined, gate: string | undefined) => (stand && !/^[nwr]\d+$/.test(stand) ? stand : gate ?? stand ?? "");
+
+/** The strip's path line: "inbound, entry BFORD T+12" before the target appears, "HLD BENKY 2L 120" for a
+ *  flight that holds, and the route time its runway adds over the nominal one ("rte +2.1′") plus any vector
+ *  stretch ("vec +1.5′"). From touchdown on it is the taxi instead: "TXI B10 → C12 9m", and "TXI → C12 9m"
+ *  once on blocks. Empty when there is nothing to say. */
+export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][number] | undefined, t: number, ground?: Ground): string {
+  const gt = groundTimes(a, ground);
+  if (gt && t >= gt.down) {
+    const m = a!.metrics;
+    const exit = ground?.exit ?? m.exit ?? null;
+    const taxi = ground?.taxi_min ?? m.taxi_min ?? null;
+    if (taxi == null && !exit) return "";
+    const onBlocks = gt.inBlock != null && t >= gt.inBlock;
+    return `TXI ${!onBlocks && exit ? `${exit} ` : ""}→ ${standName(ground?.stand, a!.gate)}${taxi != null ? ` ${taxi.toFixed(0)}m` : ""}`;
+  }
   const parts: string[] = [];
   if (air && air.points.length && t < air.appears_min) {
     const fix = air.points.find((p) => p.fix)?.fix;
@@ -49,14 +76,15 @@ export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][nu
 
 export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected, onSelect, paths = null }: Props) {
   const airBy = new Map((paths?.air ?? []).map((x) => [x.callsign, x]));
+  const groundBy = new Map((paths?.ground ?? []).filter((g) => g.kind === "arrival").map((x) => [x.callsign, x]));
   const at = (p: JointPlan | null, cs: string): Assignment | undefined => p?.assignments.find((a) => a.callsign === cs);
   const hhmm = (m: number) => clock(wave.window_start, m);
 
   const strips: Strip[] = wave.flights.map((f) => {
     const a = at(plan, f.callsign);
     const base = { cs: f.callsign, tone: tone(f.callsign), type: f.aircraft_type ?? "", from: f.origin };
-    if (!a) return { ...base, rem: f.sched_min - t, rw: "", time: hhmm(f.sched_min), gate: f.scheduled_gate, note: "no runway yet", who: null, path: "" };
-    if (a.action === "divert") return { ...base, rem: Infinity, rw: "DIV", time: "", gate: "", note: `diverts to ${f.fuel.alternate}`, who: null, path: "" };
+    if (!a) return { ...base, rem: f.sched_min - t, inBlock: null, rw: "", time: hhmm(f.sched_min), gate: f.scheduled_gate, note: "no runway yet", who: null, path: "" };
+    if (a.action === "divert") return { ...base, rem: Infinity, inBlock: null, rw: "DIV", time: "", gate: "", note: `diverts to ${f.fuel.alternate}`, who: null, path: "" };
     const slot = a.slot_min ?? f.sched_min;
     // what changed, against the plan it came from: the duty manager's edit against the agents', the agents' against the status quo
     const ref = edited(f.callsign) ? at(agreed, f.callsign) : at(baseline, f.callsign);
@@ -64,7 +92,8 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
     // one change fits the strip: the runway if it moved, else the time, else the gate (the full story is on the timeline)
     const was = !moved ? "" : ref.runway !== a.runway ? `${ref.runway}` : ref.slot_min !== a.slot_min ? hhmm(ref.slot_min ?? 0) : `gate ${ref.gate}`;
     const note = moved ? `was ${was}` : a.metrics.hold_min >= 1 ? `holds ${Math.round(a.metrics.hold_min)} min` : `due ${hhmm(f.sched_min)}`;
-    return { ...base, rem: slot - t, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t) };
+    const g = groundBy.get(f.callsign);
+    return { ...base, rem: slot - t, inBlock: groundTimes(a, g)?.inBlock ?? null, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t, g) };
   });
   const fixed = wave.queue.filter((q) => q.slot_min - t >= 0 && q.slot_min - t <= SEQ_MIN).sort((p, q) => p.slot_min - q.slot_min);
 
@@ -72,7 +101,8 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
     ["On final", strips.filter((s) => s.rem >= 0 && s.rem <= FINAL_MIN)],
     ["Sequenced", strips.filter((s) => s.rem > FINAL_MIN && s.rem <= SEQ_MIN)],
     ["Later", strips.filter((s) => s.rem > SEQ_MIN)],
-    ["Landed", strips.filter((s) => s.rem < 0)],
+    ["Taxiing", strips.filter((s) => s.rem < 0 && s.inBlock != null && t < s.inBlock)],
+    ["Landed", strips.filter((s) => s.rem < 0 && !(s.inBlock != null && t < s.inBlock))],
   ];
 
   return (
