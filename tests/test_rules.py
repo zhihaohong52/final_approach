@@ -599,8 +599,8 @@ def _bench_ids():
 
 
 def _ord_plan_with_crossing():
-    """ORD replay wave, FCFS plan, with one wave flight A moved to a runway whose taxi route crosses another strip and
-    a second wave flight B landing on that strip 0.5 min after A would reach the crossing unimpeded, so A must hold
+    """ORD fixture wave (F2015-270287, movements fixture day), FCFS plan, with one wave flight A moved to a runway
+    whose taxi route crosses another strip and a second wave flight B landing on that strip 0.5 min after A would reach the crossing unimpeded, so A must hold
     short. A is `assignments[0]`."""
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
@@ -623,7 +623,7 @@ def _ord_plan_with_crossing():
                                                                                  slot_min=round(at_crossing + 0.5, 1)))
             first = q.get(a.callsign)
             return w, JointPlan([first] + [x for x in q.assignments if x.callsign != a.callsign], q.label)
-    raise AssertionError("no crossing route on the ORD replay wave")
+    raise AssertionError("no crossing route on the ORD fixture wave")
 
 
 def moves_fcfs_runways(w):

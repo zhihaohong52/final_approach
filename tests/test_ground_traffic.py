@@ -11,8 +11,9 @@ from backend.wave.fixtures import make_wave
 from backend.wave.ground_traffic import departure_mode, fixed_traffic, fixed_tracks, reservations
 from backend.wave.model import QueueArrival, Runway
 
-# Real BTS On-Time 2015 movement rows (US DOT, public domain) for the replay days, cut to the scheduled window the
-# waves read: ORD 2015-08-19 (F2015-270287), ATL 2015-03-01 (F2015-69315), DFW 2015-01-01 (F2015-75).
+# Real BTS On-Time 2015 movement rows (US DOT, public domain) for the fixture days, cut to the scheduled window the
+# waves read: ORD 2015-08-19 (F2015-270287), ATL 2015-03-01 (F2015-69315), DFW 2015-01-01 (F2015-75, also a replay).
+# F2015-270287 and F2015-69315 were the ORD / ATL replays when these fixtures were cut; they are fixture waves now.
 FIXTURES = Path(__file__).resolve().parent / "data" / "movements"
 DAYS = {"ORD": "ORD-2015-08-19.csv", "ATL": "ATL-2015-03-01.csv", "DFW": "DFW-2015-01-01.csv"}
 
