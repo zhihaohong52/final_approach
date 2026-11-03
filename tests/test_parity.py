@@ -1,4 +1,6 @@
+import glob
 import json
+from pathlib import Path
 import pytest
 from backend import datastore
 from backend.datastore.files import FileStore
@@ -6,7 +8,7 @@ from backend.datastore.pg import PgStore
 from backend.wave import build
 pytestmark = pytest.mark.live_db
 
-REPLAYS = ["F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"]
+REPLAYS = sorted(Path(f).stem for f in glob.glob("data/replay/*.json"))   # the current demo set
 # benchmark.sample_wave_ids(20, 7) + benchmark.sample_flights2015_ids(20, 7) on FileStore, 3 Nov 2026.
 # Hard-coded: calling the samplers in parametrize costs ~63 s at collection on every offline run.
 # All 25 F2015 station-days are in data/challenge2/metar_cache, so neither backend calls IEM.

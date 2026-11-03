@@ -1,13 +1,14 @@
 """Rank flights2015 waves at a hub by the holding laps the FCFS plan or the formula-agreed plan produces (spec §6.2: the radar demo needs
 real holding paths).  Usage: PYTHONPATH=. python3 scripts/pick_replays.py ORD MIA ATL DFW DEN [--scan N]
 
-rank(hub, n) -> [(wave_id, fcfs_total_hold_min, max_laps)] sorted by max_laps desc, then hold desc.  Candidates are
+rank(hub, n) -> [(wave_id, fcfs_plan_hold_min, max_laps)]; max_laps is over the FCFS plan or the formula-agreed plan, the hold minutes are the FCFS plan's only; sorted by max_laps desc, then hold desc.  Candidates are
 the `scan` most delayed (weather + late-aircraft) supported rows at the hub, so the scan stays bounded."""
 from __future__ import annotations
 
 import sys
 
 SCAN = 300
+_SKIPPED: list[str] = []   # candidates that failed to build or negotiate (counted, not hidden)
 
 
 def _score(wave_id: str) -> tuple[float, int] | None:
@@ -24,7 +25,9 @@ def _score(wave_id: str) -> tuple[float, int] | None:
         if fp:
             agreed = trajectory.build(w, plan_from_dicts(fp["assignments"]))
             laps = max([laps] + [t.laps for t in agreed.air if t.wave])
-    except Exception:
+    except Exception as e:
+        print(f"  skipped {wave_id}: {type(e).__name__}: {e}"[:200], file=sys.stderr, flush=True)
+        _SKIPPED.append(wave_id)
         return None
     return hold, laps
 
@@ -55,5 +58,7 @@ if __name__ == "__main__":
     args = [a for a in args if not a.isdigit()]
     for hub in args:
         print(hub, flush=True)
+        _SKIPPED.clear()
         for wid, hold, laps in rank(hub, 3, scan):
-            print(f"  {wid}  max_laps={laps}  fcfs_hold_min={hold}", flush=True)
+            print(f"  {wid}  max_laps={laps}  fcfs_plan_hold_min={hold}  (laps: FCFS or formula-agreed plan)", flush=True)
+        print(f"  skipped {len(_SKIPPED)} of {scan} candidates", flush=True)

@@ -317,12 +317,12 @@ For scale: everything this key spent during the hackathon, including every bench
 
 ### Demo replays
 
-Recorded runs in `data/replay/` (live jev-1.14) play back with no model calls. Waves without a recording run live.
-- `F2015-69315` ATL, fog: DL2239 on 08R, gate E16, +26 min; agreed in turn 2 after the agents concede.
-- `F2015-75` DFW, crosswind runway closures: AA1344 on 13L, gate A38, +119 min; agreed in turn 1.
-- `F2015-77162` DEN, closures: DL927 on runway 25, gate C35, +133 min; turn 1.
-- `F2015-270287` ORD: OO5559 on 09L, gate B18, +57 min; turn 1.
-- `F2015-58926` MIA: UA1634 on runway 12, gate A1, +32 min; agreed in turn 2.
+Recorded runs in `data/replay/` (engine v3-air, live decision models: `liquid/d1-ultra`, 0 model fallbacks) play back with no model calls. Waves without a recording run live. Every replay is agreed in round 1, turn 1; the "laps" flight is the one that flies the holding pattern on the radar.
+- `F2015-310938` ORD: AA1444 on 14R, gate B14, +472 min. The status quo fails GND-GATE-FREE (UA226, AA2234); the agents agree a legal plan in round 1. UA226 laps 6 times (32.3 min) because the swap pushes its touchdown from T+88 to T+120 min, which clears the gate conflict.
+- `F2015-292602` MIA: AA943 on 08L, gate A4, +312 min. The status quo fails GND-GATE-FREE (AA1202, AA1254); legal plan agreed in round 1. AA1254 laps 5 times (41.7 min) because the swap pushes it from T+80 to T+122 min, which clears the gate conflict.
+- `F2015-355777` ATL: DL2310 on 08L, gate T15, +521 min. The status quo fails GND-GATE-FREE (DL1570, DL2463); legal plan agreed in round 1. DL2463 laps 5 times (27.7 min) because the swap pushes it from T+92 to T+120 min, after gate T11 frees.
+- `F2015-77162` DEN: DL927 on runway 25, gate C35, +131 min. The status quo fails GND-GATE-FREE (NK853, WN463); legal plan agreed in round 1. WN463 laps 7 times (40.3 min) because the swap pushes it from T+125 to T+165 min, which clears the gate conflict.
+- `F2015-75` DFW, crosswind runway closures: AA1344 on 13L, gate A38, +123 min. The status quo already passes every check, so the agents just move AA1344 from 35C to 13L; no flight holds (the one replay without a lap).
 
 Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan on the table passes the engine CHECK, so the log shows three `NO_CONSENSUS` messages and a `FALLBACK` with its reason; the safety net diverts DL2019 to CSG (about 320 min). The system declines to invent a plan it cannot prove legal.
 
