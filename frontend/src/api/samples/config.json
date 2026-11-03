@@ -54,6 +54,22 @@
   "llm_available": true,
   "tracing": false,
   "replay_available": true,
+  "rule_ids": [
+    "ATC-RWY-OPEN",
+    "ATC-WAKE-SEP",
+    "ATC-RWY-CAPACITY",
+    "ATC-TAXI-ROUTE",
+    "ATC-TAXI-CONFLICT",
+    "ATC-HOLD-STACK",
+    "ATC-WIND-LIMITS",
+    "PLT-EARLIEST-ETA",
+    "PLT-FUEL-RESERVE",
+    "PLT-CREW-DUTY",
+    "GND-GATE-SIZE",
+    "GND-GATE-FREE",
+    "GND-GATE-NOTICE",
+    "GND-CREW-DUTY"
+  ],
   "store": {
     "backend": "files",
     "degraded": false,

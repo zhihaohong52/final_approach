@@ -24,6 +24,7 @@ export interface Config {
   tracing: boolean;                    // LangSmith on
   replay_available: boolean;           // pre-recorded waves exist
   store?: StoreStatus;                 // v2.1.1: where runs and decisions are kept
+  rule_ids?: RuleId[];                 // v2.2.1: every rule the engine checks (rules.RULE_IDS)
 }
 export interface StoreStatus {
   backend: "postgres" | "files";

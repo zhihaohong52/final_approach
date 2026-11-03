@@ -53,6 +53,12 @@ def capacity_per_runway_h(wave: Wave) -> tuple[float, object]:
     return lim.max_runway_ops_per_hour / max(lim.active_runways, 1), lim
 
 
+# Every rule check() can emit (the contract's RuleId). /api/config serves it as `rule_ids`.
+RULE_IDS = ("ATC-RWY-OPEN", "ATC-WAKE-SEP", "ATC-RWY-CAPACITY", "ATC-TAXI-ROUTE", "ATC-TAXI-CONFLICT",
+            "ATC-HOLD-STACK", "ATC-WIND-LIMITS", "PLT-EARLIEST-ETA", "PLT-FUEL-RESERVE", "PLT-CREW-DUTY",
+            "GND-GATE-SIZE", "GND-GATE-FREE", "GND-GATE-NOTICE", "GND-CREW-DUTY")
+
+
 # --------------------------------------------------------------- limits stated (rules_of_play)
 LIMITS = [
     {"limit": "wake separation (same runway)", "value": "3-8 nm (min_separation_nm)", "source": "workbook",

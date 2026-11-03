@@ -7,7 +7,7 @@
       "name": "Hartsfield-Jackson Atlanta International Airport"
     },
     "window_start": "2015-05-26T20:00:00",
-    "window_end": "2015-05-26T20:00:00",
+    "window_end": "2015-05-26T21:00:00",
     "n_flights": 4,
     "n_queue": 15,
     "callsigns": [
@@ -30,7 +30,7 @@
       "name": "Miami International Airport"
     },
     "window_start": "2015-09-17T17:00:00",
-    "window_end": "2015-09-17T17:00:00",
+    "window_end": "2015-09-17T18:00:00",
     "n_flights": 4,
     "n_queue": 4,
     "callsigns": [
@@ -53,7 +53,7 @@
       "name": "Chicago O'Hare International Airport"
     },
     "window_start": "2015-01-04T12:00:00",
-    "window_end": "2015-01-04T12:00:00",
+    "window_end": "2015-01-04T13:00:00",
     "n_flights": 4,
     "n_queue": 15,
     "callsigns": [

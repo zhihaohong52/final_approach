@@ -30,6 +30,7 @@ from . import baseline, decide, jev, negotiation, scenario
 from .datastore import FileStore, get_store
 from .mcp_server import mcp_asgi_app
 from .wave import replay
+from .wave.rules import RULE_IDS
 from .wave.version import ENGINE_VERSION
 
 from .wave.loader import _load
@@ -125,6 +126,7 @@ def config():
             "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
             "tracing": bool(os.environ.get("LANGSMITH_API_KEY")),
             "replay_available": bool(_replay_ids()),
+            "rule_ids": list(RULE_IDS),
             "store": get_store().status().to_dict()}
 
 
@@ -496,10 +498,16 @@ def _wx_summary(m: dict) -> str:
     return f'{wind}{int(m.get("wind_kt") or 0):02d}KT {vis}, {m.get("surface") or "dry"}'.replace("  ", " ")
 
 
+def _plus_hour(iso: str) -> str:
+    """window_start + 1 h (a wave's window is 60 min), in the same ISO local-time format."""
+    from datetime import timedelta
+    return (datetime.fromisoformat(iso) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
 def _f2015_summary(w: dict, replay_available: bool = False) -> dict:
     flights = w["flights"]
     return {"id": w["id"], "airport": {k: w["airport"][k] for k in ("iata", "icao", "name")},
-            "window_start": w["window_start"], "window_end": w["window_start"],
+            "window_start": w["window_start"], "window_end": _plus_hour(w["window_start"]),
             "n_flights": len(flights), "n_queue": len(w["queue"]),
             "callsigns": [f["callsign"] for f in flights],
             "disrupted_callsigns": [f["callsign"] for f in flights if f.get("disrupted")],
@@ -809,7 +817,7 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
 
 @app.post("/api/evaluate")
 async def evaluate_plan(body: dict = Body(...)):
-    """Re-check a plan the duty manager edited: the same 14 rules (`rules.check`) and scores as the negotiation."""
+    """Re-check a plan the duty manager edited: the same rules (`rules.check`, `rules.RULE_IDS`) and scores as the negotiation."""
     from .wave import edit
     wave_id, rows = body.get("wave_id"), body.get("assignments")
     inc = body.get("include_trajectories", False)
