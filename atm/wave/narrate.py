@@ -61,8 +61,8 @@ def _path_clauses(result: dict) -> list[str]:
                    f"({(m.get('fuel_kg') or 0):.0f} kg)")
     wait = m.get("taxi_wait_min") or 0
     if wait > 0:
-        strip = m.get("hold_short_strip") or m.get("hold_short") or m.get("exit") or "runway"
-        out.append(f"hold-short {strip} {wait:g} min")
+        strip = m.get("hold_short_strip")   # key settled by the ATC-TAXI-CONFLICT metrics (Task 31)
+        out.append(f"hold-short {strip} {wait:g} min" if strip else f"hold-short {wait:g} min")
     return out
 
 
