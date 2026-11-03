@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from backend.wave.model import Assignment, JointPlan, Wave
+from backend.wave.model import Assignment, JointPlan, Move, Wave
 from backend.wave.utility import evaluate
 
 SEARCH_MIN = 30   # how far either side of the edited slot to look for a legal one
@@ -70,6 +70,45 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
         seen.add(cs)
         out.append(Assignment(**kw))
     return JointPlan(out, "edited by the duty manager")
+
+
+MOVE_PARAMS_MAX = 4          # a contract Move carries at most this many params ...
+MOVE_STR_MAX = 64            # ... each string (and the id) at most this long
+
+
+def move_from_dict(d: object) -> Move:
+    """A contract Move dict (e.g. a RejectedMove's `move`) -> Move. Raises ValueError on a malformed one: not an
+    object, a missing kind/agent, callsigns not a list of 1-2 strings, params not an object of at most
+    MOVE_PARAMS_MAX short strings or finite numbers. Authority and applicability are `moves.apply`'s checks."""
+    if not isinstance(d, dict):
+        raise ValueError("move must be an object")
+    kind, agent, cs, params = d.get("kind"), d.get("agent"), d.get("callsigns"), d.get("params", {})
+    if not isinstance(kind, str) or not isinstance(agent, str) or len(kind) > MOVE_STR_MAX or len(agent) > MOVE_STR_MAX:
+        raise ValueError("move needs a kind and an agent")
+    if not isinstance(cs, list) or not 1 <= len(cs) <= 2 or not all(isinstance(x, str) for x in cs):
+        raise ValueError("move.callsigns must be a list of 1 or 2 callsigns")
+    if not isinstance(params, dict) or len(params) > MOVE_PARAMS_MAX:
+        raise ValueError(f"move.params must be an object of at most {MOVE_PARAMS_MAX} entries")
+    for k, v in params.items():
+        ok = (isinstance(v, str) and len(v) <= MOVE_STR_MAX) or \
+            (isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v))
+        if not ok:
+            raise ValueError(f"move.params.{k} must be a short string or a finite number")
+    return Move(id=str(d.get("id", ""))[:MOVE_STR_MAX], agent=agent, kind=kind, callsigns=list(cs),
+                params=dict(params), label=str(d.get("label", ""))[:200])
+
+
+def apply_move(wave: Wave, plan: JointPlan, d: object) -> JointPlan:
+    """`plan` with the contract move `d` applied by the engine's own `moves.apply` (the plan a rejected move would
+    have produced), re-bounded like any input plan. ValueError if the move is malformed, outside its agent's
+    authority, not applicable, or would take the plan outside `plan_from_dicts`' bounds."""
+    from backend.wave import moves
+    m = move_from_dict(d)
+    try:
+        moved = moves.apply(wave, plan, m)
+    except (KeyError, TypeError) as e:     # a param of the wrong type for its kind
+        raise ValueError(f"move {m.kind!r} does not apply: {e}") from None
+    return plan_from_dicts([a.to_dict() for a in moved.assignments], wave)
 
 
 # rule evidence fields that name the other flight(s) a breach is with (comma-separated callsigns)

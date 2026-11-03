@@ -312,3 +312,55 @@ def test_geo_serves_fixed_ground_traffic_once_and_trajectories_only_wave_tracks(
     assert ts["ground"] and all(t["wave"] for t in ts["ground"])
     fixed_cs = {t.callsign for t in fixed}
     assert not fixed_cs & {t["callsign"] for t in ts["ground"]}
+
+
+# ---------------------------------------------------------------- T32 ruling: the paths of a rejected move's plan
+
+def _shift(cs: str, minutes=3) -> dict:
+    return {"id": "m1", "agent": "ATC", "kind": "shift_slot", "callsigns": [cs], "params": {"minutes": minutes}, "label": "x"}
+
+
+def test_trajectories_with_move_are_the_engines_moved_plan():
+    from backend.wave import edit, moves
+    w = build.build_wave(ORD)
+    asg = _sq()
+    cs = next(a["callsign"] for a in asg if a["action"] == "land" and a["callsign"] != w.focus)
+    r = c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg, "move": _shift(cs)})
+    assert r.status_code == 200
+    moved = moves.apply(w, edit.plan_from_dicts(asg, w), edit.move_from_dict(_shift(cs)))
+    assert r.json() == json.loads(json.dumps(trajectory.build(w, moved).to_dict()))
+    assert r.json() != c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg}).json()
+
+
+@pytest.mark.parametrize("move", [
+    "shift", [], {"agent": "ATC", "callsigns": ["X"]}, {"kind": "shift_slot", "agent": "ATC", "callsigns": []},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["A", "B", "C"]},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": True}},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": "x" * 100}},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": 1e9}},     # out of the slot bounds
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["{cs}"], "params": {"minutes": "soon"}},
+    {"kind": "shift_slot", "agent": "ATC", "callsigns": ["ZZ9999"], "params": {"minutes": 3}},     # not a wave flight
+    {"kind": "reassign_gate", "agent": "ATC", "callsigns": ["{cs}"], "params": {"gate": "A1"}},  # no authority
+    {"kind": "teleport", "agent": "ATC", "callsigns": ["{cs}"], "params": {}},
+])
+def test_bad_move_is_422(move):
+    asg = _sq()
+    cs = next(a["callsign"] for a in asg if a["action"] == "land")
+    if isinstance(move, dict):
+        move = json.loads(json.dumps(move).replace("{cs}", cs))
+    r = c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg, "move": move})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (move, r.text[:200])
+
+
+def test_move_hot_path_never_reads_the_store(monkeypatch):
+    from backend import datastore
+    asg = _sq()
+    w = build.build_wave(ORD)
+    cs = next(a["callsign"] for a in asg if a["action"] == "land" and a["callsign"] != w.focus)
+    assert c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg, "move": _shift(cs)}).status_code == 200
+
+    class Boom:
+        def __getattr__(self, name):
+            raise AssertionError(f"store read on the hot path: {name}")
+    monkeypatch.setattr(datastore, "_store", Boom())
+    assert c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg, "move": _shift(cs, 4)}).status_code == 200

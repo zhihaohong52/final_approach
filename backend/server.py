@@ -837,7 +837,9 @@ async def evaluate_plan(body: dict = Body(...)):
 @app.post("/api/trajectories")
 async def trajectories(request: Request, body: dict = Body(...)):
     """v2.2 TrajectorySet, deterministic and model-free: either {wave_id, assignments} (any plan, e.g. an
-    intermediate proposal or a duty-manager edit) or {run_id} (that run's agreed plan, as embedded in it)."""
+    intermediate proposal or a duty-manager edit), optionally with `move` (a Move, e.g. a RejectedMove's: the
+    paths of the plan that move would have produced, applied by `moves.apply`), or {run_id} (that run's agreed
+    plan, as embedded in it)."""
     from .wave import edit, trajectory
     if "run_id" in body:
         run_id = body.get("run_id")
@@ -852,9 +854,14 @@ async def trajectories(request: Request, body: dict = Body(...)):
                         f"run {run_id!r} was recorded on engine {run.get('engine_version') or 'v2'}; "
                         f"paths are not available on {ENGINE_VERSION}")
         return _json_response(request, final)
-    wave_id, rows = body.get("wave_id"), body.get("assignments")
+    wave_id, rows, move = body.get("wave_id"), body.get("assignments"), body.get("move")
     if not isinstance(wave_id, str) or not wave_id:
         return _err(422, "invalid_request", "wave_id (with assignments) or run_id is required")
+    if move is not None:
+        try:
+            edit.move_from_dict(move)          # malformed before any wave is built
+        except ValueError as e:
+            return _err(422, "invalid_request", str(e))
     if not isinstance(rows, list) or not rows:
         return _err(422, "invalid_request", "assignments must be a non-empty list")
     try:
@@ -867,6 +874,8 @@ async def trajectories(request: Request, body: dict = Body(...)):
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
     try:   # bounded input: the engine never sees a slot or delay it cannot draw (or that would hang it)
         plan = edit.plan_from_dicts(rows, wave)
+        if move is not None:   # v2.2: the plan a (rejected) move would have produced, by the engine's own moves.apply
+            plan = await asyncio.to_thread(edit.apply_move, wave, plan, move)
     except (ValueError, TypeError) as e:
         return _err(422, "invalid_request", str(e))
     return _json_response(request, await asyncio.to_thread(lambda: trajectory.build(wave, plan).to_dict()))

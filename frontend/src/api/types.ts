@@ -202,7 +202,7 @@ export interface EvaluateResponse {
 }
 // v2.2: POST /api/trajectories -> TrajectorySet (409 engine_mismatch for a run without paths)
 export type TrajectoriesRequest =
-  | { wave_id: string; assignments: Assignment[] }
+  | { wave_id: string; assignments: Assignment[]; move?: Move }   // v2.2: move = apply it first (a RejectedMove's move)
   | { run_id: string };
 export interface Move {
   id: string;
