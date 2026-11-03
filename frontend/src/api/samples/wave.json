@@ -923,9 +923,9 @@
             "hold_laps": 0,
             "hold_fix": null,
             "hold_level_ft": null,
-            "lap_min": null,
+            "lap_min": 5.305685575691603,
             "vector_min": 0.0,
-            "route_min": null,
+            "route_min": 44.116239273250905,
             "route_extra_min": 0.0,
             "exit": null,
             "rot_s": null,
@@ -954,9 +954,9 @@
             "hold_laps": 0,
             "hold_fix": null,
             "hold_level_ft": null,
-            "lap_min": null,
+            "lap_min": 5.359877142506221,
             "vector_min": 0.0,
-            "route_min": null,
+            "route_min": 44.362150889703884,
             "route_extra_min": 0.0,
             "exit": null,
             "rot_s": null,
@@ -985,9 +985,9 @@
             "hold_laps": 0,
             "hold_fix": null,
             "hold_level_ft": null,
-            "lap_min": null,
+            "lap_min": 5.251494008876987,
             "vector_min": 0.0,
-            "route_min": null,
+            "route_min": 44.419873657500744,
             "route_extra_min": 0.0,
             "exit": null,
             "rot_s": null,
@@ -1016,9 +1016,9 @@
             "hold_laps": 0,
             "hold_fix": null,
             "hold_level_ft": null,
-            "lap_min": null,
+            "lap_min": 5.359877142506221,
             "vector_min": 0.0,
-            "route_min": null,
+            "route_min": 28.842223239637534,
             "route_extra_min": 0.0,
             "exit": null,
             "rot_s": null,
@@ -1067,6 +1067,21 @@
           "callsign": "MQ3327"
         },
         {
+          "rule": "ATC-HOLD-STACK",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "MQ3327: no whole holding lap, not in a stack",
+          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
+          "evidence": {
+            "hold_fix": "none",
+            "laps": 0,
+            "level_ft": "none",
+            "holders": 0,
+            "levels": 5
+          },
+          "callsign": "MQ3327"
+        },
+        {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
@@ -1102,11 +1117,17 @@
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "MQ3327: slot T+301 >= earliest achievable T+301",
-          "source": "ops rule",
+          "detail": "MQ3327: slot T+301 >= earliest achievable T+301.00 on 22R (entry T+256.88 at MYRRS + 44.12 min route to 22R + speed reduction 0 + ground delay 0)",
+          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
             "slot_min": 301.0,
             "eta_earliest_min": 301.0,
+            "earliest_min": 301.0,
+            "runway": "22R",
+            "route_min": 44.12,
+            "route_extra_min": 0.0,
+            "entry_fix": "MYRRS",
+            "t_entry": 256.88,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
@@ -1121,7 +1142,12 @@
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
+            "route_extra_min": 0.0,
+            "need_min": 0.0,
             "extra_min": 45.0,
+            "laps": 0,
+            "lap_min": 5.31,
+            "hold_fix": "none",
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
@@ -1136,7 +1162,8 @@
           "evidence": {
             "arrival_min": 307.0,
             "crew_duty_end_min": 630,
-            "earliest_arrival_min": 307.0,
+            "earliest_arrival_min": 304.6,
+            "earliest_runway": "22L",
             "unavoidable_bust": "no"
           },
           "callsign": "MQ3327"
@@ -1247,6 +1274,21 @@
           "callsign": "MQ3318"
         },
         {
+          "rule": "ATC-HOLD-STACK",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "MQ3318: no whole holding lap, not in a stack",
+          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
+          "evidence": {
+            "hold_fix": "none",
+            "laps": 0,
+            "level_ft": "none",
+            "holders": 0,
+            "levels": 5
+          },
+          "callsign": "MQ3318"
+        },
+        {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
@@ -1282,11 +1324,17 @@
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "MQ3318: slot T+29 >= earliest achievable T+29",
-          "source": "ops rule",
+          "detail": "MQ3318: slot T+29 >= earliest achievable T+29.00 on 22R (entry T-15.36 at CASHN + 44.36 min route to 22R + speed reduction 0 + ground delay 0)",
+          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
             "slot_min": 29.0,
             "eta_earliest_min": 29.0,
+            "earliest_min": 29.0,
+            "runway": "22R",
+            "route_min": 44.36,
+            "route_extra_min": 0.0,
+            "entry_fix": "CASHN",
+            "t_entry": -15.36,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
@@ -1301,7 +1349,12 @@
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
+            "route_extra_min": 0.0,
+            "need_min": 0.0,
             "extra_min": 45.0,
+            "laps": 0,
+            "lap_min": 5.36,
+            "hold_fix": "none",
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
@@ -1316,7 +1369,8 @@
           "evidence": {
             "arrival_min": 35.0,
             "crew_duty_end_min": 600,
-            "earliest_arrival_min": 35.0,
+            "earliest_arrival_min": 28.8,
+            "earliest_runway": "14R",
             "unavoidable_bust": "no"
           },
           "callsign": "MQ3318"
@@ -1427,6 +1481,21 @@
           "callsign": "OO5559"
         },
         {
+          "rule": "ATC-HOLD-STACK",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "OO5559: no whole holding lap, not in a stack",
+          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
+          "evidence": {
+            "hold_fix": "none",
+            "laps": 0,
+            "level_ft": "none",
+            "holders": 0,
+            "levels": 5
+          },
+          "callsign": "OO5559"
+        },
+        {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
@@ -1462,11 +1531,17 @@
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "OO5559: slot T+62 >= earliest achievable T+62",
-          "source": "ops rule",
+          "detail": "OO5559: slot T+62 >= earliest achievable T+62.00 on 22R (entry T+17.58 at BONNT + 44.42 min route to 22R + speed reduction 0 + ground delay 0)",
+          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
             "slot_min": 62.0,
             "eta_earliest_min": 62.0,
+            "earliest_min": 62.0,
+            "runway": "22R",
+            "route_min": 44.42,
+            "route_extra_min": 0.0,
+            "entry_fix": "BONNT",
+            "t_entry": 17.58,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
@@ -1481,7 +1556,12 @@
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
+            "route_extra_min": 0.0,
+            "need_min": 0.0,
             "extra_min": 45.0,
+            "laps": 0,
+            "lap_min": 5.25,
+            "hold_fix": "none",
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
@@ -1496,7 +1576,8 @@
           "evidence": {
             "arrival_min": 68.0,
             "crew_duty_end_min": 660,
-            "earliest_arrival_min": 68.0,
+            "earliest_arrival_min": 60.4,
+            "earliest_runway": "10C",
             "unavoidable_bust": "no"
           },
           "callsign": "OO5559"
@@ -1607,6 +1688,21 @@
           "callsign": "OO5570"
         },
         {
+          "rule": "ATC-HOLD-STACK",
+          "owner": "ATC",
+          "passed": true,
+          "detail": "OO5570: no whole holding lap, not in a stack",
+          "source": "FAA JO 7110.65 \u00a74-5-1 (1,000 ft) and \u00a72-1-4 (first come, first served); 5 levels (assumption)",
+          "evidence": {
+            "hold_fix": "none",
+            "laps": 0,
+            "level_ft": "none",
+            "holders": 0,
+            "levels": 5
+          },
+          "callsign": "OO5570"
+        },
+        {
           "rule": "ATC-TAXI-ROUTE",
           "owner": "ATC",
           "passed": true,
@@ -1642,11 +1738,17 @@
           "rule": "PLT-EARLIEST-ETA",
           "owner": "PILOT",
           "passed": true,
-          "detail": "OO5570: slot T+106 >= earliest achievable T+106",
-          "source": "ops rule",
+          "detail": "OO5570: slot T+106 >= earliest achievable T+106.00 on 22R (entry T+77.16 at TRICH + 28.84 min route to 22R + speed reduction 0 + ground delay 0)",
+          "source": "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)",
           "evidence": {
             "slot_min": 106.0,
             "eta_earliest_min": 106.0,
+            "earliest_min": 106.0,
+            "runway": "22R",
+            "route_min": 28.84,
+            "route_extra_min": 0.0,
+            "entry_fix": "TRICH",
+            "t_entry": 77.16,
             "speed_reduction_min": 0.0,
             "ground_delay_min": 0.0,
             "airborne": "yes"
@@ -1661,7 +1763,12 @@
           "source": "challenge2_operational_constraints.xlsx fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate",
           "evidence": {
             "hold_min": 0.0,
+            "route_extra_min": 0.0,
+            "need_min": 0.0,
             "extra_min": 45.0,
+            "laps": 0,
+            "lap_min": 5.36,
+            "hold_fix": "none",
             "alternate": "MDW",
             "final_reserve_min": 30.0
           },
@@ -1676,7 +1783,8 @@
           "evidence": {
             "arrival_min": 112.0,
             "crew_duty_end_min": 600,
-            "earliest_arrival_min": 112.0,
+            "earliest_arrival_min": 109.7,
+            "earliest_runway": "28R",
             "unavoidable_bust": "no"
           },
           "callsign": "OO5570"

@@ -772,6 +772,9 @@ async def evaluate_plan(body: dict = Body(...)):
     """Re-check a plan the duty manager edited: same rules (`rules.check`) and scores as the negotiation."""
     from .wave import edit
     wave_id, rows = body.get("wave_id"), body.get("assignments")
+    inc = body.get("include_trajectories", False)
+    if not isinstance(inc, bool):
+        return _err(422, "invalid_request", "include_trajectories must be a boolean")
     if not isinstance(wave_id, str) or not wave_id:
         return _err(422, "invalid_request", "wave_id is required")
     if not isinstance(rows, list) or not rows:
@@ -788,7 +791,7 @@ async def evaluate_plan(body: dict = Body(...)):
         plan = edit.plan_from_dicts(rows, wave)
     except (ValueError, TypeError) as e:
         return _err(422, "invalid_request", str(e))
-    return await asyncio.to_thread(edit.check_edit, wave, plan, body.get("include_trajectories") is True)
+    return await asyncio.to_thread(edit.check_edit, wave, plan, inc)
 
 
 @app.post("/api/trajectories")

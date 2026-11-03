@@ -38,6 +38,7 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
     outside [0, 240] min."""
     if wave is not None and len(rows) > len(wave.flights):
         raise ValueError(f"{len(rows)} assignments for a wave of {len(wave.flights)} flights")
+    bounds = slot_bounds(wave) if wave is not None else None
     out, seen = [], set()
     for r in rows:
         if not isinstance(r, dict) or not isinstance(r.get("callsign"), str):
@@ -60,7 +61,7 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
                 raise ValueError(f"{cs} is not a flight of wave {wave.id}")
             if "runway" in kw and not any(rw.id == kw["runway"] for rw in wave.airport.runways):
                 raise ValueError(f"unknown runway {kw['runway']!r} for {cs}")
-            lo, hi = slot_bounds(wave)
+            lo, hi = bounds
             if "slot_min" in kw and not lo <= kw["slot_min"] <= hi:
                 raise ValueError(f"slot_min of {cs} must lie in [{lo:g}, {hi:g}] min")
             for k in ("speed_reduction_min", "ground_delay_min"):

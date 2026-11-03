@@ -6,19 +6,7 @@ from backend.wave import build, trajectory
 from backend.wave.version import ENGINE_VERSION
 from scripts.make_samples import WAVE_ID as ORD_REPLAY   # the ORD replay id; T18 may change it
 
-try:   # T13 defines the shared helper in tests/test_trajectory.py
-    from tests.test_trajectory import _far_runway
-except ImportError:   # until T13 lands: the same definition (T13 brief)
-    def _far_runway(w, cs) -> str:
-        """Open runway end with the largest t_route_min, provided it exceeds the nominal runway's by > 1.0 min."""
-        from backend.wave import route
-        from backend.wave.moves import fcfs_runways
-        rs = route.routes_for_wave(w)
-        nominal = rs[(cs, fcfs_runways(w)[cs])].t_route_min
-        best = max((r for (c, _), r in rs.items() if c == cs), key=lambda r: r.t_route_min)
-        if best.t_route_min <= nominal + 1.0:
-            pytest.skip("no runway end more than 1 min farther than nominal")
-        return best.runway
+from tests.test_trajectory import _far_runway
 
 c = TestClient(server.app)
 ORD = "F2015-270287"   # a flights2015 row; builds regardless of which replay files exist
@@ -220,3 +208,8 @@ def test_replay_load_falls_back_to_result_engine_version(tmp_path, monkeypatch):
     monkeypatch.setattr(datastore, "_store", FileStore(FilePaths(replay_dir=tmp_path, runs_dir=tmp_path / "runs",
                                                                  decisions_path=tmp_path / "decisions.jsonl")))
     assert replay.load("W1")["engine_version"] == ENGINE_VERSION and replay.load("W2")["engine_version"] == "v2"
+
+
+def test_include_trajectories_must_be_bool():
+    r = c.post("/api/evaluate", json={"wave_id": ORD, "assignments": _sq(), "include_trajectories": "yes"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request"
