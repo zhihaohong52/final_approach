@@ -2,11 +2,12 @@ from dataclasses import replace
 
 import pytest
 
-from atm.wave import rules
+from atm.wave import build, route, rules, trajectory
 from atm.wave.model import Assignment, JointPlan, QueueArrival, agent_ids
 from atm.wave.moves import fcfs_plan
 from atm.wave.utility import evaluate
 from tests.fixtures import make_wave
+from tests.test_trajectory import _far_runway
 
 
 def _by(checks, rule, cs):
@@ -179,7 +180,7 @@ def test_evaluate_shape():
     rules_seen = {c["rule"] for c in ev["checks"]}
     assert rules_seen == {"ATC-RWY-OPEN", "ATC-WAKE-SEP", "ATC-TAXI-ROUTE", "ATC-WIND-LIMITS", "PLT-EARLIEST-ETA",
                           "PLT-FUEL-RESERVE", "GND-GATE-SIZE", "GND-GATE-FREE", "GND-CREW-DUTY",
-                          "GND-GATE-NOTICE", "ATC-RWY-CAPACITY"}
+                          "GND-GATE-NOTICE", "ATC-RWY-CAPACITY", "ATC-HOLD-STACK"}
     assert all(a.metrics.in_block_min is not None for a in p.assignments)
 
 
@@ -324,3 +325,210 @@ def test_limits_entries_present():
     assert names["remote stand"]["value"] == "1 stand, 2 positions"
     assert "speed reduction cap" in names
     assert "departures not modelled" in names["runway capacity"]["note"]
+
+
+# --------------------------------------------------------------- airborne model (T14)
+
+ORD = "F2015-270287"
+
+
+def _shared_hold_pair(w, p):
+    """(A, B, runway): two wave flights whose routes on the same runway (A's FCFS runway) hold at the same
+    physical fix, A with the earlier ETA; None if there is no such pair."""
+    rs = route.routes_for_wave(w)
+    by_key: dict = {}
+    for a in p.assignments:
+        r = rs.get((a.callsign, a.runway))
+        if r is not None:
+            by_key.setdefault((a.runway, trajectory._stack_key(r.hold)), []).append(a.callsign)
+    for (rwy, _), css in sorted(by_key.items()):
+        if len(css) >= 2:
+            a_cs, b_cs = sorted(css[:2], key=lambda c: w.flight(c).eta_earliest_min)
+            return a_cs, b_cs, rwy
+    return None
+
+
+def _clear_caches():
+    route.routes_for_wave.cache_clear()
+    trajectory.build.cache_clear()
+
+
+@pytest.fixture
+def two_holders_reversed(monkeypatch):
+    """ORD wave, two flights at one hold fix: A enters first and flies 2 laps (slot earliest + 2.2 laps),
+    B enters 0.3 lap later and flies 1 lap (slot earliest + 1.2 laps), so B leaves the stack before A
+    (not bottom-first). B's ETA is moved so that it reaches the fix 0.3 lap after A. B is
+    plan.assignments[1]."""
+    _clear_caches()
+    w = build.build_wave(ORD)
+    pair = _shared_hold_pair(w, fcfs_plan(w))
+    if pair is None:
+        # no two flights share a hold fix: route every flight with the first origin's STAR
+        orig, seen = route.select_star, []
+
+        def same_star(proc, origin_latlon, runway):
+            if origin_latlon is not None and not seen:
+                seen.append(origin_latlon)
+            return orig(proc, seen[0] if seen else origin_latlon, runway)
+        monkeypatch.setattr(route, "select_star", same_star)
+        _clear_caches()
+        pair = _shared_hold_pair(w, fcfs_plan(w))
+    assert pair is not None
+    a_cs, b_cs, rwy = pair
+
+    def plan_for(wv):
+        rs = route.routes_for_wave(wv)
+        lap = trajectory.hold_for(wv, rs[(a_cs, rwy)]).lap_min
+        p = fcfs_plan(wv)
+        a = replace(p.get(a_cs), runway=rwy, slot_min=trajectory.earliest(wv, a_cs, rwy) + 2.2 * lap,
+                    speed_reduction_min=0.0, ground_delay_min=0.0)
+        b = replace(p.get(b_cs), runway=rwy, slot_min=trajectory.earliest(wv, b_cs, rwy) + 1.2 * lap,
+                    speed_reduction_min=0.0, ground_delay_min=0.0)
+        plan = JointPlan([a, b] + [x for x in p.assignments if x.callsign not in (a_cs, b_cs)], p.label)
+        holds = {t.callsign: t.hold for t in trajectory.build(wv, plan).air}
+        return plan, lap, holds[a_cs], holds[b_cs]
+
+    for _ in range(4):   # move B's ETA until it reaches the fix 0.3 lap after A (entry is linear in ETA)
+        plan, lap, ha, hb = plan_for(w)
+        gap = hb["entry_min"] - ha["entry_min"]
+        if abs(gap - 0.3 * lap) < 1e-6:
+            break
+        f = w.flight(b_cs)
+        nf = replace(f, eta_earliest_min=f.eta_earliest_min + 0.3 * lap - gap)
+        w = replace(w, flights=[nf if x is f else x for x in w.flights])
+    assert ha["laps"] == 2 and hb["laps"] == 1
+    assert ha["entry_min"] < hb["entry_min"] and hb["exit_min"] < ha["exit_min"]
+    yield w, plan
+    _clear_caches()
+
+
+def test_hold_stack_fifo_violation_cited(two_holders_reversed):
+    w, p = two_holders_reversed          # same hold fix; B enters after A but leaves first; both >= 1 lap
+    c = _by(rules.check(w, p), "ATC-HOLD-STACK", p.assignments[1].callsign)
+    assert not c.passed and c.source.startswith("FAA JO 7110.65 §4-5-1")
+    assert {"hold_fix", "laps", "level_ft", "holders", "levels"} <= set(c.evidence)
+
+
+def test_hold_stack_earlier_holder_passes(two_holders_reversed):
+    w, p = two_holders_reversed
+    checks = rules.check(w, p)
+    a, b = p.assignments[0].callsign, p.assignments[1].callsign
+    ca, cb = _by(checks, "ATC-HOLD-STACK", a), _by(checks, "ATC-HOLD-STACK", b)
+    assert ca.passed and ca.evidence["laps"] == 2 and ca.evidence["holders"] == 1
+    assert cb.evidence["laps"] == 1 and cb.evidence["holders"] == 2 and cb.evidence["levels"] == 5
+    assert cb.evidence["level_ft"] == ca.evidence["level_ft"] + 1000
+    assert a in cb.detail and "bottom" in cb.detail
+    # the trajectory layer reports the same violation at the same fix
+    assert cb.evidence["hold_fix"] in trajectory.build(w, p).stack_violations
+
+
+def test_hold_stack_no_laps_passes():
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    for a in p.assignments:
+        c = _by(rules.check(w, p), "ATC-HOLD-STACK", a.callsign)
+        assert c.passed and c.evidence["laps"] == 0 and c.evidence["levels"] == 5
+
+
+def test_stack_eval_six_holders_and_order():
+    # (callsign, entry, exit, level): six overlapping holders at a 12,000 ft base, exits in entry order
+    hs = [(f"F{i}", float(i), 100.0 + i, 12000 + 1000 * i) for i in range(6)]
+    res = rules.stack_eval(hs, 12000)
+    assert all(res[f"F{i}"]["ok"] for i in range(5))
+    assert not res["F5"]["ok"] and res["F5"]["holders"] == 6 and "levels" in res["F5"]["why"][0]
+    # a later entrant leaving while an earlier one still holds fails; the earlier one does not
+    res = rules.stack_eval([("A", 0.0, 20.0, 12000), ("B", 1.0, 10.0, 13000)], 12000)
+    assert res["A"]["ok"] and not res["B"]["ok"] and "A" in res["B"]["why"][0]
+    # equal exit times are bottom-first in entry order: no violation; a level below the base fails
+    res = rules.stack_eval([("A", 0.0, 10.0, 12000), ("B", 1.0, 10.0, 13000)], 12000)
+    assert res["A"]["ok"] and res["B"]["ok"]
+    assert not rules.stack_eval([("A", 0.0, 10.0, 11000)], 12000)["A"]["ok"]
+
+
+def test_earliest_eta_cites_route_for_far_runway():
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
+    far = _far_runway(w, a.callsign)      # from tests.test_trajectory
+    c = _by(rules.check(w, p.with_assignment(replace(a, runway=far))), "PLT-EARLIEST-ETA", a.callsign)
+    assert not c.passed and "route_min" in c.evidence and far in c.detail
+    assert {"entry_fix", "t_entry"} <= set(c.evidence)
+
+
+def test_earliest_eta_regression_ord_mq3327_far_runway():
+    """Recorded ORD agreed plan: MQ3327 on 09L at its nominal (22R) slot T+301. Its 09L route is ~5.6 min
+    longer, so it lands before its 09L earliest. Before T14 the rule used ETA+SR+GD and passed it."""
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
+    q = p.with_assignment(replace(a, runway="09L", slot_min=301.0))
+    e = trajectory.earliest(w, "MQ3327", "09L")
+    assert e - 301.0 > 5.0
+    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "MQ3327")
+    assert not c.passed and "09L" in c.detail
+    assert c.evidence["earliest_min"] == pytest.approx(e, abs=0.01)
+    # metrics agree: no hold is drawn for a slot before the earliest landing
+    from atm.wave.utility import metrics_map
+    assert metrics_map(w, q)["MQ3327"].hold_min == 0.0
+    # at its 09L earliest it passes
+    ok = p.with_assignment(replace(a, runway="09L", slot_min=e))
+    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "MQ3327").passed
+
+
+def test_fuel_reserve_counts_route_extra():
+    from dataclasses import replace as _r
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
+    far = _far_runway(w, a.callsign)
+    rs = route.routes_for_wave(w)
+    extra = rs[(a.callsign, far)].t_route_min - rs[(a.callsign, a.runway)].t_route_min
+    f = w.flight(a.callsign)
+    w2 = _r(w, flights=[_r(f, fuel={**f.fuel, "extra_min": extra - 0.5}) if x is f else x for x in w.flights])
+    q = p.with_assignment(replace(a, runway=far, slot_min=trajectory.earliest(w2, a.callsign, far)))
+    c = _by(rules.check(w2, q), "PLT-FUEL-RESERVE", a.callsign)
+    assert not c.passed and c.evidence["route_extra_min"] > 0
+    assert {"laps", "lap_min", "hold_fix"} <= set(c.evidence)
+
+
+def test_crew_duty_unavoidable_uses_best_open_runway():
+    """'Unavoidable' compares the duty end with the earliest in-block over every open runway, not the
+    assigned runway: a flight on a far runway that could have made it on another one fails."""
+    from dataclasses import replace as _r
+    from atm.wave.utility import metrics_map, taxi_min
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
+    far = _far_runway(w, a.callsign)
+    best = min(trajectory.earliest(w, a.callsign, r.id) + taxi_min(w, r.id, a.gate)
+               for r in w.airport.runways if r.open)
+    q = p.with_assignment(replace(a, runway=far, slot_min=trajectory.earliest(w, a.callsign, far)))
+    arr = metrics_map(w, q)[a.callsign].in_block_min
+    assert arr > best + 1.0
+    f = w.flight(a.callsign)
+    end = (arr + best) / 2           # between the best in-block and the far-runway one
+    w2 = _r(w, flights=[_r(f, crew_duty_end_min=end) if x is f else x for x in w.flights])
+    c = _by(rules.check(w2, q), "PLT-CREW-DUTY", a.callsign)
+    assert not c.passed and c.evidence["unavoidable_bust"] == "no"
+    assert c.evidence["earliest_arrival_min"] == pytest.approx(best, abs=0.05)
+    assert c.evidence["earliest_runway"] != far
+    w3 = _r(w, flights=[_r(f, crew_duty_end_min=best - 1.0) if x is f else x for x in w.flights])
+    c = _by(rules.check(w3, q), "PLT-CREW-DUTY", a.callsign)
+    assert c.passed and c.evidence["unavoidable_bust"] == "yes"
+
+
+def test_limits_list_new_rows():
+    rows = {l["limit"]: l for l in rules.LIMITS}
+    assert rows["holding pattern geometry"]["source"] == "real data" and rows["holding stack"]["source"] == "assumption"
+    assert rows["procedures cycle"]["source"] == "real data"
+    assert all(l["source"] in ("workbook", "real data", "assumption") for l in rules.LIMITS)
+
+
+def test_thirteen_rules_on_ord():
+    w = build.build_wave(ORD)
+    assert len({c.rule for c in rules.check(w, fcfs_plan(w))}) == 13
+
+
+def test_earliest_eta_shorter_route_runway_passes_below_eta():
+    """Coordinator repro (T13 review): ORD MQ3327 22R -> 22L. The 22L route is shorter, so its earliest
+    landing is before the ETA; a slot there passes (the old ETA+SR+GD rule vetoed it)."""
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
+    e = trajectory.earliest(w, "MQ3327", "22L")
+    assert e < w.flight("MQ3327").eta_earliest_min - 1.0
+    q = p.with_assignment(replace(a, runway="22L", slot_min=e))
+    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "MQ3327")
+    assert c.passed and c.evidence["route_extra_min"] < 0
+    late = p.with_assignment(replace(a, runway="22L", slot_min=e - 0.1))
+    assert not _by(rules.check(w, late), "PLT-EARLIEST-ETA", "MQ3327").passed

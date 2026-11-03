@@ -9,7 +9,7 @@ import math
 import re
 from collections import Counter
 
-from atm.wave import wind
+from atm.wave import holding, route, trajectory, wind
 from atm.wave.model import FlightMetrics, JointPlan, RuleCheck, Wave
 from atm.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics_map, taxi_min, turnaround_min
 
@@ -17,6 +17,8 @@ SRC_WB = "challenge2_operational_constraints.xlsx"
 SRC_WAKE = f"{SRC_WB} wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)"
 SRC_FUEL = f"{SRC_WB} fuel_and_crew (final reserve 30 min) + 14 CFR 121.639 alternate"
 SRC_OPS = "ops rule"
+SRC_ETA = "ops rule + FAA CIFP 2611 route time T_route (synthesized where CIFP has none)"
+SRC_STACK = "FAA JO 7110.65 §4-5-1 (1,000 ft) and §2-1-4 (first come, first served); 5 levels (assumption)"
 SRC_CAP = f"{SRC_WB} airport_capacity (max_runway_ops_per_hour / active_runways)"
 SRC_TURN = f"{SRC_WB} airport_capacity (min_turnaround_min)"
 SRC_NOTICE = f"{SRC_WB} fuel_and_crew (gate change notice >= 20 min before arrival)"
@@ -92,6 +94,24 @@ LIMITS = [
      "note": "maximum en-route speed reduction a pilot may use to absorb delay"},
     {"limit": "turnaround / gate occupancy", "value": "airport min_turnaround_min", "source": "workbook",
      "note": "45 min at large hubs, 35 min at medium/small hubs"},
+    {"limit": "holding pattern geometry", "value": "AIM 5-3-8: 200 KIAS <= 6,000 ft, 230 KIAS to 14,000 ft, "
+     "265 KIAS above; inbound leg 1.0 min <= 14,000 ft, 1.5 min above; right turns unless published",
+     "source": "real data", "note": "published (CIFP HF/HM/HA) hold geometry where coded, else a standard hold "
+     "at the STAR fix; turn rate = least bank of 3 deg/s, 30 deg, 25 deg; TAS = IAS x (1 + 0.02 x alt/1000); "
+     "lap time derived from these; hold_min = laps x lap_min + vector stretch"},
+    {"limit": "holding stack", "value": "5 levels, 1,000 ft apart, bottom-first exit", "source": "assumption",
+     "note": "1,000 ft vertical spacing per FAA JO 7110.65 §4-5-1, first come first served per §2-1-4; the "
+     "5-level depth is our assumption; only flights with >= 1 whole lap enter the stack; ATC-HOLD-STACK fails a "
+     "6th simultaneous holder and a later entrant leaving while an earlier one still holds"},
+    {"limit": "terminal burn proxy", "value": "workbook holding burn for route extra and holding",
+     "source": "assumption", "note": "fuel_kg = (hold_min + route_extra_min) x holding burn (route extra may be "
+     "negative, never below zero fuel); PLT-FUEL-RESERVE checks hold_min + max(0, route_extra_min) <= extra fuel"},
+    {"limit": "terminal speed profile", "value": "280 KIAS above 10,000 ft, 250 below, 210 from the IAF, "
+     "170 at the FAF, 140 kt final", "source": "assumption",
+     "note": "converted to TAS for route time T_route; METAR headwind applied on final only; the runway-dependent "
+     "earliest landing is t_entry + SR + GD + T_route(runway) with t_entry = ETA - T_route(FCFS runway)"},
+    {"limit": "procedures cycle", "value": "FAA CIFP 2611", "source": "real data",
+     "note": "current procedures (CIFP 2611) flown over 2015 traffic; not for navigation"},
 ]
 
 
@@ -346,39 +366,140 @@ def _divert_check(f, cs: str) -> RuleCheck:
                      SRC_FUEL, ev, cs)
 
 
-def _duty_check(f, a, mm, cs: str) -> RuleCheck | None:
+def stack_eval(holders: list[tuple[str, float, float, int]], base_ft: int) -> dict[str, dict]:
+    """ATC-HOLD-STACK at one physical hold fix. `holders` are (callsign, entry_min, exit_min, level_ft) of
+    the flights flying >= 1 lap there. Order of entry is (entry_min, callsign); an exit at the same minute
+    as an entry happens first. Per callsign returns {ok, holders, earlier_holding, why}:
+      * holders: flights in the stack when it enters (itself included); > 5 (holding.STACK_LEVELS) fails;
+      * earlier_holding: earlier entrants still holding when it leaves (FIFO / bottom-first exit); any fails;
+      * a level below the hold base fails."""
+    order = sorted(holders, key=lambda h: (h[1], h[0]))
+    out: dict[str, dict] = {}
+    for i, (cs, t_in, t_out, level) in enumerate(order):
+        earlier = order[:i]
+        n = 1 + sum(1 for o in earlier if o[2] > t_in + 1e-9)
+        still = [o[0] for o in earlier if o[2] > t_out + 1e-9]
+        why = []
+        if n > holding.STACK_LEVELS:
+            why.append(f"{n} simultaneous holders > {holding.STACK_LEVELS} levels")
+        if still:
+            why.append(f"leaves at T{t_out:+.1f} while earlier entrant {', '.join(still)} still holds "
+                       f"(not bottom-first)")
+        if level < base_ft:
+            why.append(f"level {level} ft below hold base {base_ft} ft")
+        out[cs] = {"ok": not why, "holders": n, "earlier_holding": still, "why": why}
+    return out
+
+
+def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
+    """ATC-HOLD-STACK for every landing wave flight, grouped by PHYSICAL hold fix (`trajectory._stack_key` of
+    the route's hold, never the name). Entry/exit/level come from the plan's trajectories; a fix the
+    trajectory layer flagged (`stack_violations`) with no failing flight here fails all its holders (closed)."""
+    ts = trajectory.build(wave, plan)
+    rs = route.routes_for_wave(wave)
+    holds = trajectory.wave_holds(wave)
+    groups: dict[tuple, list] = {}
+    for t in ts.air:
+        if t.wave and t.laps >= 1:
+            r = rs.get((t.callsign, t.runway))
+            if r is not None:
+                groups.setdefault(trajectory._stack_key(r.hold), []).append(t)
+    names = Counter(k[0] for k in groups)
+    out: dict[str, RuleCheck] = {}
+    for key, ts_ in groups.items():
+        label = key[0] if names[key[0]] == 1 else f"{key[0]}@{key[1]:.3f},{key[2]:.3f}"
+        spec = holds[key]
+        rows = [(t.callsign, t.hold["entry_min"], t.hold["exit_min"], t.hold["level_ft"])
+                for t in ts_ if t.hold is not None]
+        res = stack_eval(rows, spec.base_ft)
+        for t in ts_:
+            if t.hold is None:
+                res[t.callsign] = {"ok": False, "holders": 0, "earlier_holding": [],
+                                   "why": [f"{t.laps} laps but no stack level assigned"]}
+        flagged = ts.stack_violations.get(label)
+        if flagged and all(v["ok"] for v in res.values()):
+            for v in res.values():
+                v["ok"] = False
+                v["why"].append("trajectory stack violation: " + "; ".join(flagged))
+        all_cs = ", ".join(c for c, *_ in sorted(rows, key=lambda h: (h[1], h[0])))
+        for t in ts_:
+            v, h = res[t.callsign], t.hold or {}
+            lvl = h.get("level_ft")
+            ev = {"hold_fix": label, "laps": t.laps, "level_ft": lvl if lvl is not None else "none",
+                  "holders": v["holders"], "levels": holding.STACK_LEVELS, "base_ft": spec.base_ft,
+                  "lap_min": round(t.lap_min, 2), "holders_at_fix": all_cs}
+            if h:
+                ev.update({"entry_min": round(h["entry_min"], 2), "exit_min": round(h["exit_min"], 2)})
+            if v["earlier_holding"]:
+                ev["earlier_holding"] = ", ".join(v["earlier_holding"])
+            where = (f"{t.callsign}: {t.laps} laps at {label} ({t.lap_min:.2f} min/lap)"
+                     + (f", level {lvl} ft, T{h['entry_min']:+.1f}..T{h['exit_min']:+.1f}" if h else ""))
+            detail = (where + ": " + "; ".join(v["why"]) if not v["ok"] else
+                      where + f": {v['holders']} of {holding.STACK_LEVELS} levels in use on entry, "
+                      f"leaves bottom-first")
+            out[t.callsign] = RuleCheck("ATC-HOLD-STACK", "ATC", v["ok"], detail, SRC_STACK, ev, t.callsign)
+    for t in ts.air:
+        if t.wave and t.callsign not in out:
+            if t.lap_min is None:
+                det = f"{t.callsign}: no route geometry for {t.runway}: holding not modelled, not in a stack"
+            elif t.laps >= 1:
+                det = f"{t.callsign}: {t.laps} laps but no hold fix route; not in a stack"
+            else:
+                det = (f"{t.callsign}: no whole holding lap"
+                       + (f" (delay absorbed by {t.vector_min:.1f} min vector stretch)" if t.vector_min > 0 else "")
+                       + ", not in a stack")
+            out[t.callsign] = RuleCheck("ATC-HOLD-STACK", "ATC", t.laps < 1 or t.lap_min is None, det, SRC_STACK,
+                                        {"hold_fix": "none", "laps": t.laps, "level_ft": "none", "holders": 0,
+                                         "levels": holding.STACK_LEVELS}, t.callsign)
+    return out
+
+
+def _earliest_in_block(wave: Wave, f, gate: str | None) -> tuple[float, str | None]:
+    """Earliest possible in-block (no speed reduction, no ground delay) minimised over open runways:
+    min over open r of trajectory.earliest(f, r) + taxi(r, gate) (M1: v2 taxi heuristic). Without an open
+    runway: ETA + far taxi."""
+    best = (f.eta_earliest_min + TAXI_FAR_MIN, None)
+    for r in wave.airport.runways:
+        if r.open:
+            t = trajectory.earliest(wave, f.callsign, r.id) + taxi_min(wave, r.id, gate)
+            if best[1] is None or t < best[0]:
+                best = (t, r.id)
+    return best
+
+
+def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
     """PLT-CREW-DUTY: in-block (landing slot + taxi-in) or alternate arrival within the flight crew duty end.
-    Fails iff the plan's arrival exceeds the duty end AND eta_earliest + taxi was still within it (the plan
-    caused the bust). If even the earliest landing busts the duty it is an unavoidable bust in the data:
-    reported, never a violation. None when the duty end is unknown."""
+    Fails iff the plan's arrival exceeds the duty end AND the earliest possible in-block over the open
+    runways (`_earliest_in_block`, at the plan's gate; the scheduled gate for a diversion) was still within it
+    (the plan caused the bust). If even that busts the duty it is an unavoidable bust in the data: reported,
+    never a violation. None when the duty end is unknown."""
     end = getattr(f, "crew_duty_end_min", None)
     if end is None:
         return None
     if a.action == "divert":
         _, alt, alt_min, _ = fuel_info(f)
         arr = f.eta_earliest_min + float(alt_min or 0.0)
-        taxi = TAXI_FAR_MIN
         what = f"diverts, alternate {alt or '?'} arrival T{arr:+g}"
     else:
         arr = mm[cs].in_block_min
         if arr is None or not math.isfinite(arr) or not has_slot(a):
             return RuleCheck("PLT-CREW-DUTY", "PILOT", False, f"{cs}: no in-block time to check crew duty",
                              SRC_DUTY, {"crew_duty_end_min": end}, cs)
-        taxi = arr - float(a.slot_min)
         what = f"in-block T{arr:+g}"
-    earliest = f.eta_earliest_min + taxi
+    earliest, e_rwy = _earliest_in_block(wave, f, a.gate if a.action == "land" else f.scheduled_gate)
     unavoidable = earliest > end + 1e-9
     ok = arr <= end + 1e-9 or unavoidable
     if arr <= end + 1e-9:
         tail = f"<= crew duty end T{end:+g}"
     elif unavoidable:
         tail = (f"> crew duty end T{end:+g}: unavoidable duty bust (data), earliest landing in-block "
-                f"T{earliest:+g} is already past it")
+                f"T{earliest:+.1f} (on {e_rwy or 'any runway'}) is already past it")
     else:
-        tail = f"> crew duty end T{end:+g} (earliest possible in-block T{earliest:+g} would fit)"
+        tail = (f"> crew duty end T{end:+g} (earliest possible in-block T{earliest:+.1f} on "
+                f"{e_rwy or 'any runway'} would fit)")
     return RuleCheck("PLT-CREW-DUTY", "PILOT", ok, f"{cs}: {what} {tail}", SRC_DUTY,
                      {"arrival_min": round(arr, 1), "crew_duty_end_min": round(end, 1),
-                      "earliest_arrival_min": round(earliest, 1),
+                      "earliest_arrival_min": round(earliest, 1), "earliest_runway": e_rwy or "none",
                       "unavoidable_bust": "yes" if unavoidable else "no"}, cs)
 
 
@@ -394,6 +515,8 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
     gfree = _gate_free_checks(wave, plan, mm)
     opposite = direction_conflicts(wave, plan)
     cap = _capacity_checks(wave, plan)
+    stack = _stack_checks(wave, plan)
+    rs = route.routes_for_wave(wave)
     turn = turnaround_min(wave)
     metar = wave.metar
     out: list[RuleCheck] = []
@@ -403,7 +526,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
         cs = a.callsign
         if a.action == "divert":
             out.append(_divert_check(f, cs))
-            d = _duty_check(f, a, mm, cs)
+            d = _duty_check(wave, f, a, mm, cs)
             if d:
                 out.append(d)
             continue
@@ -429,6 +552,12 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
         # ATC-WAKE-SEP
         out.append(wake.get(cs) or RuleCheck("ATC-WAKE-SEP", "ATC", False, f"{cs}: no valid slot assigned",
                                              SRC_WAKE, {"runway": str(a.runway), "slot_min": str(a.slot_min)}, cs))
+
+        # ATC-HOLD-STACK (only flights with >= 1 whole lap are in a stack)
+        out.append(stack.get(cs) or RuleCheck("ATC-HOLD-STACK", "ATC", True,
+                                              f"{cs}: no valid runway/slot, no holding drawn", SRC_STACK,
+                                              {"hold_fix": "none", "laps": 0, "level_ft": "none", "holders": 0,
+                                               "levels": holding.STACK_LEVELS}, cs))
 
         # ATC-TAXI-ROUTE (no taxiway closures modelled in wave data: informational pass)
         g = gates.get(a.gate or "")
@@ -462,18 +591,25 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
             out.append(RuleCheck("ATC-WIND-LIMITS", "ATC", False, f"{cs}: unknown runway {a.runway!r}",
                                  "FAA Order 8400.9 §6d", {"metar": metar.raw, "runway": str(a.runway)}, cs))
 
-        # PLT-EARLIEST-ETA (incl. absorption bounds)
+        # PLT-EARLIEST-ETA (incl. absorption bounds): runway-dependent earliest landing (spec §6.2)
         slot_ok = has_slot(a)
         slot = float(a.slot_min) if slot_ok else float("nan")
-        earliest = f.eta_earliest_min + a.speed_reduction_min + a.ground_delay_min
+        sr, gd = a.speed_reduction_min, a.ground_delay_min
+        earliest = trajectory.earliest(wave, cs, a.runway, sr, gd)
+        rex = trajectory.earliest(wave, cs, a.runway) - f.eta_earliest_min   # T_route(r) - T_route(nominal)
+        r = rs.get((cs, a.runway)) if a.runway else None
+        t_entry = trajectory.entry_time(wave, cs) if r is not None else None
+        if r is not None and t_entry is not None:
+            how = (f"entry T{t_entry:+.2f} at {r.entry_fix or 'route start'} + {r.t_route_min:.2f} min route "
+                   f"to {a.runway}")
+        else:
+            how = f"ETA T{f.eta_earliest_min:+g}, no route geometry for {a.runway}"
+        how += f" + speed reduction {sr:g} + ground delay {gd:g}"
         problems = []
         if not slot_ok:
             problems.append(f"no valid slot ({a.slot_min!r})")
         elif slot < earliest:
-            problems.append(f"slot T{slot:+g} before earliest achievable T{earliest:+g} "
-                            f"(ETA T{f.eta_earliest_min:+g} + speed reduction {a.speed_reduction_min:g} "
-                            f"+ ground delay {a.ground_delay_min:g})")
-        sr, gd = a.speed_reduction_min, a.ground_delay_min
+            problems.append(f"slot T{slot:+g} before earliest achievable T{earliest:+.2f} on {a.runway} ({how})")
         if not (math.isfinite(sr) and 0 <= sr <= MAX_SPEED_REDUCTION_MIN):
             problems.append(f"speed reduction {sr:g} min outside 0-{MAX_SPEED_REDUCTION_MIN:g}")
         if not math.isfinite(gd):
@@ -482,28 +618,50 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
             problems.append(f"negative ground delay {gd:g}")
         if math.isfinite(gd) and gd > 0 and f.airborne:
             problems.append(f"ground delay {gd:g} min impossible: {cs} already airborne")
+        fin_e = math.isfinite(earliest)
         out.append(RuleCheck(
             "PLT-EARLIEST-ETA", "PILOT", not problems,
-            f"{cs}: " + ("; ".join(problems) if problems else f"slot T{slot:+g} >= earliest achievable T{earliest:+g}"),
-            SRC_OPS, {"slot_min": slot if slot_ok else "none", "eta_earliest_min": f.eta_earliest_min,
+            f"{cs}: " + ("; ".join(problems) if problems else
+                         f"slot T{slot:+g} >= earliest achievable T{earliest:+.2f} on {a.runway} ({how})"),
+            SRC_ETA, {"slot_min": slot if slot_ok else "none", "eta_earliest_min": f.eta_earliest_min,
+                      "earliest_min": round(earliest, 2) if fin_e else str(earliest),
+                      "runway": str(a.runway),
+                      "route_min": round(r.t_route_min, 2) if r is not None else "none",
+                      "route_extra_min": round(rex, 2),
+                      "entry_fix": (r.entry_fix or "none") if r is not None else "none",
+                      "t_entry": round(t_entry, 2) if t_entry is not None else "none",
                       "speed_reduction_min": sr if math.isfinite(sr) else str(sr),
                       "ground_delay_min": gd if math.isfinite(gd) else str(gd),
                       "airborne": "yes" if f.airborne else "no"}, cs))
 
-        # PLT-FUEL-RESERVE (unrounded hold)
+        # PLT-FUEL-RESERVE: unrounded hold (= laps x lap_min + vector) plus any longer route than nominal
         extra, alt, _, fin = fuel_info(f)
         hold = max(0.0, slot - earliest) if slot_ok else float("inf")
-        ok = hold <= extra
-        hold_s = f"{hold:.2f}".rstrip("0").rstrip(".") if slot_ok else "unknown"
+        route_x = max(0.0, rex)
+        need = hold + route_x
+        ok = need <= extra
+        fmt = lambda x: f"{x:.2f}".rstrip("0").rstrip(".")
+        if not slot_ok:
+            parts = "hold unknown"
+        elif m.lap_min is not None and m.hold_laps >= 1:
+            parts = (f"hold {fmt(hold)} min ({m.hold_laps} laps x {m.lap_min:.2f} min at {m.hold_fix or 'hold fix'}"
+                     f" + {fmt(m.vector_min)} min vectors)")
+        else:
+            parts = f"hold {fmt(hold)} min"
+        if slot_ok and route_x > 0:
+            parts += f" + {fmt(route_x)} min longer route to {a.runway} = {fmt(need)} min"
         out.append(RuleCheck(
             "PLT-FUEL-RESERVE", "PILOT", ok,
-            f"{cs}: hold {hold_s} min {'<=' if ok else '>'} {extra:g} min extra fuel above alternate "
+            f"{cs}: {parts} {'<=' if ok else '>'} {extra:g} min extra fuel above alternate "
             f"({alt or 'none'}) + {fin:g} min final reserve", SRC_FUEL,
-            {"hold_min": round(hold, 2) if slot_ok else "unknown", "extra_min": extra,
+            {"hold_min": round(hold, 2) if slot_ok else "unknown", "route_extra_min": round(rex, 2),
+             "need_min": round(need, 2) if slot_ok else "unknown", "extra_min": extra,
+             "laps": m.hold_laps, "lap_min": round(m.lap_min, 2) if m.lap_min is not None else "none",
+             "hold_fix": m.hold_fix or "none",
              "alternate": str(alt or "none"), "final_reserve_min": fin}, cs))
 
         # PLT-CREW-DUTY
-        d = _duty_check(f, a, mm, cs)
+        d = _duty_check(wave, f, a, mm, cs)
         if d:
             out.append(d)
 
