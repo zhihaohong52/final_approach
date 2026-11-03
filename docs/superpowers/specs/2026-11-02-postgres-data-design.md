@@ -61,7 +61,8 @@ move and utility runs in memory, exactly as today (§10).
 - Changed provenance. Postgres is storage, not a source: provenance strings stay "BTS On-Time 2024-07",
   "IEM METAR", "OurAirports", and so on.
 - Anything that wakes the database on a timer (health checks, keep-alives, background pruning). This would burn
-  the 100 CU-hour budget for nothing (§10.2).
+  the 100 CU-hour budget for nothing (§10.2). Nothing wakes the database on a timer: the one-shot warm-up runs
+  once per process start, never periodically.
 
 ## 3. Current state (verified by reading code and files, 2 Nov 2026)
 
@@ -607,7 +608,7 @@ transfer" is not stated, so it is checked in the Console after D3.
 | `GET /api/waves`, `/api/flights` | p95 ≤ 300 ms | precomputed summaries; one indexed query with `count(*) over ()` |
 | `GET /api/runs/{id}` | p95 ≤ 150 ms (LRU hit ~1 ms) | PK lookup |
 | Run save | off the SSE path | background thread after the LRU insert |
-| `/api/config` (Render health check) | no DB call, ever | reports the last known store status |
+| `/api/config` (Render health check) | no DB call in the handler; under Postgres the first request starts the one-shot replay warm-up thread (once per process) | reports the last known store status |
 
 **Region:** the Render service runs in `oregon` (Blueprint default), so the Neon project goes in
 **`aws-us-west-2` (Oregon)**. Neon regions cannot be changed after creation.
