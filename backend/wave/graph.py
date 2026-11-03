@@ -196,8 +196,8 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
     cs = agent.split(":", 1)[1]
     f, a = wave.flight(cs), plan.get(cs)
     m = metrics_map(wave, plan)[cs]
-    return {"flight": cs, "type": f.aircraft_type, "airborne": f.airborne, "eta_earliest": f.eta_earliest_min,
-            "sched": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
+    return {"flight": cs, "type": f.aircraft_type, "airborne": f.airborne, "earliest_touchdown": f.eta_earliest_min,
+            "sched_in_block": f.sched_min,   # §6.1: BTS scheduled arrival is a gate time "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
                            "speed_reduction": a.speed_reduction_min, "ground_delay": a.ground_delay_min},
             "path": _path_line(wave, a),
@@ -740,7 +740,7 @@ def revision(wave: Wave, plan: JointPlan, focus: str) -> dict:
                 "summary": f"{focus} diverts to {alt or 'its alternate'} (delay ~{m.delay_min:g} min)"}
     action = "ground_delay" if a.ground_delay_min > 0 else "hold" if m.hold_min > 0 else "land"
     slot = float(a.slot_min)
-    d = m.delay_min   # §6.1: in-block vs the scheduled gate time (a landing slot vs a gate time mixed bases)
+    d = m.delay_min   # §6.1: in-block vs the scheduled gate time (not landing slot - sched: mixed time bases)
     hhmm = _hhmm(wave.window_start, slot)
     extra = (f", ground delay {a.ground_delay_min:g} min" if a.ground_delay_min > 0 else "") + \
             (f", speed reduction {a.speed_reduction_min:g} min" if a.speed_reduction_min > 0 else "") + \

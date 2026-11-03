@@ -87,15 +87,16 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
   const strips: Strip[] = wave.flights.map((f) => {
     const a = at(plan, f.callsign);
     const base = { cs: f.callsign, tone: tone(f.callsign), type: f.aircraft_type ?? "", from: f.origin };
-    if (!a) return { ...base, rem: f.sched_min - t, inBlock: null, rw: "", time: hhmm(f.sched_min), gate: f.scheduled_gate, note: "no runway yet", who: null, path: "" };
+    // strip time is a landing time: the earliest touchdown; sched_min is the gate (in-block) time, shown as STA
+    if (!a) return { ...base, rem: f.eta_earliest_min - t, inBlock: null, rw: "", time: hhmm(f.eta_earliest_min), gate: f.scheduled_gate, note: `STA ${hhmm(f.sched_min)} · no runway yet`, who: null, path: "" };
     if (a.action === "divert") return { ...base, rem: Infinity, inBlock: null, rw: "DIV", time: "", gate: "", note: `diverts to ${f.fuel.alternate}`, who: null, path: "" };
-    const slot = a.slot_min ?? f.sched_min;
+    const slot = a.slot_min ?? f.eta_earliest_min;
     // what changed, against the plan it came from: the duty manager's edit against the agents', the agents' against the status quo
     const ref = edited(f.callsign) ? at(agreed, f.callsign) : at(baseline, f.callsign);
     const moved = ref && ref.action === "land" && (ref.runway !== a.runway || ref.slot_min !== a.slot_min || ref.gate !== a.gate);
     // one change fits the strip: the runway if it moved, else the time, else the gate (the full story is on the timeline)
     const was = !moved ? "" : ref.runway !== a.runway ? `${ref.runway}` : ref.slot_min !== a.slot_min ? hhmm(ref.slot_min ?? 0) : `gate ${ref.gate}`;
-    const note = moved ? `was ${was}` : a.metrics.hold_min >= 1 ? `holds ${Math.round(a.metrics.hold_min)} min` : `due ${hhmm(f.sched_min)}`;
+    const note = moved ? `was ${was}` : a.metrics.hold_min >= 1 ? `holds ${Math.round(a.metrics.hold_min)} min` : `STA ${hhmm(f.sched_min)}`;
     const g = groundBy.get(f.callsign);
     return { ...base, rem: slot - t, inBlock: groundTimes(a, g)?.inBlock ?? null, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t, g, geo ? fixBy : undefined) };
   });

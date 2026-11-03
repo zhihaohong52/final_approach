@@ -99,12 +99,21 @@ def test_airport_taxi_median_and_generic_fallback():
 
 
 def test_revision_delay_vs_schedule_is_in_block_delay():
-    from atm.wave import build
-    from atm.wave.graph import revision
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import metrics_map
+    from backend.wave import build
+    from backend.wave.graph import revision
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import metrics_map
     w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
     r = revision(w, p, w.focus)
     m = metrics_map(w, p)[w.focus]   # §6.1: delay vs the scheduled gate time, measured at in-block
     assert r["delay_vs_schedule_min"] == m.delay_min
     assert r["delay_vs_schedule_min"] == pytest.approx(m.in_block_min - w.flight(w.focus).sched_min, abs=0.05)
+
+
+def test_queue_slot_survives_wheels_on_day_wrap():
+    """split_flights2015 wraps wheels_on only when it is < sched - 720, so an arrival ~12 h late reads a day
+    early (UA1121 on F2015-37071 had slot T-696). The slot is sched + arr_delay - taxi_in (exact by BTS definition)."""
+    from backend.wave import build
+    w = build.build_wave("F2015-37071")
+    q = next(x for x in w.queue if x.callsign == "UA1121")
+    assert q.slot_min == pytest.approx(744.0, abs=1.0)

@@ -654,11 +654,12 @@ function Revision({ r, plan, wave }: { r: NegotiationResult; plan: JointPlan | n
   const f = wave.flights.find((x) => x.callsign === r.focus);
   const name = icao(r.revision.callsign);
   if (!a || a.action === "divert" || !f) return <p className="dec-head">{name} diverts to {r.revision.alternate ?? f?.fuel.alternate ?? "its alternate"}</p>;
-  const late = Math.round((a.slot_min ?? 0) - f.sched_min);
+  // in-block delay against the scheduled gate time (BTS STA); a landing slot minus STA would mix time bases
+  const late = Math.round(a.metrics.delay_min);
   return (
     <>
       <p className="dec-head">{name} lands <span className="mono">{clock(wave.window_start, a.slot_min ?? 0)}</span> on {a.runway}, gate {a.gate}</p>
-      <p className="dec-line"><span className={late > 0 ? "neg" : "pos"}>{signed(late, " min")}</span> against its schedule ({clock(wave.window_start, f.sched_min)}){a.gate !== f.scheduled_gate ? `; gate was ${f.scheduled_gate}` : ""}{a.metrics.hold_min ? `; holds ${a.metrics.hold_min} min` : ""}.</p>
+      <p className="dec-line"><span className={late > 0 ? "neg" : "pos"}>{signed(late, " min")}</span> at the gate against its schedule (STA {clock(wave.window_start, f.sched_min)}){a.gate !== f.scheduled_gate ? `; gate was ${f.scheduled_gate}` : ""}{a.metrics.hold_min ? `; holds ${a.metrics.hold_min} min` : ""}.</p>
     </>
   );
 }

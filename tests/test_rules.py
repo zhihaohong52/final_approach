@@ -460,9 +460,12 @@ def test_earliest_eta_regression_ord_mq3327_far_runway():
     """Recorded ORD agreed plan: MQ3327 on 09L at its nominal (22R) slot T+301. Its 09L route is ~5.6 min
     longer, so it lands before its 09L earliest. Before T14 the rule used ETA+SR+GD and passed it."""
     w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
-    q = p.with_assignment(replace(a, runway="09L", slot_min=301.0))
+    # §6.1 (v3-time): the nominal slot is now the real wheels-on T+287 (301 - 14 min TAXI_IN), not T+301
+    nominal = w.flight("MQ3327").eta_earliest_min
+    assert nominal == pytest.approx(287.0)
+    q = p.with_assignment(replace(a, runway="09L", slot_min=nominal))
     e = trajectory.earliest(w, "MQ3327", "09L")
-    assert e - 301.0 > 5.0
+    assert e - nominal > 5.0
     c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "MQ3327")
     assert not c.passed and "09L" in c.detail
     assert c.evidence["earliest_min"] == pytest.approx(e, abs=0.01)

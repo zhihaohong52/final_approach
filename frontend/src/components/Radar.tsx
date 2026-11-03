@@ -294,7 +294,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
         <ul className="beyond" aria-label={`Inbound flights not drawn on the ${range} NM scope`}>
           {/* before a plan exists the negotiated flights have no runway, so they are listed, not drawn */}
           {awaiting.map((f) => (
-            <li key={f.callsign} className={`blip ${tone(f.callsign)}`}><button onClick={() => onSelect(f.callsign)}>{icao(f.callsign)}</button> due {clock(wave.window_start, f.sched_min)} · no runway yet</li>
+            <li key={f.callsign} className={`blip ${tone(f.callsign)}`}><button onClick={() => onSelect(f.callsign)}>{icao(f.callsign)}</button> STA {clock(wave.window_start, f.sched_min)} (gate) · no runway yet</li>
           ))}
           {beyond.sort((p, q) => p.rem - q.rem).slice(0, 5).map((b) => (
             <li key={b.cs} className={`blip ${b.tone}`}><button onClick={() => b.tone !== "fixed" && onSelect(b.cs)}>{icao(b.cs)}</button> {b.rw} in {b.rem}′</li>

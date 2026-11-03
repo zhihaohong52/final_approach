@@ -125,3 +125,15 @@ def test_delay_is_in_block_minus_scheduled_gate_time():
     w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
     m = metrics_map(w, p)[w.focus]
     assert m.delay_min == pytest.approx(max(0.0, m.in_block_min - w.flight(w.focus).sched_min), abs=0.05)
+
+
+def test_2024_wave_uses_the_airport_taxi_median():
+    """BTS 2024 rows carry no TAXI_IN: the taxi-in reference is the airport's 2015 median (spec §6.1)."""
+    from backend.wave.utility import taxi_in_ref
+    w = build.build_wave("DCA-2024-06-22-16")
+    med = build.airport_taxi_median("DCA")
+    assert med is not None
+    for f in w.flights:
+        assert f.taxi_in_ref_min == med and taxi_in_ref(w, f.callsign) == med
+        detail = next(p for p in f.provenance if p.layer == "flights").detail
+        assert "DCA 2015 median TAXI_IN" in detail and "delayed-flight rows" in detail

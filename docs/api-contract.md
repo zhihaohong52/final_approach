@@ -25,11 +25,14 @@ response per endpoint in `frontend/src/api/samples/*.json`. Until then, build ag
 - Errors: non-2xx status with `{ "error": { "code": string, "message": string } }`.
   `429` adds `retry_after_s`. Rate limit: 10 live negotiations per 10 min per IP.
 - Every real-world fact carries a `Provenance` so the UI can badge real vs simulated.
-- Time base (engine `v3-time`): BTS scheduled arrival times are gate (in-block) times. `sched_min` is
+- Time base (engine `v3-time`): BTS scheduled arrival times are gate (in-block) times (STA). `sched_min` is
   the scheduled in-block; `eta_earliest_min` is the earliest touchdown, `sched_min` + attributed BTS
-  delays − the taxi-in reference (the flight's real `TAXI_IN`, else the airport's 2015 median, else 6 min),
-  so for a 2015 row it is the real wheels-on. `delay_min` = in-block − `sched_min`. Fixed-traffic
-  `QueueArrival.slot_min` is the real wheels-on when known, else `sched − taxi-in reference`.
+  delays (late aircraft, carrier, weather, NAS) − the taxi-in reference (the flight's real `TAXI_IN`, else
+  the airport's 2015 median, else 6 min). For a 2015 row that is the real wheels-on whenever the attributed
+  delays sum to `ARRIVAL_DELAY` (security delay is not attributed). `delay_min` = max(0, in-block −
+  `sched_min`). Fixed-traffic `QueueArrival.slot_min` is the real wheels-on, `sched + ARRIVAL_DELAY −
+  TAXI_IN` (exact by the BTS definitions), else `sched − taxi-in reference`; the queue is still chosen by
+  scheduled time, so a late fixed arrival may land well after the window.
 
 ```ts
 type AgentId = "ATC" | "GROUND" | `PILOT:${string}`;
@@ -417,7 +420,7 @@ interface Revision {
   scheduled_gate: string;
   speed_reduction_min?: number; ground_delay_min?: number; hold_min?: number;
   alternate?: string | null;           // divert only
-  delay_vs_schedule_min: number;       // in-block - scheduled arrival (BTS gate time); divert: estimated delay
+  delay_vs_schedule_min: number;       // max(0, in-block - scheduled arrival (BTS gate time)) >= 0; divert: estimated delay
   summary: string;                     // one line for the UI
 }
 interface Limit {

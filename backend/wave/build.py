@@ -411,7 +411,7 @@ def taxi_in_ref_row(iata: str, r: dict) -> tuple[float, float | None, str]:
         return real, real, f"taxi-in {real:g} min (real TAXI_IN)"
     med = airport_taxi_median(iata)
     if med is not None:
-        return med, med, f"taxi-in {med:g} min ({iata} 2015 median TAXI_IN)"
+        return med, med, f"taxi-in {med:g} min ({iata} 2015 median TAXI_IN over the challenge's delayed-flight rows)"
     return GENERIC_TAXI_IN_MIN, None, f"taxi-in {GENERIC_TAXI_IN_MIN:g} min (generic, no TAXI_IN for {iata})"
 
 
@@ -498,8 +498,8 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
 
 
 def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> list[QueueArrival]:
-    """Fixed-traffic arrivals (spec §6.1): each lands at its real wheels-on (`wheels_min`, T0-relative) when
-    known, else at its scheduled gate time minus the taxi-in reference."""
+    """Fixed-traffic arrivals (spec §6.1): each lands at its real wheels-on when known (`_queue_slot`), else at
+    its scheduled gate time minus the taxi-in reference. Membership is still chosen by scheduled time."""
     open_rw = [r for r in runways if r.open]
     if not open_rw:
         return []
@@ -517,6 +517,13 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> l
 
 
 def _queue_slot(iata: str, r: dict) -> float:
+    """T0-relative landing of a fixed-traffic arrival. BTS: ARRIVAL_TIME = scheduled + ARRIVAL_DELAY and
+    WHEELS_ON = ARRIVAL_TIME - TAXI_IN, so `sched_min + arr_delay - taxi_in` is the real wheels-on with no clock
+    ambiguity (the split's `wheels_on` reads a day early for arrivals ~12 h late). Then `wheels_min`, then
+    `sched_min - taxi_in_ref`."""
+    delay, taxi = _num(r.get("arr_delay")), _num(r.get("taxi_in"))
+    if delay is not None and taxi is not None:
+        return float(r["sched_min"]) + delay - taxi
     wheels = _num(r.get("wheels_min"))
     return wheels if wheels is not None else float(r["sched_min"]) - taxi_in_ref_row(iata, r)[0]
 
