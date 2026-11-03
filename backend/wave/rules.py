@@ -107,7 +107,8 @@ LIMITS = [
              "give-way "
              "waits of the plan's hold-short pass (ATC-TAXI-CONFLICT); no ramp or gate waits, so it can sit below BTS "
              "TAXI_IN (FCFS medians on the replays with the 2015 movements, ROT + taxi + waits vs taxi-in reference: "
-             "ORD 4.4 / 15.5, MIA 5.0 / 4.0, ATL 7.0 / 6.5, DFW 16.4 / 13.5, DEN 6.4 / 5.5 min; DFW is above the "
+             "ORD-7053 4.1 / 26.0, ORD-346730 6.1 / 15.0, MIA 5.0 / 4.0, ATL 4.6 / 16.0, DFW 16.4 / 13.5 min; DFW is above "
+             "the "
              "reference because three arrivals wait head-on against a 36R departure stream on their fixed route, no "
              "rerouting: see 'departure holding bay'); see the taxi validation (Task 27)"},
     {"limit": "ground node headway", "value": f"{surface.HEADWAY_S:g} s", "source": "assumption",
@@ -167,11 +168,14 @@ LIMITS = [
              "the taxiway until one leaves (re-scheduled behind it, visible to every later mover and to the wave "
              "flights). Takeoffs are spaced only from takeoffs already settled in pushback order. Replays with the "
              "2015 movements (bay wait median / p95 / max; upstream queue wait median / max; fixed movers over the "
-             "30-min horizon): ORD 5.4 / 25.0 / 37.6, 10.4 / 29.9, 0; MIA 10.7 / 17.9 / 38.3, 0 / 8.6, 0; ATL "
-             "5.0 / 21.0 / 43.7, 8.5 / 22.5, 0; DFW 5.0 / 18.0 / 39.0, 2.3 / 12.6, 0; DEN 9.3 / 22.4 / 23.2, "
-             "0 / 7.0, 0. Pushback is WHEELS_OFF - TAXI_OUT, and BTS TAXI_OUT already contains the real queue, so "
+             "30-min horizon): ORD-7053 4.0 / 94.6 / 125.2, 27.8 / 91.7, 41; ORD-346730 1.0 / 15.0 / 29.3, 14.5 / 81.4, "
+             "41; MIA 10.7 / 17.9 / 38.3, 0 / 8.6, 0; ATL 5.0 / 17.0 / 22.0, 7.6 / 23.3, 0; DFW 5.0 / 18.0 / 39.0, "
+             "2.3 / 12.6, 0. Known limitation: the two ORD replays overload the fixed traffic. ORD-7053 sends 88 "
+             "departures to 27R/28C/28R and 41 of them wait past the horizon; ORD-346730 is mixed mode on 04L "
+             "(113 departures and the arrivals on one runway end, 1 takeoff a minute) and 41 fixed movers "
+             "(departures and arrivals) exceed it; both counts are in the wave's ground-traffic provenance. Pushback is WHEELS_OFF - TAXI_OUT, and BTS TAXI_OUT already contains the real queue, so "
              "the bay wait stands for that queue. Wave arrivals giving way to a departure on a shared taxiway (FCFS "
-             "plans): DFW 3, ATL 2 (max 1.3 min), other replays 0. Known limitation: the DFW waits (MQ2833 21.0, "
+             "plans): DFW 3, other replays 0. Known limitation: the DFW waits (MQ2833 21.0, "
              "AA2441 13.6, AA260 7.6 min, all at node 107) are head-on waits on the arrival's fixed route against a "
              "stream of 36R departures (9-10 departures on its route edges, opposite direction, during each wait); "
              "with no rerouting the arrival waits for a gap, and its ROT + taxi + wait exceeds its own BTS TAXI_IN "
@@ -211,8 +215,9 @@ LIMITS = [
              "within 10 deg, same direction, another strip), plus every other free open end within 60 deg of it "
              "with no tailwind whose centreline crosses no arrival strip and no strip already chosen (nearest heading "
              "first; crossing-runway operations are not modelled). Mixed mode (departures share the arrival runway) "
-             "iff there is none. Replays: ORD arrivals 14R, departures 09R/10C/10L/10R (v3-taxi: mixed on 14R); DFW "
-             "35R/36L/36R + 31L/31R; MIA (09), ATL (09L/09R/10) and DEN (16R/17L/17R) unchanged. "
+             "iff there is none. Replays: ORD-7053 arrivals 32R, departures 27R/28C/28R; ORD-346730 mixed mode on 04L; "
+             "DFW arrivals 35C, departures 31L/31R/36L/36R; MIA arrivals 08L, departures 09; ATL arrivals 08L, "
+             "departures 09L/09R. "
              "In pushback order each departure is trial-scheduled (hold-short scheduler, crossing "
              "waits and queues included) to every candidate and takes the earliest expected takeoff: leaving the "
              "holding point, never before WHEELS_OFF, spaced from the strip's other takeoffs (departure takeoff "
@@ -231,9 +236,8 @@ LIMITS = [
              "same time; it is spaced only from takeoffs already settled in pushback order and from every landing on "
              "the strip (1 min). It matches the holding-point throughput of the ground scheduler (30 s node headway + "
              "30 s line-up). Replays with the 2015 movements, takeoffs later than WHEELS_OFF (> 0 / > 1 / > 5 min, "
-             "max): ORD 14 / 10 / 1 of 144, 6.0; MIA 2 / 0 / 0 of 24, 1.0; ATL 39 / 28 / 2 of 163, 6.5; DFW "
-             "4 / 4 / 0 of 119, 4.0; DEN 0 (v3-taxi: ORD 0; MIA 2 / 0 / 0, 1.0; ATL 62 / 51 / 37, 18.0; DFW and DEN "
-             "0)"},
+             "max): ORD-7053 39 / 38 / 31 of 88, 36.0; ORD-346730 81 / 70 / 53 of 113, 70.9; MIA 2 / 0 / 0 of 24, 1.0; "
+             "ATL 38 / 33 / 18 of 110, 16.0; DFW 4 / 4 / 0 of 119, 4.0"},
 ]
 
 
