@@ -342,7 +342,8 @@ class PgStore:
         if hit is not _UNSET:
             return None if hit is None else hit.copy()
         cols = ("row_id, date::text as date, arr_date::text as arr_date, carrier, flight_no, tail, origin, sched_dep, "
-                "sched_arr, arr_delay, weather_delay, late_aircraft_delay, nas_delay, carrier_delay, diverted, cancelled")
+                "sched_arr, arr_delay, weather_delay, late_aircraft_delay, nas_delay, carrier_delay, diverted, cancelled, "
+                "wheels_on, taxi_in, wheels_off, taxi_out")
         text = self._copy_text(f"copy (select {cols} from ref.flights2015 where dest = %s and arr_date = %s::date "
                                f"order by ord) to stdout with (format csv, header true)", (dest, arr_date))
         df = pd.read_csv(io.StringIO(text), **FLIGHTS2015_DAY_KWARGS)

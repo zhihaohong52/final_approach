@@ -16,3 +16,4 @@ docs/
 data/waves/arrivals.csv.gz
 data/challenge2/flights.csv
 data/challenge2/disruptions.csv
+data/ref/movements2015/

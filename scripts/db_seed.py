@@ -387,7 +387,7 @@ def _load_dataset(name: str) -> Callable:
 
 _F15_COLS = ["ord", "row_id", "date", "arr_date", "carrier", "flight_no", "tail", "origin", "dest", "sched_dep",
              "sched_arr", "arr_delay", "weather_delay", "late_aircraft_delay", "nas_delay", "carrier_delay",
-             "diverted", "cancelled"]
+             "diverted", "cancelled", "wheels_on", "taxi_in", "wheels_off", "taxi_out"]
 _F15_TYPES = ["text" if c in ("carrier", "tail", "origin", "dest") else "date" if c in ("date", "arr_date") else "int4"
               for c in _F15_COLS]
 _F15_TEXT = [t == "text" for t in _F15_TYPES]
@@ -398,22 +398,23 @@ def _files_flights2015() -> list[Path]:
 
 
 def _flights2015_lines() -> Iterable[str]:
-    """flights_index.csv (row order = ord) merged with the per-destination files on row_id for the three columns
-    the index lacks (sched_dep, nas_delay, carrier_delay)."""
+    """flights_index.csv (row order = ord) merged with the per-destination files on row_id for the columns
+    the index lacks (sched_dep, nas_delay, carrier_delay and the four taxi columns)."""
     import gzip
-    extra: dict[str, tuple[str, str, str]] = {}
+    extra: dict[str, tuple[str, ...]] = {}
     for p in sorted((CH2 / "flights").glob("*.csv.gz")):
         with gzip.open(p, "rt", newline="") as f:
             for r in csv.DictReader(f):
-                extra[r["row_id"]] = (r["sched_dep"], r["nas_delay"], r["carrier_delay"])
+                extra[r["row_id"]] = (r["sched_dep"], r["nas_delay"], r["carrier_delay"], r["wheels_on"], r["taxi_in"],
+                                      r["wheels_off"], r["taxi_out"])
     with open(DATASETS["flights2015_index"].path, newline="") as f:
         for i, r in enumerate(csv.DictReader(f)):
             if r["row_id"] not in extra:
                 raise ValueError(f"flights_index row_id {r['row_id']} is missing from flights/{r['dest']}.csv.gz")
-            sd, nas, carr = extra[r["row_id"]]
+            sd, nas, carr, *taxi = extra[r["row_id"]]
             vals = [str(i), r["row_id"], r["date"], r["arr_date"], r["carrier"], r["flight_no"], r["tail"], r["origin"],
                     r["dest"], sd, r["sched_arr"], r["arr_delay"], r["weather_delay"], r["late_aircraft_delay"],
-                    nas, carr, r["diverted"], r["cancelled"]]
+                    nas, carr, r["diverted"], r["cancelled"], *taxi]
             yield _pg_line([_cell(v, t) for v, t in zip(vals, _F15_TYPES)], _F15_TEXT)
 
 

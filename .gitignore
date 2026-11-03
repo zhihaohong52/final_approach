@@ -18,3 +18,6 @@ frontend/dist/
 
 # browser-test screenshots and logs
 .playwright-mcp/
+
+# generated BTS 2015 ground movements (~94 MB): seeded to Postgres only, never committed
+data/ref/movements2015/

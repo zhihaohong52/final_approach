@@ -48,7 +48,8 @@ ARRIVALS_KWARGS = {"dtype": {
 FLIGHTS2015_DAY_KWARGS = {"dtype": {
     "date": str, "arr_date": str, "carrier": str, "tail": str, "origin": str,
     "row_id": "int32", "flight_no": "int32", "sched_dep": "int32",
-    "sched_arr": "int32", "diverted": "int8", "cancelled": "int8"}}
+    "sched_arr": "int32", "diverted": "int8", "cancelled": "int8",
+    "wheels_on": "float32", "taxi_in": "float32", "wheels_off": "float32", "taxi_out": "float32"}}
 
 _FLIGHTS2015_INDEX_KWARGS = {"dtype": {
     "row_id": "int32", "date": "category", "carrier": "category", "flight_no": "int32",

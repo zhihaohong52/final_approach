@@ -15,11 +15,12 @@ SRC = {"AIRLINE": "carrier", "FLIGHT_NUMBER": "flight_no", "TAIL_NUMBER": "tail"
        "DESTINATION_AIRPORT": "dest", "SCHEDULED_DEPARTURE": "sched_dep", "SCHEDULED_ARRIVAL": "sched_arr",
        "ARRIVAL_DELAY": "arr_delay", "WEATHER_DELAY": "weather_delay", "LATE_AIRCRAFT_DELAY": "late_aircraft_delay",
        "AIR_SYSTEM_DELAY": "nas_delay", "AIRLINE_DELAY": "carrier_delay", "DIVERTED": "diverted",
-       "CANCELLED": "cancelled"}
+       "CANCELLED": "cancelled", "WHEELS_ON": "wheels_on", "TAXI_IN": "taxi_in", "WHEELS_OFF": "wheels_off",
+       "TAXI_OUT": "taxi_out"}
 DELAYS = ["arr_delay", "weather_delay", "late_aircraft_delay", "nas_delay", "carrier_delay"]
 FILE_COLS = ["row_id", "date", "arr_date", "carrier", "flight_no", "tail", "origin", "sched_dep", "sched_arr",
              "arr_delay", "weather_delay", "late_aircraft_delay", "nas_delay", "carrier_delay", "diverted",
-             "cancelled"]
+             "cancelled", "wheels_on", "taxi_in", "wheels_off", "taxi_out"]
 INDEX_COLS = ["row_id", "date", "carrier", "flight_no", "tail", "origin", "dest", "sched_arr", "arr_delay",
               "weather_delay", "late_aircraft_delay", "diverted", "cancelled", "arr_date"]
 
@@ -27,6 +28,14 @@ INDEX_COLS = ["row_id", "date", "carrier", "flight_no", "tail", "origin", "dest"
 def _min(hhmm: pd.Series) -> pd.Series:
     v = hhmm.astype(int)
     return (v // 100).clip(upper=23) * 60 + v % 100
+
+
+def _wheels_min(hhmm: pd.Series, sched_hhmm: pd.Series) -> pd.Series:
+    """Wheels time HHMM -> local minutes since midnight of the scheduled day: +1440 when it wrapped past midnight
+    relative to the scheduled time. NaN stays NaN."""
+    v = pd.to_numeric(hhmm, errors="coerce")
+    m = (v // 100).clip(upper=23) * 60 + (v % 100).where(v < 2400, 59)
+    return m.where(~(m < _min(sched_hhmm) - 720), m + 1440)
 
 
 def main() -> None:
@@ -45,6 +54,11 @@ def main() -> None:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
     for c in ("flight_no", "sched_dep", "sched_arr", "diverted", "cancelled"):
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
+    # wheels_on is on the arrival clock, wheels_off on the departure clock (both local to their airport)
+    df["wheels_on"] = _wheels_min(df["wheels_on"], df["sched_arr"])
+    df["wheels_off"] = _wheels_min(df["wheels_off"], df["sched_dep"])
+    for c in ("taxi_in", "taxi_out"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
     out = CH2 / "flights"
     out.mkdir(exist_ok=True)
     n = 0

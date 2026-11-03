@@ -1,0 +1,9 @@
+date,kind,carrier,flight_no,tail,other,sched,wheels,taxi,cancelled
+2015-08-19,arrival,AA,100,N100AA,DFW,420,425,6.0,0
+2015-08-19,arrival,UA,201,N201UA,DEN,485,490,9.0,0
+2015-08-19,departure,AA,310,N310AA,MIA,495,510,14.0,0
+2015-08-19,departure,DL,411,,ATL,530,,,1
+2015-08-19,arrival,WN,520,N520WN,HOU,545,552,7.0,0
+2015-08-19,departure,UA,630,N630UA,SFO,600,615,12.0,0
+2015-08-19,arrival,AA,740,N740AA,LAX,1435,1442,8.0,0
+2015-08-20,arrival,AA,750,N750AA,LAX,10,20,9.0,0
