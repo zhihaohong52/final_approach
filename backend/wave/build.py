@@ -494,6 +494,8 @@ def build_wave(wave_id: str) -> Wave:
     """The wave for `wave_id`, from an LRU of the last 32 builds. A built wave is treated as immutable: callers make
     variants with dataclasses.replace, never mutate it. A flights2015 wave built without a METAR (IEM unreachable,
     retried after 120 s) is not cached."""
+    if wave_id.startswith("F2015-") and wave_id[6:].isdigit():
+        wave_id = f"F2015-{int(wave_id[6:])}"      # one cache entry for F2015-0270287 and F2015-270287
     with _WAVES_LOCK:
         hit = _WAVES.get(wave_id)
         if hit is not None:

@@ -109,3 +109,9 @@ def test_build_wave_is_cached_by_id():
     build.build_wave.cache_clear()
     w2 = build.build_wave(wid)
     assert w2 is not w and w2.to_dict() == w.to_dict()
+
+
+def test_build_wave_cache_key_normalised():
+    from backend.wave import build as B
+    w = B.build_wave("F2015-270287")
+    assert B.build_wave("F2015-0270287") is w

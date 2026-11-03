@@ -20,9 +20,12 @@ import backend  # noqa: E402,F401  (loads .env)
 
 IDLE_S = 6 * 60
 FIRST_WAVES_BUDGET_MS = 3000.0
-BUDGETS_MS = {   # design section 10.1
-    "build_wave cold": 400.0, "build_wave warm": 50.0, "list_waves": 300.0, "search": 300.0, "get_run": 150.0,
-    "first call after idle": 1900.0,   # 400 ms build budget + 1.5 s compute wake
+# design section 10.1. build_wave cold was 400 ms; since T30 a build also schedules the wave's fixed ground traffic
+# (real 2015 departures, runway chosen by trial scheduling): offline (FileStore) cold builds of the replays measured
+# 117-932 ms, ATL F2015-69315 the slowest (~930 ms). Warm builds come from build_wave's LRU (~0.01 ms).
+BUDGETS_MS = {
+    "build_wave cold": 1000.0, "build_wave warm": 50.0, "list_waves": 300.0, "search": 300.0, "get_run": 150.0,
+    "first call after idle": 2500.0,   # 1000 ms build budget + 1.5 s compute wake
 }
 
 
