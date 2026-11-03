@@ -619,13 +619,13 @@ interface BenchmarkReport {
       delay_min: number; fuel_kg: number; pax_protected_pct: number; overtime_min: number;
       agreement_with_formula_pct: number; brier: number | null;
       latency_p50_ms: number | null; latency_p95_ms: number | null; error_rate_pct: number; cost_usd_per_wave: number;
-      worse_than_status_quo_pct?: number | null;   // v2.3: % of waves with a feasible status quo whose final plan (consensus or
-                                                   // fallback) has a flight worse than the status quo (delay > +0.05 min or fuel > +0.5 kg); null: no such wave
+      worse_than_status_quo_pct?: number | null;   // v2.3: WAVE-TOTAL share: % of waves with a feasible status quo whose final plan (consensus or fallback) has a worse wave-total delay (> +0.05 min) or fuel (> +0.5 kg); null: no such wave. The only share v3-traffic archives hold
+      worse_flight_pct?: number | null;            // v2.3: PER-FLIGHT share: % of agreed (consensus) waves with a feasible status quo where any flight's delay or fuel is worse than in the status quo (same tolerances); null: no such wave. The fairness pick ranks on it
       model_calls_per_wave?: number;               // v2.3: mean of stats.model_calls
     };
     delay_min_vs_feasible_status_quo?: number;   // arm mean delay on waves where status quo is legal
     n_ok?: number; failed_ids?: string[]; p95_all_ms?: number | null; model_decisions?: number;
-    worse_than_sq_consensus_pct?: number | null;   // v2.3: worse_than_status_quo_pct over consensus plans only
+    worse_than_sq_consensus_pct?: number | null;   // v2.3: the wave-total share (worse_than_status_quo_pct) over consensus plans only
     infeasible_sq_waves?: number; consensus_pct_infeasible_sq?: number | null;   // v2.3: waves whose status quo is infeasible, and the consensus rate on them
   }[];
   baseline: { delay_min: number; fuel_kg: number; pax_protected_pct: number; overtime_min: number; diversions: number;
