@@ -288,10 +288,23 @@ def _clip(wave: Wave, pts: list[dict]) -> tuple[list[dict], str | None]:
     return [_pt(b["t_min"], b["lat"], b["lon"], b["alt_ft"], "entry", None, "synth", "interp"), *pts[k:]], None
 
 
-def _stack_key(h: holding.HoldSpec) -> tuple:
+def stack_key(h: holding.HoldSpec) -> tuple:
     """One stack per physical fix: name plus position rounded to 0.001 deg (~0.06 NM); straight-in holds are
     all named "HOLD" and corner posts "CPnnn" while sitting at different places."""
     return (h.fix, round(h.lat, 3), round(h.lon, 3))
+
+
+_stack_key = stack_key   # alias kept for existing callers (tests/test_trajectory.py)
+
+
+def stack_labels(keys) -> dict[tuple, str]:
+    """Display label per physical stack key: the fix name, or `NAME@lat,lon` when several keys in `keys`
+    share a name. Used for `TrajectorySet.stack_violations` and by ATC-HOLD-STACK."""
+    keys = list(keys)
+    n: dict[str, int] = {}
+    for k in keys:
+        n[k[0]] = n.get(k[0], 0) + 1
+    return {k: k[0] if n[k[0]] == 1 else f"{k[0]}@{k[1]:.3f},{k[2]:.3f}" for k in keys}
 
 
 def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]], elev_ft: float = 0.0) -> holding.HoldSpec:
@@ -323,7 +336,7 @@ _HOLDS: dict[str, dict[tuple, holding.HoldSpec]] = {}
 
 
 def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
-    """Physical hold fix key (`_stack_key`) -> the wave's shared hold there (see the module docstring).
+    """Physical hold fix key (`stack_key`) -> the wave's shared hold there (see the module docstring).
     Plan-independent; memoised on the wave key. Treat as read-only."""
     k = route.wave_key(wave)
     hit = _HOLDS.get(k)
@@ -331,7 +344,7 @@ def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
         members: dict[tuple, list] = {}
         elev = 0.0
         for (cs, rwy), r in route.routes_for_wave(wave).items():
-            members.setdefault(_stack_key(r.hold), []).append((rwy, cs, r.hold))
+            members.setdefault(stack_key(r.hold), []).append((rwy, cs, r.hold))
             elev = r.elev_ft
         hit = {key: _shared_hold(ms, elev) for key, ms in members.items()}
         _put(_HOLDS, k, hit)
@@ -340,7 +353,7 @@ def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
 
 def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
     """The wave's shared hold at route `r`'s hold fix."""
-    return wave_holds(wave)[_stack_key(r.hold)]
+    return wave_holds(wave)[stack_key(r.hold)]
 
 
 def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
@@ -373,15 +386,13 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     for cs, _, rwy, slot, r, laps, lap, vec, _ in rows:
         if r is not None and laps >= 1:
             t_in = _hold_entry(r, slot, laps, lap, vec)
-            groups.setdefault(_stack_key(r.hold), []).append((cs, t_in, t_in + laps * lap))
-    names: dict[str, int] = {}
-    for key in groups:
-        names[key[0]] = names.get(key[0], 0) + 1
+            groups.setdefault(stack_key(r.hold), []).append((cs, t_in, t_in + laps * lap))
+    labels = stack_labels(groups)
     levels: dict[str, int] = {}
     entry: dict[str, float] = {}
     violations: dict[str, list[str]] = {}
     for key, hs in groups.items():
-        fix = key[0] if names[key[0]] == 1 else f"{key[0]}@{key[1]:.3f},{key[2]:.3f}"
+        fix = labels[key]
         spec = wave_holds(wave)[key]
         hs.sort(key=lambda h: (h[1], h[0]))
         seen, holders, bad = set(), [], []

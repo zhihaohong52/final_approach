@@ -1,7 +1,7 @@
 """Human edits: the duty manager moves a flight on the Gantt and the engine re-checks the whole plan.
 
 The edited plan is scored with the same evaluate() the negotiation uses, so an edit passes or fails
-exactly the 12 rules the agents' plans do. For each flight that breaks a rule, the nearest landing
+exactly the rules (`rules.check`) the agents' plans do. For each flight that breaks a rule, the nearest landing
 slot on the same runway where that flight breaks nothing, and nobody else breaks more, is suggested (searched minute by minute)."""
 from __future__ import annotations
 

@@ -25,6 +25,8 @@ SRC_NOTICE = f"{SRC_WB} fuel_and_crew (gate change notice >= 20 min before arriv
 SRC_DUTY = f"{SRC_WB} fuel_and_crew (flight crew max duty 13 h from report; report = sched dep - 60 min, assumption)"
 SRC_CREW = f"{SRC_WB} fuel_and_crew (ground crew shift 8 h, overtime 1.5x)"
 GATE_NOTICE_MIN = 20.0
+EPS_MIN = 1e-6   # float tolerance (min) on slot >= earliest and hold <= extra fuel: moves._r rounds a slot to
+                 # 0.1 min and can land ~5e-8 below trajectory.earliest; 1e-6 min = 60 microseconds
 OVERTIME_MULT = 1.5
 REMOTE_STAND_POSITIONS = 2   # assumption: aircraft on the remote stand (RS) at overlapping times
 SRC_RWY = "airport runway status"
@@ -68,6 +70,8 @@ LIMITS = [
     {"limit": "flight crew max duty", "value": "13 h from report time", "source": "workbook",
      "note": "report = scheduled departure - 60 min (assumption); PLT-CREW-DUTY: landing slot + taxi-in (or "
      "alternate arrival for a diversion) must be within the duty end. A flight whose earliest possible in-block "
+     "(minimum over the open runways of the runway-dependent earliest landing + taxi to the plan's gate, the "
+     "scheduled gate for a diversion; replaces v2's ETA + taxi, and far taxi for diversions) "
      "is already past the duty end is an unavoidable duty bust (data): reported in the check detail, never a "
      "violation. Otherwise the rule fails iff the plan's arrival is past the duty end. Skipped when the departure "
      "time is unknown"},
@@ -392,7 +396,7 @@ def stack_eval(holders: list[tuple[str, float, float, int]], base_ft: int) -> di
 
 
 def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
-    """ATC-HOLD-STACK for every landing wave flight, grouped by PHYSICAL hold fix (`trajectory._stack_key` of
+    """ATC-HOLD-STACK for every landing wave flight, grouped by PHYSICAL hold fix (`trajectory.stack_key` of
     the route's hold, never the name). Entry/exit/level come from the plan's trajectories; a fix the
     trajectory layer flagged (`stack_violations`) with no failing flight here fails all its holders (closed)."""
     ts = trajectory.build(wave, plan)
@@ -403,11 +407,11 @@ def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
         if t.wave and t.laps >= 1:
             r = rs.get((t.callsign, t.runway))
             if r is not None:
-                groups.setdefault(trajectory._stack_key(r.hold), []).append(t)
-    names = Counter(k[0] for k in groups)
+                groups.setdefault(trajectory.stack_key(r.hold), []).append(t)
+    labels = trajectory.stack_labels(groups)
     out: dict[str, RuleCheck] = {}
     for key, ts_ in groups.items():
-        label = key[0] if names[key[0]] == 1 else f"{key[0]}@{key[1]:.3f},{key[2]:.3f}"
+        label = labels[key]
         spec = holds[key]
         rows = [(t.callsign, t.hold["entry_min"], t.hold["exit_min"], t.hold["level_ft"])
                 for t in ts_ if t.hold is not None]
@@ -608,7 +612,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
         problems = []
         if not slot_ok:
             problems.append(f"no valid slot ({a.slot_min!r})")
-        elif slot < earliest:
+        elif slot < earliest - EPS_MIN:
             problems.append(f"slot T{slot:+g} before earliest achievable T{earliest:+.2f} on {a.runway} ({how})")
         if not (math.isfinite(sr) and 0 <= sr <= MAX_SPEED_REDUCTION_MIN):
             problems.append(f"speed reduction {sr:g} min outside 0-{MAX_SPEED_REDUCTION_MIN:g}")
@@ -639,7 +643,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
         hold = max(0.0, slot - earliest) if slot_ok else float("inf")
         route_x = max(0.0, rex)
         need = hold + route_x
-        ok = need <= extra
+        ok = need <= extra + EPS_MIN
         fmt = lambda x: f"{x:.2f}".rstrip("0").rstrip(".")
         if not slot_ok:
             parts = "hold unknown"

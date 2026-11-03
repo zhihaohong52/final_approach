@@ -340,7 +340,7 @@ def _shared_hold_pair(w, p):
     for a in p.assignments:
         r = rs.get((a.callsign, a.runway))
         if r is not None:
-            by_key.setdefault((a.runway, trajectory._stack_key(r.hold)), []).append(a.callsign)
+            by_key.setdefault((a.runway, trajectory.stack_key(r.hold)), []).append(a.callsign)
     for (rwy, _), css in sorted(by_key.items()):
         if len(css) >= 2:
             a_cs, b_cs = sorted(css[:2], key=lambda c: w.flight(c).eta_earliest_min)
@@ -425,8 +425,9 @@ def test_hold_stack_earlier_holder_passes(two_holders_reversed):
 def test_hold_stack_no_laps_passes():
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
+    checks = rules.check(w, p)
     for a in p.assignments:
-        c = _by(rules.check(w, p), "ATC-HOLD-STACK", a.callsign)
+        c = _by(checks, "ATC-HOLD-STACK", a.callsign)
         assert c.passed and c.evidence["laps"] == 0 and c.evidence["levels"] == 5
 
 
@@ -532,3 +533,28 @@ def test_earliest_eta_shorter_route_runway_passes_below_eta():
     assert c.passed and c.evidence["route_extra_min"] < 0
     late = p.with_assignment(replace(a, runway="22L", slot_min=e - 0.1))
     assert not _by(rules.check(w, late), "PLT-EARLIEST-ETA", "MQ3327").passed
+
+
+def test_earliest_eta_float_tolerance():
+    """A slot rounded by moves._r can sit ~5e-8 min below trajectory.earliest: within EPS_MIN it passes;
+    1e-3 min early still fails."""
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
+    e = trajectory.earliest(w, "MQ3327", "09L")
+    ok = p.with_assignment(replace(a, runway="09L", slot_min=e - 5e-8))
+    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "MQ3327").passed
+    assert _by(rules.check(w, ok), "PLT-FUEL-RESERVE", "MQ3327").passed
+    bad = p.with_assignment(replace(a, runway="09L", slot_min=e - 1e-3))
+    assert not _by(rules.check(w, bad), "PLT-EARLIEST-ETA", "MQ3327").passed
+
+
+def test_fuel_reserve_float_tolerance():
+    from dataclasses import replace as _r
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
+    far = _far_runway(w, a.callsign)
+    e = trajectory.earliest(w, a.callsign, far)
+    need = e - w.flight(a.callsign).eta_earliest_min      # route extra, no hold
+    f = w.flight(a.callsign)
+    for extra, passed in ((need - 5e-8, True), (need - 1e-3, False)):
+        w2 = _r(w, flights=[_r(f, fuel={**f.fuel, "extra_min": extra}) if x is f else x for x in w.flights])
+        q = p.with_assignment(replace(a, runway=far, slot_min=trajectory.earliest(w2, a.callsign, far)))
+        assert _by(rules.check(w2, q), "PLT-FUEL-RESERVE", a.callsign).passed is passed
