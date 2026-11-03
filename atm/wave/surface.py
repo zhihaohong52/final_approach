@@ -228,9 +228,11 @@ def generic_taxi_min(runway, gate_lat: float, gate_lon: float) -> float:
 HEADWAY_S = 30.0              # node headway (assumption)
 HORIZON_MIN = 30.0            # search horizon (assumption)
 GAP_MIN = {"landing": (1.0, 1.5), "takeoff": (1.0, 1.0)}   # crossing blocked if the event is in [t - a, t + b] min
+RUNWAY_HOLD_CLEARANCE_M = 90.0   # no waiting closer than this to a crossed strip's centreline, unless at an OSM hold
+HOLD_LOOKBACK = 3             # edges before a crossing within which an OSM holding position is used
 _TOL = 1e-9
 _EPS = 1e-6                   # release just after a closed crossing window
-HOLD_LOOKBACK = 3             # edges before a crossing within which an OSM holding position is used
+_MAX_ITER = 200000
 
 
 @dataclass
@@ -266,49 +268,102 @@ class GroundTrack:
     src: str
 
 
-def _hold_index(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, str]]) -> list[int | None]:
-    """For each path index, where to wait before entering it: the previous node, except that from the OSM holding
-    position up to the node after a runway crossing the aircraft waits at the holding position (or, without one,
-    the node before the strip), so it never stops on the runway."""
-    hold: list[int | None] = [None] + list(range(len(nodes) - 1))
-    lo, k, prev_h = 0, 1, None
+def strip_distance_m(g: TaxiGraph, node: int, strip: str) -> float:
+    """Pure geometry: distance in metres from a node to the centreline of `strip` (its runway edges); inf if the strip
+    has no runway edges in the graph. Cached on the graph."""
+    key = ("strip_d", node, strip)
+    hit = g._trees.get(key)
+    if hit is not None:
+        return hit
+    segs = g._trees.get(("strip_segs", strip))
+    if segs is None:
+        segs = g._trees[("strip_segs", strip)] = sorted(
+            {(min(u, v), max(u, v)) for u, es in g.adj.items() for v, _, kind, name, _ in es
+             if kind == "runway" and name == strip})
+    lat0, lon0 = g.nodes[node]
+    ky = math.radians(1.0) * EARTH_R
+    kx = ky * math.cos(math.radians(lat0))
+    best = math.inf
+    for u, v in segs:
+        ax, ay = (g.nodes[u][1] - lon0) * kx, (g.nodes[u][0] - lat0) * ky
+        bx, by = (g.nodes[v][1] - lon0) * kx, (g.nodes[v][0] - lat0) * ky
+        dx, dy = bx - ax, by - ay
+        L2 = dx * dx + dy * dy
+        f = 0.0 if L2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / L2))
+        best = min(best, math.hypot(ax + f * dx, ay + f * dy))
+    g._trees[key] = best
+    return best
+
+
+def _crossing_zones(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, str]]
+                    ) -> tuple[list[int | None], dict[int, tuple[str, int, int]]]:
+    """Where to wait before entering each path index, and the protected zone of each crossing.
+
+    A node is inside a strip's protected zone when it is closer than RUNWAY_HOLD_CLEARANCE_M to the centreline and is
+    not an OSM holding position for that strip (or for no named strip). Around a crossing at index c the zone runs
+    backwards to the first node outside it (or further back, to an OSM holding position within HOLD_LOOKBACK edges)
+    = the hold index h, and forwards to the first node outside it = ze. Arriving anywhere in (h, ze] waits at h, so
+    the aircraft never stops inside the zone; overlapping zones (strips close together) merge onto the earlier hold.
+    Returns (hold per index, {c: (strip, h, ze)})."""
+    n = len(nodes)
+    hold: list[int | None] = [None] + list(range(n - 1))
+
+    def inside(i: int, strip: str) -> bool:
+        nd = nodes[i]
+        if nd in g.holds and g.holds[nd] in (None, strip):
+            return False
+        return strip_distance_m(g, nd, strip) < RUNWAY_HOLD_CLEARANCE_M
+
+    zones: dict[int, tuple[str, int, int]] = {}
+    k, prev = 1, None                                  # prev = (h, ze) of the last zone
     for node, strip in crossings:
-        c = next((i for i in range(max(k, 1), len(nodes)) if nodes[i] == node), None)
+        c = next((i for i in range(k, n) if nodes[i] == node), None)
         if c is None:
             continue
-        if c - 1 < lo:
-            # adjacent strips (no node between the two centrelines): cross both as one block from the earlier hold
-            h = prev_h if prev_h is not None else c - 1
-        else:
-            # an OSM holding position at most HOLD_LOOKBACK edges before the strip, else the node before it
-            h = next((i for i in range(c - 1, max(lo, c - HOLD_LOOKBACK) - 1, -1)
-                      if nodes[i] in g.holds and g.holds[nodes[i]] in (None, strip)), c - 1)
-        prev_h = h
-        for i in range(h + 1, min(c + 2, len(nodes))):
+        k = c + 1
+        h = c - 1
+        while h > 0 and inside(h, strip):
+            h -= 1
+        osm = next((i for i in range(c - 1, max(0, c - HOLD_LOOKBACK) - 1, -1)
+                    if nodes[i] in g.holds and g.holds[nodes[i]] in (None, strip)), None)
+        if osm is not None and osm < h:
+            h = osm
+        ze = c + 1
+        while ze < n - 1 and inside(ze, strip):
+            ze += 1
+        ze = min(ze, n - 1)
+        if prev is not None and h < prev[1]:           # starts inside (or before the end of) the previous zone
+            h = min(h, prev[0])
+        for i in range(h + 1, ze + 1):
             hold[i] = h
-        lo, k = c + 1, c + 1
-    return hold
+        zones[c] = (strip, h, ze)
+        prev = (h, ze)
+    # a later merge can move a zone's hold back: give every zone the hold its entry index now uses
+    for c, (strip, h, ze) in list(zones.items()):
+        zones[c] = (strip, hold[h + 1] if h + 1 < n and hold[h + 1] is not None else h, ze)
+    return hold, zones
 
 
 def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, callsign: str,
              horizon_min: float = HORIZON_MIN, headway_s: float = HEADWAY_S) -> Scheduled:
-    """Move along the fixed route from `t0_min`, waiting (at the previous node, or at the OSM holding position before
-    a runway) until (a) the node is clear of reservations by the headway, (b) the next edge is not in use in the
-    opposite direction and (c) a runway crossing meets the landing/takeoff gap. Waits only grow, so the search is
-    monotone and deterministic. On success the flight's own intervals are added to `res`."""
+    """Move along the fixed route from `t0_min`, waiting (at the previous node, or at the hold before a runway's
+    protected zone) until (a) the node is clear of reservations by the headway, (b) the next edge is not in use in the
+    opposite direction and (c) for a runway crossing, the whole time inside the strip's protected zone (from leaving
+    the hold to reaching the first node outside the zone) meets the landing/takeoff gap. Waits only grow, so the
+    search is monotone and deterministic. It always runs to a complete conflict-free schedule (bounded by an
+    iteration guard); `ok` is False when the total wait exceeds `horizon_min`. The flight's intervals are added to
+    `res` in either case, so later flights give way to it.
+
+    If the first node itself is blocked, its arrival is delayed: the aircraft is still upstream and off the graph
+    (rolling out on the runway, or at the stand before pushback) during `waits[0]`, which runs from `t0_min` to the
+    first point; `points` start at the delayed arrival."""
     nodes = path.nodes
     n = len(nodes)
     seg = [s / 60.0 for s in path.seg_s[:n - 1]]
     park = path.seg_s[n - 1] / 60.0 if len(path.seg_s) >= n else 0.0
     hw = headway_s / 60.0
-    hold = _hold_index(g, nodes, path.crossings)
-    cross_at: dict[int, str] = {}
-    k = 1
-    for node, strip in path.crossings:
-        c = next((i for i in range(k, n) if nodes[i] == node), None)
-        if c is not None:
-            cross_at[c], k = strip, c + 1
-    events = {strip: sorted(res.runway_events.get(strip, ())) for strip in set(cross_at.values())}
+    hold, zones = _crossing_zones(g, nodes, path.crossings)
+    events = {strip: sorted(res.runway_events.get(strip, ())) for strip, _, _ in zones.values()}
     free_arr_last = t0_min + sum(seg)
 
     arr0_nb = t0_min                       # earliest arrival at the first node
@@ -338,23 +393,23 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         return h
 
     times()
-    ok, fail, i, guard = True, None, 0, 0
+    converged, i, it = True, 0, 0
     while i < n:
-        guard += 1
-        if arr[-1] - free_arr_last > horizon_min + _TOL or guard > 100000:
-            ok = False
-            fail = (f"taxi wait {arr[-1] - free_arr_last:.1f} min exceeds the {horizon_min:.0f} min search horizon"
-                    if guard <= 100000 else "hold-short search did not converge")
+        it += 1
+        if it > _MAX_ITER:
+            converged = False
             break
         node, restart = nodes[i], None
-        # (c) runway crossing gap at the strip's centreline node
-        if i in cross_at:
-            t, strip = arr[i], cross_at[i]
+        # (c) runway crossing gap over the whole time inside the strip's protected zone
+        if i in zones:
+            strip, h, ze = zones[i]
+            t_in, t_out = dep[h], arr[ze]
             hit = [(ev + GAP_MIN[kind][0] + _EPS, kind, cs) for ev, kind, cs in events[strip]
-                   if kind in GAP_MIN and t - GAP_MIN[kind][0] - _TOL <= ev <= t + GAP_MIN[kind][1] + _TOL]
+                   if kind in GAP_MIN and t_in <= ev + GAP_MIN[kind][0] + _TOL
+                   and t_out >= ev - GAP_MIN[kind][1] - _TOL]
             if hit:
                 target, kind, cs = max(hit)
-                restart = push(i, target, f"hold short {strip} for {kind} {cs}")
+                restart = push(h + 1, target + seg[h], f"hold short {strip} for {kind} {cs}")
         # (a) the node is clear of other reservations by the headway, over the whole dwell
         if restart is None:
             hit = [(e + hw, cs) for s, e, cs in res.node_busy.get(node, ())
@@ -375,6 +430,13 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             times()
             i = restart
 
+    total_wait = arr[-1] - free_arr_last
+    ok, fail = True, None
+    if not converged:
+        ok, fail = False, "hold-short search did not converge"
+    elif total_wait > horizon_min + _TOL:
+        ok, fail = False, f"taxi wait {total_wait:.1f} min exceeds the {horizon_min:.0f} min search horizon"
+
     def pt(t: float, node: int) -> dict:
         return {"t_min": t, "lat": g.nodes[node][0], "lon": g.nodes[node][1], "node": node}
 
@@ -391,27 +453,34 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             points.append(pt(dep[i], nodes[i]))
             waits.append(wait(nodes[i], arr[i], dep[i], why[i]))
     points.append(pt(dep[-1], nodes[-1]))
-    if ok:
-        for i in range(n):
-            lst = res.node_busy.setdefault(nodes[i], [])
-            lst.append((arr[i], dep[i], callsign))
+    for i in range(n):
+        lst = res.node_busy.setdefault(nodes[i], [])
+        lst.append((arr[i], dep[i], callsign))
+        lst.sort()
+        if i + 1 < n:
+            lst = res.edge_dir.setdefault((nodes[i], nodes[i + 1]), [])
+            lst.append((dep[i], arr[i + 1], callsign))
             lst.sort()
-            if i + 1 < n:
-                lst = res.edge_dir.setdefault((nodes[i], nodes[i + 1]), [])
-                lst.append((dep[i], arr[i + 1], callsign))
-                lst.sort()
     return Scheduled(points, waits, ok, fail, dep[0] if n > 1 else arr[0])
 
 
-def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S) -> list[str]:
-    """Brute-force check, independent of `schedule`: for every pair of tracks, (1) node passages (first to last point
-    at a node) are at least `headway_s` apart and (2) sampled every 1 s, the two are never on the same taxi edge in
-    opposite directions. Reads only the track points; returns one message per violation (empty when separated)."""
+def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
+                      runway_events: dict[str, list[tuple[float, str, str]]] | None = None,
+                      g: TaxiGraph | None = None) -> list[str]:
+    """Brute-force check, independent of `schedule`; reads only the track points (and, for the runway check, the
+    graph's geometry). Returns one message per violation (empty when separated):
+    (1) for every pair of tracks, node passages (first to last point at a node) are at least `headway_s` apart;
+    (2) for every pair, no two traversals of the same edge in opposite directions overlap in time;
+    (3) with `runway_events` and `g`: for every strip a track crosses, each stretch of the track inside that strip's protected zone (closer than RUNWAY_HOLD_CLEARANCE_M to the
+        centreline, OSM holding positions excepted) that crosses the strip (a node entered and left over taxi edges
+        that both carry the strip),
+        from leaving the node before the stretch (or the track's first node) to reaching the node after it, misses
+        every other flight's landing window [ev - 1.5, ev + 1] and takeoff window [ev - 1, ev + 1] on that strip."""
     hw = headway_s / 60.0
-    visits, edges = [], []
+    visits, trav = [], []
     for tr in tracks:
         v: list[tuple[int, float, float]] = []
-        e: dict[int, tuple[int, int]] = {}                 # second -> (from node, to node)
+        e: list[tuple[int, int, float, float]] = []
         pts = [q for q in tr.points if q.get("node") is not None]
         for q in pts:
             if v and v[-1][0] == q["node"]:
@@ -419,13 +488,10 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S) -
             else:
                 v.append((q["node"], q["t_min"], q["t_min"]))
         for a, b in zip(pts, pts[1:]):
-            if a["node"] == b["node"]:
-                continue
-            for sec in range(math.floor(a["t_min"] * 60.0) + 1, math.ceil(b["t_min"] * 60.0)):
-                if a["t_min"] * 60.0 < sec < b["t_min"] * 60.0:
-                    e[sec] = (a["node"], b["node"])
+            if a["node"] != b["node"]:
+                e.append((a["node"], b["node"], a["t_min"], b["t_min"]))
         visits.append(v)
-        edges.append(e)
+        trav.append(e)
     out: list[str] = []
     for i in range(len(tracks)):
         for j in range(i + 1, len(tracks)):
@@ -435,10 +501,43 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S) -
                     if na == nb_ and a0 < b1 + hw - _TOL and b0 < a1 + hw - _TOL:
                         out.append(f"{ca} and {cb} at node {na} within {headway_s:.0f} s "
                                    f"({a0:.2f}-{a1:.2f} vs {b0:.2f}-{b1:.2f} min)")
-            seen = set()
-            for sec in sorted(edges[i].keys() & edges[j].keys()):
-                u, v = edges[i][sec]
-                if edges[j][sec] == (v, u) and (u, v) not in seen:
-                    seen.add((u, v))
-                    out.append(f"{ca} and {cb} on edge {u}-{v} in opposite directions at {sec / 60.0:.2f} min")
+            for u, v_, s0, s1 in trav[i]:
+                for x, y, r0, r1 in trav[j]:
+                    if (x, y) == (v_, u) and s0 < r1 - _TOL and r0 < s1 - _TOL:
+                        out.append(f"{ca} and {cb} on edge {u}-{v_} in opposite directions "
+                                   f"({s0:.2f}-{s1:.2f} vs {r0:.2f}-{r1:.2f} min)")
+    if runway_events and g is not None:
+        window = {"landing": (1.5, 1.0), "takeoff": (1.0, 1.0)}     # (before, after) the event, minutes
+
+        def strip_of(u: int, v: int) -> set[str]:
+            return {st for w, _, kind, _, st in g.adj.get(u, ()) if w == v and kind != "runway" and st}
+
+        for tr, vis in zip(tracks, visits):
+            # a crossing: a node entered and left over taxi edges that both carry the same strip
+            cross = [(x, st) for x in range(1, len(vis) - 1)
+                     for st in sorted(strip_of(vis[x - 1][0], vis[x][0]) & strip_of(vis[x][0], vis[x + 1][0]))]
+            for strip in sorted({st for _, st in cross}):
+                flags = [not (nd in g.holds and g.holds[nd] in (None, strip))
+                         and strip_distance_m(g, nd, strip) < RUNWAY_HOLD_CLEARANCE_M for nd, _, _ in vis]
+                k = 0
+                while k < len(vis):
+                    if not flags[k]:
+                        k += 1
+                        continue
+                    m = k
+                    while m + 1 < len(vis) and flags[m + 1]:
+                        m += 1
+                    if any(k <= x <= m and st == strip for x, st in cross):
+                        # a track that starts inside the zone (its runway exit) is counted from leaving that first
+                        # node: the dwell there is the runway-vacate case, judged against exit_clear_min instead
+                        t_in = vis[k - 1][2] if k > 0 else vis[0][2]
+                        t_out = vis[m + 1][1] if m + 1 < len(vis) else vis[m][2]
+                        for ev, kind, cs in sorted(runway_events.get(strip, ())):
+                            if cs == tr.callsign or kind not in window:
+                                continue
+                            before, after = window[kind]
+                            if t_in < ev + after + _TOL and ev - before - _TOL < t_out:
+                                out.append(f"{tr.callsign} inside the {strip} protected zone {t_in:.2f}-{t_out:.2f} "
+                                           f"min during {kind} {cs} at {ev:.2f}")
+                    k = m + 1
     return out

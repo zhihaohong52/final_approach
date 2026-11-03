@@ -173,8 +173,11 @@ def test_unimpeded_schedule_has_no_waits_and_reserves(mini):
 def test_takeoff_gap_is_one_minute_each_side(mini):
     path = path_across_1836(mini)
     t_cross = 0.5 + sum(path.seg_s[:3]) / 60          # 10 -> 15 -> 16 -> 6
+    # the whole time in the 18/36 zone (hold 16 -> node 17, 300 m beyond, ~0.5 min after the centreline) is checked
+    res = Reservations({}, {}, {"18/36": [(t_cross + 1.6, "takeoff", "DL5")]})
+    assert schedule(mini, path, 0.5, res, "AA1").waits == []                        # zone left > 1 min before it
     res = Reservations({}, {}, {"18/36": [(t_cross + 1.2, "takeoff", "DL5")]})
-    assert schedule(mini, path, 0.5, res, "AA1").waits == []                        # 1.2 min later: outside +1 min
+    assert schedule(mini, path, 0.5, res, "AA1").waits                              # still on 17's side of the zone
     res = Reservations({}, {}, {"18/36": [(t_cross + 0.9, "takeoff", "DL5")]})
     s = schedule(mini, path, 0.5, res, "AA1")
     assert s.waits[0]["reason"] == "hold short 18/36 for takeoff DL5"
@@ -231,12 +234,120 @@ def test_schedule_is_deterministic(mini):
     assert run() == run()
 
 
-def test_hold_index_adjacent_strips_and_lookback_cap(mini):
-    from atm.wave.surface import _hold_index
-    mini.holds = {}
-    # a -> R1 -> R2 -> b: two strips with no node between them are crossed as one block from index 0
-    assert _hold_index(mini, [100, 101, 102, 103], [(101, "A"), (102, "B")]) == [None, 0, 0, 0]
-    # a holding position more than 3 edges before the strip is not used: wait at the node before it
-    mini.holds = {200: None}
-    assert _hold_index(mini, [200, 201, 202, 203, 204, 205], [(204, "A")])[4:] == [3, 3]
-    assert _hold_index(mini, [200, 201, 202, 204, 205], [(204, "A")])[1:] == [0, 0, 0, 0]
+M_PER_DEG = 111194.92664
+
+
+def _line_graph(xs_m, strips, holds=None):
+    """A west-east taxiway along lat 0 with nodes at `xs_m` metres; each strip {label: x_m} is a north-south runway
+    whose centreline node lies on the taxiway; the two taxi edges at a centreline node carry the strip."""
+    xs = sorted(set(xs_m) | set(strips.values()))
+    nodes = [(0.0, x / M_PER_DEG) for x in xs]
+    at = {x: i for i, x in enumerate(xs)}
+    adj = {i: [] for i in range(len(xs) + 2 * len(strips))}
+    lab = {at[x]: s for s, x in strips.items()}
+
+    def edge(u, v, length, kind, name, strip):
+        adj[u].append((v, length, kind, name, strip)); adj[v].append((u, length, kind, name, strip))
+
+    for a, b in zip(xs, xs[1:]):
+        edge(at[a], at[b], b - a, "taxiway", "A", lab.get(at[a]) or lab.get(at[b]))
+    for s_, x in sorted(strips.items()):
+        for lat in (-0.02, 0.02):
+            nodes.append((lat, x / M_PER_DEG))
+            edge(at[x], len(nodes) - 1, abs(lat) * M_PER_DEG, "runway", s_, None)
+    for lst in adj.values():
+        lst.sort(key=lambda e: (e[0], e[1], e[3] or ""))
+    g = TaxiGraph("KLIN", nodes, adj, {}, {}, {}, {at[x]: st for x, st in (holds or {}).items()})
+    return g, at
+
+
+def _line_path(g, at, xs):
+    p = unimpeded(g, at[min(xs)], at[max(xs)])
+    assert p.nodes == [at[x] for x in sorted(at)]
+    return p
+
+
+def _assert_no_wait_in_zone(g, s, strips):
+    from atm.wave.surface import strip_distance_m
+    for w in s.waits:
+        for strip in strips:
+            ok_hold = g.holds.get(w["node"], "-") in (None, strip)
+            assert ok_hold or strip_distance_m(g, w["node"], strip) >= 90.0, (w, strip)
+
+
+def test_no_wait_next_to_the_centreline_when_blocked_beyond(mini):
+    # the reviewer's ORD case: a conflict at c+2 used to park the aircraft at c+1, 16 m from the centreline
+    xs = [-400, -300, -200, -100, 16, 40, 100, 300]
+    g, at = _line_graph(xs, {"R": 0})
+    p = _line_path(g, at, xs)
+    c = p.nodes.index(at[0])
+    t_c = sum(p.seg_s[:c]) / 60
+    res = Reservations({p.nodes[c + 2]: [(0.0, t_c + 6.0, "BLOCK")]}, {}, {"R": [(t_c + 3.0, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and s.waits and all(w["node"] == at[-100] for w in s.waits)    # 100 m out, no OSM hold
+    _assert_no_wait_in_zone(g, s, ["R"])
+    assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
+
+
+def test_no_osm_hold_within_lookback_waits_outside_clearance(mini):
+    xs = [-400, -300, -200, -60, 50, 300]
+    g, at = _line_graph(xs, {"R": 0}, holds={-400: "R"})                       # the OSM hold is 4 edges back
+    p = _line_path(g, at, xs)
+    res = Reservations({}, {}, {"R": [(0.3, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and [w["node"] for w in s.waits] == [at[-200]]                 # -60 m is inside the 90 m zone
+    _assert_no_wait_in_zone(g, s, ["R"])
+    assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
+    g2, at2 = _line_graph(xs, {"R": 0}, holds={-300: "R"})                     # 3 edges back: used
+    s2 = schedule(g2, _line_path(g2, at2, xs), 0.0, Reservations({}, {}, {"R": [(0.3, "landing", "UA9")]}), "AA1")
+    assert [w["node"] for w in s2.waits] == [at2[-300]]
+
+
+def test_two_strips_two_nodes_apart_are_one_zone(mini):
+    xs = [-400, -300, -200, -100, 30, 300]
+    g, at = _line_graph(xs, {"R": 0, "S": 60})                                 # path: ... -100, R, 30, S, 300
+    p = _line_path(g, at, xs)
+    assert [st for _, st in p.crossings] == ["R", "S"]
+    c2 = p.nodes.index(at[60])
+    assert p.nodes[c2 - 2] == at[0]
+    t_s = sum(p.seg_s[:c2]) / 60
+    res = Reservations({at[30]: [(0.0, t_s + 2.0, "BLOCK")]}, {}, {"S": [(t_s + 1.0, "takeoff", "DL5")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and s.waits and all(w["node"] == at[-100] for w in s.waits)
+    _assert_no_wait_in_zone(g, s, ["R", "S"])
+    assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
+
+
+def test_verifier_flags_wait_inside_runway_zone_during_landing(mini):
+    # the old behaviour, built by hand: crossing R, then waiting 16 m beyond the centreline while UA9 lands on R
+    xs = [-200, -100, 16, 40, 300]
+    g, at = _line_graph(xs, {"R": 0})
+    pts = [{"t_min": t, "node": at[x], "lat": 0.0, "lon": x / M_PER_DEG}
+           for t, x in [(0.0, -200), (0.2, -100), (0.4, 0), (0.45, 16), (6.0, 16), (6.1, 40), (6.5, 300)]]
+    bad = GroundTrack("AA1", "arrival", True, None, "", [], pts, [], 0.0, 0.0, "osm")
+    ev = {"R": [(3.0, "landing", "UA9")]}
+    msgs = verify_separation([bad], runway_events=ev, g=g)
+    assert msgs and "UA9" in msgs[0] and "R protected zone" in msgs[0]
+    assert verify_separation([bad]) == []                                     # the old call still works
+    assert verify_separation([bad], runway_events={"R": [(3.0, "landing", "AA1")]}, g=g) == []   # its own movement
+
+
+def test_failed_flight_still_reserves_and_later_flights_give_way(mini):
+    res = Reservations({}, {}, {"18/36": [(t / 2, "landing", f"L{t}") for t in range(0, 80)]})
+    a = schedule(mini, path_across_1836(mini), 0.0, res, "AA1")
+    assert not a.ok and "30 min" in a.reason
+    assert any(x[2] == "AA1" for x in res.node_busy[6])
+    b = schedule(mini, path_across_1836(mini), 0.0, res, "BB1", horizon_min=90.0)
+    assert b.ok and any(w["reason"] == "give way to AA1" for w in b.waits)
+    assert verify_separation([track(a, "AA1"), track(b, "BB1")], runway_events=res.runway_events, g=mini) == []
+
+
+def test_verifier_edge_overlap_is_exact(mini):
+    def tr(cs, seq):
+        return GroundTrack(cs, "arrival", True, None, "", [],
+                           [{"t_min": t, "node": n, "lat": 0.0, "lon": 0.0} for t, n in seq], [], 0.0, 0.0, "osm")
+    # head-on on edge 1-2 for 0.1 s only, no common node within headway (nodes far apart in time)
+    a = tr("A", [(0.0, 1), (1.0, 2)])
+    b = tr("B", [(0.9995, 2), (2.0, 1)])
+    msgs = verify_separation([a, b], headway_s=0.0)
+    assert any("opposite" in m for m in msgs)
