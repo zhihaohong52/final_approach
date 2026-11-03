@@ -727,11 +727,11 @@ function changes(base: JointPlan, now: JointPlan | null, ws: string): string {
   return `${moved.length} of ${now.assignments.length} flights moved: ${moved.map((a) => { const b = base.assignments.find((x) => x.callsign === a.callsign)!; return `${icao(a.callsign)} ${b.runway}→${a.runway}${b.slot_min !== a.slot_min ? ` ${clock(ws, b.slot_min ?? 0)}→${clock(ws, a.slot_min ?? 0)}` : ""}`; }).join(", ")}`;
 }
 
-// Each line re-derived from a formulas run on engine v3-traffic (files store, 4 Nov 2026); re-check after data changes.
+// Each line re-derived from a formulas run (files store, 4 Nov 2026; the closed-airport lines with airline agents); re-check after data changes.
 const HARD_CASES = [
   { id: "F2015-6291", title: "ORD, 1 of 16 runways open (32R), 15 queued", what: "agreed in turn 1; EV3263 lands 72 min late" },
-  { id: "F2015-70412", title: "PHX, every runway closed", what: "no legal landing: safety net diverts all 4 to TUS" },
-  { id: "F2015-102056", title: "ATL, every runway closed", what: "no legal landing: safety net diverts all 4 to CSG" },
+  { id: "F2015-70412", title: "PHX, every runway closed", what: "no legal landing: agreed in turn 2, airlines divert all 4 to TUS" },
+  { id: "F2015-102056", title: "ATL, every runway closed", what: "no legal landing: agreed in turn 3, airlines divert all 4 to CSG" },
   { id: "F2015-252123", title: "LGA, runway 13 closed, 5 queued", what: "status quo breaks GND-GATE-FREE; agreed in turn 2" },
   { id: "F2015-247837", title: "SLC, 3 of 6 runways closed", what: "status quo breaks GND-GATE-FREE; agreed in turn 2" },
 ];

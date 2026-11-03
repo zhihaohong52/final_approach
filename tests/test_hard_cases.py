@@ -34,10 +34,12 @@ def test_hard_case_text_is_true(wid):
         assert [x.id for x in rw if not x.open] == [m[1]]
     if m := re.search(r"(\d+) queued", text):
         assert len(w.queue) == int(m[1])
-    if m := re.search(r"diverts all (\d+) to (\w+)", text):
+    if m := re.search(r"diverts? all (\d+) to (\w+)", text):
         alt = {f.callsign: (f.fuel or {}).get("alternate") for f in w.flights}
         div = [a["callsign"] for a in r["final_plan"]["assignments"] if a["action"] == "divert"]
-        assert r["outcome"] == "fallback" and len(div) == int(m[1]) == len(w.flights)
+        assert len(div) == int(m[1]) == len(w.flights)
+        if "safety net" in text:
+            assert r["outcome"] == "fallback"
         assert {alt[c] for c in div} == {m[2]}
     if m := re.search(r"agreed in turn (\d+)", text):
         assert r["outcome"] == "consensus" and r["turns"] == int(m[1])

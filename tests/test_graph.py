@@ -13,9 +13,10 @@ from backend.wave.model import JointPlan
 from tests.fixtures import make_wave
 
 CONTRACT_TYPES = {"TRIAGE", "OPEN", "AGENT_TURN", "CHECK", "CONSENSUS", "NO_CONSENSUS", "FALLBACK",
-                  "MODEL_FALLBACK"}
+                  "MODEL_FALLBACK", "UNABLE"}
 RESULT_KEYS = {"run_id", "wave_id", "mode", "model", "outcome", "rounds", "turns", "agents", "focus", "revision",
-               "limits", "final_plan", "evaluation", "baseline", "narration", "model_errors", "stats", "log"}
+               "limits", "final_plan", "evaluation", "baseline", "narration", "model_errors", "stats", "log",
+               "pilots", "airlines", "fairness"}
 
 
 @pytest.fixture(autouse=True)
@@ -51,16 +52,23 @@ def _assert_valid(wave, r):
     assert rules.feasible(wave, _plan(wave, r["final_plan"]))
     assert r["final_plan"]["id"] == r["evaluation"]["plan_id"]
     assert r["final_plan"]["label"] == _plan(wave, r["final_plan"]).describe()
-    agents = r["agents"]
-    assert len(agents) == 3 and agents[0] == "ATC" and agents[2] == "GROUND"
-    assert agents[1] == f"PILOT:{r['focus']}" and r["focus"] == (wave.focus or r["focus"])
+    from backend.wave.utility import pilots
+    agents = r["agents"]   # the voters: ATC, AIRLINE:* (sorted), GROUND
+    assert agents[0] == "ATC" and agents[-1] == "GROUND"
+    assert agents[1:-1] == sorted(agents[1:-1]) and agents[1:-1] and all(a.startswith("AIRLINE:") for a in agents[1:-1])
+    assert r["pilots"] == pilots(wave) and r["fairness"] in ("firm", "relaxing")
+    assert [f"AIRLINE:{a['code']}" for a in r["airlines"]] == agents[1:-1]
+    assert r["focus"] == (wave.focus or r["focus"])
     turns = [m for m in r["log"] if m["type"] == "AGENT_TURN"]
     assert {m["sender"] for m in turns} == set(agents)
-    for t in range(1, r["turns"] + 1):  # exactly one AGENT_TURN per agent per turn, in order
+    for t in range(1, r["turns"] + 1):  # exactly one AGENT_TURN per voter per turn, in order
         assert [m["sender"] for m in turns if m["round"] == t] == agents
         for m in turns:
             assert m["body"]["turn"] == m["round"] and m["body"]["agent"] == m["sender"]
-    assert len(turns) == 3 * r["turns"] and r["turns"] == r["rounds"] <= 3
+    assert len(turns) == len(agents) * r["turns"] and r["turns"] == r["rounds"] <= 3
+    for m in r["log"]:   # pilots only ever send UNABLE
+        if m["sender"].startswith("PILOT:"):
+            assert m["type"] == "UNABLE" and m["sender"] in r["pilots"]
     passed = {m["body"]["plan_id"] for m in r["log"] if m["type"] == "CHECK" and m["body"]["passed"]}
     opening = next(m for m in r["log"] if m["type"] == "OPEN")
     if opening["body"]["evaluation"]["feasible"]:
@@ -106,16 +114,22 @@ def test_formulas_run_terminates_valid():
 
 def _check_order(log):
     r0 = [m["type"] for m in log if m["round"] == 0 and m["type"] != "MODEL_FALLBACK"]
-    assert r0 == ["TRIAGE", "OPEN"]
+    assert r0[:2] == ["TRIAGE", "OPEN"] and set(r0[2:]) <= {"UNABLE"}
+    n_agents = len(next(m for m in log if m["type"] == "OPEN")["body"]["agents"])
     last = max(m["round"] for m in log)
     for t in range(1, last + 1):
         types = [m["type"] for m in log if m["round"] == t and m["type"] not in ("MODEL_FALLBACK", "FALLBACK")]
         assert types[-1] in ("CONSENSUS", "NO_CONSENSUS")
         assert types.count("CONSENSUS") + types.count("NO_CONSENSUS") == 1
-        assert types.count("AGENT_TURN") == 3
-        for i, ty in enumerate(types):  # every CHECK directly follows the AGENT_TURN whose proposal it checks
+        assert types.count("AGENT_TURN") == n_agents
+        for i, ty in enumerate(types):  # every CHECK follows the AGENT_TURN whose proposal it checks (and its UNABLEs)
             if ty == "CHECK":
-                assert types[i - 1] == "AGENT_TURN"
+                j = i - 1
+                while types[j] == "UNABLE":
+                    j -= 1
+                assert types[j] == "AGENT_TURN"
+            if ty == "UNABLE":   # pilots speak right after the voter whose plan or move they refuse
+                assert types[i - 1] in ("AGENT_TURN", "UNABLE")
     rounds_seq = [m["round"] for m in log]
     assert rounds_seq == sorted(rounds_seq)
     fb = [i for i, m in enumerate(log) if m["type"] == "FALLBACK"]
@@ -165,7 +179,7 @@ def test_hard_wave_falls_back_safely():
 
 def test_graph_mermaid_written(tmp_path):
     text = graph.mermaid()
-    for node in ("triage", "open", "atc", "pilot", "ground", "decide_turn", "fallback", "finalize"):
+    for node in ("triage", "open", "atc", "airlines", "ground", "decide_turn", "fallback", "finalize"):
         assert node in text
     path = tmp_path / "graph.mmd"   # docs/graph.mmd: python3 -m backend.wave.graph --mermaid docs/graph.mmd
     path.write_text(text)
@@ -222,13 +236,14 @@ def test_engine_rejects_unsafe_model_pick(monkeypatch):
                    for y in m["body"]["moves"])
 
 
-def test_three_agents_only_on_real_shape():
-    """Exactly ATC, the focus flight's pilot and GROUND negotiate, even with 4 flights in the wave."""
+def test_voters_and_pilots_on_real_shape():
+    """ATC, one airline per carrier group and GROUND vote; each of the 4 flights has a (non-voting) pilot."""
     w = replace(make_wave(), focus="AA302")
     r = negotiate_wave(w, "formulas")
     _assert_valid(w, r)
-    assert r["agents"] == ["ATC", "PILOT:AA302", "GROUND"]
-    assert set(r["evaluation"]["utilities"]) == set(r["agents"])
+    assert r["agents"] == ["ATC", "AIRLINE:AA", "AIRLINE:DL", "AIRLINE:UA", "GROUND"]
+    assert r["pilots"] == ["PILOT:DL100", "PILOT:DL201", "PILOT:AA302", "PILOT:UA403"]
+    assert list(r["evaluation"]["utilities"]) == r["agents"]
     assert r["revision"]["callsign"] == "AA302"
 
 
@@ -315,9 +330,9 @@ def test_largest_prompt_under_8k_tokens(monkeypatch):
 
 def test_views_show_each_flights_path():
     from backend.wave import build, moves
-    from backend.wave.utility import negotiators
+    from backend.wave.utility import pilots
     w = build.build_wave("F2015-270287"); p = moves.fcfs_plan(w)
-    atc, pilot, _ = negotiators(w)
+    atc, pilot = "ATC", f"PILOT:{w.focus}" if w.focus else pilots(w)[0]
     v = graph._view(w, p, atc)
     assert set(v["path"]) == {a.callsign for a in p.assignments}
     assert any(" · hold " in s and " base " in s and " · lap " in s and s.endswith(" kg") for s in v["path"].values())
@@ -327,11 +342,11 @@ def test_views_show_each_flights_path():
 
 def test_view_path_without_geometry_and_when_diverted():
     from backend.wave import moves
-    from backend.wave.utility import negotiators
+    from backend.wave.utility import pilots
     w = make_wave(); p = moves.fcfs_plan(w)    # fixture wave: no procedures
     v = graph._view(w, p, "ATC")
     assert all(v["path"][a.callsign] == f"no route geometry for {a.runway}" for a in p.assignments)
-    pilot = negotiators(w)[1]
+    pilot = pilots(w)[0]
     cs = pilot.split(":", 1)[1]
     d = next(m for m in moves.legal_moves(w, p, pilot) if m.kind == "request_divert")
     q = moves.apply(w, p, d)

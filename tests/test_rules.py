@@ -171,7 +171,7 @@ def test_evaluate_shape():
     assert ev["plan_id"] == p.id
     assert set(ev["totals"]) == {"delay_min", "fuel_kg", "hold_min", "pax_protected_pct", "overtime_min", "diversions"}
     from backend.wave.utility import negotiators
-    assert set(ev["utilities"]) == set(negotiators(w)) and len(ev["utilities"]) == 3
+    assert list(ev["utilities"]) == negotiators(w)
     assert {"ATC", "GROUND"} <= set(ev["utilities"]) and all(0 <= u <= 1 for u in ev["utilities"].values())
     keys = {"rule", "owner", "passed", "detail", "source", "evidence", "callsign"}
     assert all(set(c) == keys for c in ev["checks"])

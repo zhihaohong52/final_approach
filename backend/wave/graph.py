@@ -1,39 +1,53 @@
-"""Wave negotiation as a LangGraph state graph (challenge rules_of_play; contract v2.0).
+"""Wave negotiation as a LangGraph state graph (challenge rules_of_play, extended with airline agents; contract v2.0+).
 
-    triage -> open -> atc -> pilot -> ground -> decide_turn -+-> finalize          (consensus)
-                       ^                                     +-> atc               (next turn)
-                       +-------------------------------------+-> fallback -> finalize (after turn 3)
+    triage -> open -> atc -> airlines -> ground -> decide_turn -+-> finalize          (consensus)
+                       ^                                        +-> atc               (next turn)
+                       +----------------------------------------+-> fallback -> finalize (after turn 3)
 
-Exactly three agents negotiate (challenge rules_of_play): ATC, PILOT:<focus> (the pilot of the
-disruption flight, wave.focus; if unset the most-delayed disrupted flight) and GROUND. One turn =
-each agent sends ONE structured AGENT_TURN message, in the order ATC -> PILOT -> GROUND; at most
-3 turns. Non-focus flights have no pilot agent: ATC sequences them (runway, slot/holding, plus
-speed control / ground delay as ATC instructions), GROUND assigns their gates, and the engine still
-checks all their rules (fuel, wake, gates...). Every decision goes through a per-agent `Decider`
-(model chain -> local formula); the deterministic rule engine (rules.check) is the only judge of
-legality. Engine messages (TRIAGE, OPEN, CHECK, CONSENSUS, NO_CONSENSUS, FALLBACK, MODEL_FALLBACK)
-are not agent turns.
+Voters (`utility.voters`, = `negotiators`): ATC, one AIRLINE:<code> agent per airline in the wave (codes sorted,
+`airlines.groups`: a regional flies under its major) and GROUND. Deviation from rules_of_play, which names exactly
+three agents (ATC, the disruption flight's pilot, GROUND): the focus flight's bargaining moves to its airline, so
+every flight's commercial owner is at the table, not only the focus flight's. Pilots (`utility.pilots`, one per
+wave flight) never vote, never propose and make no model calls: a pilot only sends UNABLE when an instruction or a
+plan on the table breaks one of its own pilot-side rules (`unable.pilot_side`: PLT-* plus ATC-WIND-LIMITS). One
+turn = each voter sends ONE structured AGENT_TURN, in the order ATC -> airlines (alphabetical, inside the one
+`airlines` node) -> GROUND; at most 3 turns. Every voter decision goes through a per-agent `Decider` (model chain ->
+local formula); the deterministic rule engine (rules.check) is the only judge of legality. Engine messages
+(TRIAGE, OPEN, CHECK, CONSENSUS, NO_CONSENSUS, FALLBACK, MODEL_FALLBACK) and pilot UNABLEs are not agent turns.
+
+Message order: TRIAGE, OPEN, (UNABLE* on the opening plan); per turn, for each voter: AGENT_TURN, (UNABLE*), CHECK
+(if its proposal is new), then CONSENSUS or NO_CONSENSUS; FALLBACK last if no consensus after turn 3.
 
 Choices made here (documented for review):
-- Chaining: in turn t, ATC starts from the incumbent plan, PILOT from ATC's proposal, GROUND from
-  PILOT's proposal. Each agent makes up to 2 moves (3 when triage severity >= 3) and puts the result
-  on the table as its proposal. The engine CHECKs every new proposal right after the agent's message.
-- Move rejection: a move is rejected iff the plan after it has a violation (rule, callsign) that the
-  plan before it did not have. Rejections are listed in the agent's AGENT_TURN `rejected` with the
-  violations (rule, source, evidence). A slot allows at most MAX_REJECTIONS_PER_SLOT vetoed picks.
-- Agent formula (Choice fallback / formulas mode): ranks options by (known violated rules after the
-  move, -own utility); moves only on strict improvement; otherwise accepts/passes.
-- Votes: when an agent speaks it votes on every CHECK-passed plan on the table at that moment: the
-  incumbent, the proposals made earlier in this turn and its own proposal. Consensus = one
-  CHECK-passed plan ACCEPTed by all three agents within the same turn (best max-min utility if
-  several). A plan GROUND proposes in turn t can therefore only win from turn t+1 on, as incumbent.
+- Chaining: in turn t, ATC starts from the incumbent plan, each airline from the previous proposal, GROUND from
+  the last airline's. Each voter makes up to 2 moves (3 when triage severity >= 3) and puts the result on the
+  table as its proposal. The engine CHECKs every new proposal right after the voter's message (and its UNABLEs).
+- Move rejection: a move is rejected iff the plan after it has a violation (rule, callsign) that the plan before
+  it did not have. Rejections are listed in the AGENT_TURN `rejected` with the violations (rule, source,
+  evidence) and the post-move `plan_id`. A slot allows at most MAX_REJECTIONS_PER_SLOT vetoed picks. A rejected
+  move with a pilot-side violation is followed by that pilot's UNABLE naming the instruction.
+- Divert guard (per move): a request_divert is offered only if that flight fails PLT-FUEL-RESERVE or no runway
+  is open.
+- Agent formula (Choice fallback / formulas mode): ATC / GROUND rank options by (known violated rules after the
+  move, -own utility); an airline by (known violations on its own flights, fairness-floor breaches at this turn's
+  slack, -own utility). A voter moves only on a strict lexicographic improvement; otherwise accepts/passes.
+- Fairness floor (spec 3.4, `fairness.py`): an airline compares each of its flights' delay and fuel with the
+  floor plan (status quo when feasible, else the best feasible plan it has seen). When some CHECK-passed plan on
+  the table meets its floor, it REJECTs every plan that breaches it (`decided_by: "floor"`, `floor: [breach]`,
+  never sent to the model); otherwise (firm escape clause) it votes on utility as ATC / GROUND do. Its AGENT_TURN
+  lists `objections`: the breaches of each CHECK-passed plan another agent proposed.
+- Votes: when a voter speaks it votes on every CHECK-passed plan on the table at that moment: the incumbent, the
+  proposals made earlier in this turn and its own. Consensus = one CHECK-passed plan with no pilot UNABLE,
+  ACCEPTed by every voter within the same turn (best max-min utility over the voters if several). A plan GROUND
+  proposes in turn t can therefore only win from turn t+1 on, as incumbent.
 - Vote formula: P(accept) = 1.0 if utility >= reservation else 0.0. A model vote ACCEPTs at P >= 0.7 and
   REJECTs at P <= 0.3; in between (uncertain) the formula verdict decides and the vote says so.
   Reservation_t = best own utility seen on a FEASIBLE plan so far * (0.9 - 0.12 * (t - 1)).
-- Incumbent for turn t+1: the CHECK-passed plan of turn t (incumbent or proposal) with the highest
-  max-min utility; if none passed, the proposal with the fewest violations.
-- No consensus after turn 3: the deterministic non-AI solver (fallback.solve) decides; FALLBACK.reason
-  says which agent rejected which plan (utility vs reservation) or that no plan passed CHECK.
+- Incumbent for turn t+1: the CHECK-passed plan of turn t with the fewest fairness-floor breaches summed over the
+  airlines at turn t+1's slack, then the highest max-min utility (so a floor-meeting plan stays on the table while
+  one exists); if none passed, the proposal with the fewest violations.
+- No consensus after turn 3: the deterministic non-AI solver (fallback.solve) decides; FALLBACK.reason says which
+  voter rejected which plan (fairness floor breach, or utility vs reservation) or that no plan passed CHECK.
 - stats.model_calls = decisions answered by a model; stats.fallbacks = Decider fallback events.
 """
 from __future__ import annotations
@@ -42,17 +56,18 @@ import json
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 from backend.decide import DEFAULT_CHAIN, Decider, DecisionResult
-from backend.wave import baseline, fallback, moves, route, rules, surface, trajectory, wind
+from backend.wave import airlines as airlines_mod
+from backend.wave import baseline, fallback, moves, route, rules, surface, trajectory, unable, wind
+from backend.wave import fairness as fairness_mod
 from backend.wave.model import JointPlan, Move, Wave
 from backend.wave.utility import (agent_terms, agent_utility, evaluate, focus_callsign, hold_burn, metrics_map,
-                               negotiators)
+                               negotiators, pilots)
 
 MAX_TURNS = 3
 MAX_ROUNDS = MAX_TURNS  # back-compat alias
@@ -70,6 +85,8 @@ OBJECTIVES = {
     "ATC": "Keep wake separation and wind limits, spread landings across runways, minimise airborne holding.",
     "PILOT": "Keep fuel reserves, minimise your own delay and holding, protect your passengers' connections.",
     "GROUND": "Avoid gate conflicts and crew overtime, keep scheduled gates, protect next departures.",
+    "AIRLINE": "Protect each of your flights: delay, holding fuel, connections and next departure; no flight worse "
+               "than the original plan.",
 }
 PASS = "pass"
 
@@ -79,7 +96,16 @@ def _now() -> str:
 
 
 def _role(agent: str) -> str:
-    return "PILOT" if agent.startswith("PILOT:") else agent
+    if agent.startswith("PILOT:"):
+        return "PILOT"
+    if agent.startswith("AIRLINE:"):
+        return "AIRLINE"
+    return agent
+
+
+def _code(agent: str) -> str:
+    """Airline code of an AIRLINE:<code> id."""
+    return agent.split(":", 1)[1]
 
 
 def _plan_dict(wave: Wave, plan: JointPlan) -> dict:
@@ -99,31 +125,37 @@ def _own_flight(c, cs: str) -> bool:
     return c.callsign == cs or cs in c.detail
 
 
-def _counted(agent: str, checks, known: set[str]) -> list:
-    """Failed checks counted as 'known violations' for `agent`. A PILOT judges only its own flight
-    (it cannot fix other flights' problems by moving itself); ATC/GROUND count their own rules plus
-    any rule the engine has published as vetoed."""
+def _counted(agent: str, checks, known: set[str], own=None) -> list:
+    """Failed checks counted as 'known violations' for `agent`. A PILOT judges only its own flight and an
+    AIRLINE only its own flights (they cannot fix other flights' problems by moving their own); ATC/GROUND
+    count their own rules plus any rule the engine has published as vetoed. `own` (AIRLINE) is the airline's
+    callsigns, passed in by hot callers."""
     role = _role(agent)
     if role == "PILOT":
         cs = agent.split(":", 1)[1]
         return [c for c in checks if not c.passed and _own_flight(c, cs)]
+    if role == "AIRLINE":
+        return [c for c in checks if not c.passed and any(_own_flight(c, cs) for cs in (own or ()))]
     return [c for c in checks if not c.passed and (c.owner == role or c.rule in known)]
 
 
-def _known_violations(agent: str, checks, known: set[str]) -> int:
-    return len(_counted(agent, checks, known))
+def _known_violations(agent: str, checks, known: set[str], own=None) -> int:
+    return len(_counted(agent, checks, known, own))
 
 
-def _known_rules(agent: str, checks, known: set[str]) -> list[str]:
+def _known_rules(agent: str, checks, known: set[str], own=None) -> list[str]:
     """Sorted distinct rule ids counted by _known_violations (what the agent may be told)."""
-    return sorted({c.rule for c in _counted(agent, checks, known)})
+    return sorted({c.rule for c in _counted(agent, checks, known, own)})
 
 
-def _divert_justified(w: Wave, agent: str, checks) -> bool:
-    """A pilot requests diversion only if its own flight fails the fuel reserve or no runway is open."""
-    cs = agent.split(":", 1)[1]
+def _divert_ok(w: Wave, mv: Move, checks) -> bool:
+    """Divert guard, per move: a request_divert is allowed only if that flight fails PLT-FUEL-RESERVE in the
+    plan it is made from, or no runway is open. Any other move kind is allowed."""
+    if mv.kind != "request_divert":
+        return True
     if not any(r.open for r in w.airport.runways):
         return True
+    cs = mv.callsigns[0]
     return any(not c.passed and c.rule == "PLT-FUEL-RESERVE" and c.callsign == cs for c in checks)
 
 
@@ -224,9 +256,17 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
                              "crew_shift_end": wave.flight(a.callsign).crew_shift_end_min,
                              "next_dep": wave.flight(a.callsign).next_departure_min}
                             for a in plan.assignments]}
-    cs = agent.split(":", 1)[1]
+    mm = metrics_map(wave, plan)
+    if role == "AIRLINE":
+        own = airlines_mod.groups(wave).get(_code(agent), [])
+        return {"airline": _code(agent), "flights": [_flight_view(wave, plan, cs, ts, mm) for cs in own]}
+    return _flight_view(wave, plan, agent.split(":", 1)[1], ts, mm)
+
+
+def _flight_view(wave: Wave, plan: JointPlan, cs: str, ts, mm) -> dict:
+    """One flight's private view (a PILOT's view; an AIRLINE sees one per own flight)."""
     f, a = wave.flight(cs), plan.get(cs)
-    m = metrics_map(wave, plan)[cs]
+    m = mm[cs]
     # §6.1: BTS scheduled arrival is a gate (in-block) time; eta_earliest_min is the earliest touchdown
     return {"flight": cs, "type": f.aircraft_type, "airborne": f.airborne, "earliest_touchdown": f.eta_earliest_min,
             "sched_in_block": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
@@ -241,8 +281,11 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
 
 class _Run:
     def __init__(self, wave: Wave, mode: str, chain: list[str] | None,
-                 on_message: Callable[[dict], None] | None, run_id: str):
+                 on_message: Callable[[dict], None] | None, run_id: str, fairness: str | None = None):
         self.wave, self.mode, self.run_id = wave, mode, run_id
+        self.fairness = fairness or fairness_mod.current()
+        if self.fairness not in fairness_mod.VARIANTS:
+            raise ValueError(f"unknown fairness variant {self.fairness!r}; expected one of {fairness_mod.VARIANTS}")
         self.chain = [] if mode == "formulas" else list(chain if chain is not None else DEFAULT_CHAIN)
         self.on_message = on_message
         self.log: list[dict] = []
@@ -250,8 +293,19 @@ class _Run:
         self.fallbacks = 0
         self.model_errors: list[str] = []
         self.known_rules: set[str] = set()
-        self.agents = negotiators(wave)
+        self.agents = negotiators(wave)              # the voters: ATC, AIRLINE:* (sorted), GROUND
+        self.airlines = self.agents[1:-1]
+        self.pilots = pilots(wave)
+        self.own = {ag: list(airlines_mod.groups(wave).get(_code(ag), [])) for ag in self.airlines}
         self.focus = focus_callsign(wave)
+        self.sq = baseline.status_quo(wave)
+        self.sq_ok = rules.feasible(wave, self.sq)
+        self.floor_best: dict[str, JointPlan] = {}   # airline code -> best feasible plan seen, by its utility
+        self.floor_u: dict[str, float] = {}
+        self.proposed_by: dict[str, str] = {}        # plan id -> first voter to put it on the table (ENGINE: OPEN)
+        self.unable_plans: set[str] = set()          # plan ids a pilot sent UNABLE on (cannot win)
+        self.unable_seen: set[tuple] = set()
+        self._breach_cache: dict[tuple, list[dict]] = {}
         self.best_seen: dict[str, float] = {ag: 0.0 for ag in self.agents}
         self.max_moves = MOVES_PER_ROUND
         self.votes: dict[str, list[dict]] = {}
@@ -296,6 +350,26 @@ class _Run:
             return
         for ag in self.best_seen:
             self.best_seen[ag] = max(self.best_seen[ag], agent_utility(self.wave, plan, ag))
+        for ag in self.airlines:   # best-seen floor, used only when the status quo is infeasible
+            code, u = _code(ag), agent_utility(self.wave, plan, ag)
+            if code not in self.floor_best or u > self.floor_u[code] + 1e-9:
+                self.floor_best[code], self.floor_u[code] = plan, u
+
+    def floor(self, agent: str) -> tuple[JointPlan | None, str]:
+        """(floor plan, floor source) of AIRLINE `agent` now: the status quo when feasible, else the best
+        feasible plan it has seen (None before any)."""
+        code = _code(agent)
+        fp = fairness_mod.floor_source(self.wave, self.sq, self.sq_ok, self.floor_best.get(code))
+        return fp, "status_quo" if self.sq_ok else "best_seen"
+
+    def breaches(self, plan: JointPlan, agent: str, rnd: int) -> list[dict]:
+        """Fairness-floor breaches of AIRLINE `agent`'s flights in `plan` at turn `rnd` (1..3)."""
+        fp, src = self.floor(agent)
+        key = (plan.id, agent, rnd, fp.id if fp is not None else None)
+        if key not in self._breach_cache:
+            self._breach_cache[key] = fairness_mod.breaches(self.wave, plan, _code(agent), fp, self.fairness, rnd,
+                                                            source=src)
+        return self._breach_cache[key]
 
 
 ACCEPT_AT = 0.7     # model P(accept) at or above: ACCEPT
@@ -391,65 +465,114 @@ def _open(st: S) -> dict:
     run.see(plan)
     run.known_rules |= {c["rule"] for c in ev["checks"] if not c["passed"]}
     nv = sum(not c["passed"] for c in ev["checks"])
+    run.proposed_by.setdefault(plan.id, "ENGINE")
     run.emit(run.msg(0, "ENGINE", {"type": "OPEN", "plan": plan.to_dict(), "evaluation": ev,
-                                   "agents": run.agents, "focus": run.focus},
+                                   "agents": run.agents, "pilots": run.pilots,
+                                   "airlines": airlines_mod.describe(run.wave), "focus": run.focus},
                      f"Opening plan: first come first served from the schedule; {nv} rule violation(s) on the "
-                     f"table; agents {', '.join(run.agents)}"))
+                     f"table; agents {', '.join(run.agents)}; {len(run.pilots)} pilot(s)"))
+    _unables(run, 0, "ENGINE", [], plan, rules.violations(run.wave, plan))
     return {"round": 1, "table": plan}
+
+
+def _unables(run: _Run, rnd: int, proposer: str, rejected: list[dict], plan: JointPlan | None, viol) -> None:
+    """Emit the pilots' UNABLEs: one per pilot-side violation (`unable.pilot_side`) of each rejected move
+    (instruction = the move, plan_id = the post-move plan) and of `plan` (a new proposal or the opening plan;
+    `viol` = its failed checks, None when it was not CHECKed now). Deduped on (plan id, move id, callsign, rule):
+    the same refusal of the same instruction on the same plan is said once. Every refused plan id goes into
+    `run.unable_plans` (it cannot win). Pure formula: pilots make no model calls."""
+    items = [(x["plan_id"], x["move"], c) for x in rejected for c in x["violations"]]
+    if plan is not None and viol:
+        items += [(plan.id, None, c) for c in viol]
+    for pid, mv, c in items:
+        if not unable.pilot_side(c):   # unable_body does not re-check
+            continue
+        body = unable.unable_body(rnd, c, mv, pid, proposer)
+        run.unable_plans.add(pid)
+        key = (pid, mv["id"] if mv else None, body["callsign"], body["rule"])
+        if key in run.unable_seen:
+            continue
+        run.unable_seen.add(key)
+        run.emit(run.msg(rnd, body["agent"], body, body["text"][:400]))
+
+
+def _fair_words(br: list[dict]) -> str:
+    """An airline option's fairness, in words (the engine computed the breaches; the model only reads them)."""
+    if not br:
+        return "keeps every flight within its floor"
+    parts = [f"{b['callsign']} +{b['value'] - b['floor']:.1f} min over its floor" if b["metric"] == "delay_min"
+             else f"{b['callsign']} +{b['value'] - b['floor']:.0f} kg fuel over its floor" for b in br[:3]]
+    return ", ".join(parts) + (f" (+{len(br) - 3} more)" if len(br) > 3 else "")
 
 
 def _agent_moves(run: _Run, agent: str, rnd: int, table: JointPlan, known: set[str]
                  ) -> tuple[list[dict], JointPlan, list[dict], list[dict]]:
     """The agent's moves for this turn. Returns (MODEL_FALLBACK messages, resulting plan,
-    applied [{move, utility_before, utility_after, decision}], rejected [{move, violations, decision}])."""
+    applied [{move, utility_before, utility_after, decision}], rejected [{move, violations, reason, plan_id,
+    decision}], plan_id = the post-move plan the engine refused)."""
     w = run.wave
     buf: list[dict] = []
     applied: list[dict] = []
     rejected: list[dict] = []
     dec = run.decider(agent, rnd, buf)
+    airline = _role(agent) == "AIRLINE"
+    own = run.own.get(agent)
+    nb = (lambda p: len(run.breaches(p, agent, rnd))) if airline else (lambda p: 0)
     plan = table
     for _slot in range(run.max_moves):
         opts = moves.legal_moves(w, plan, agent)
         before_checks = rules.check(w, plan)
         before_v = _vkeys(before_checks)
         u_now = agent_utility(w, plan, agent)
-        k_now = _known_violations(agent, before_checks, known)
-        divert_ok = _role(agent) != "PILOT" or _divert_justified(w, agent, before_checks)
+        k_now = _known_violations(agent, before_checks, known, own)
+        b_now = nb(plan)
         info = {}
         for i, mv in enumerate(opts):
             after = moves.apply(w, plan, mv)
             chk = rules.check(w, after)
-            info[f"m{i + 1}"] = (mv, after, chk, agent_utility(w, after, agent), _known_violations(agent, chk, known))
+            info[f"m{i + 1}"] = (mv, after, chk, agent_utility(w, after, agent),
+                                 _known_violations(agent, chk, known, own),
+                                 run.breaches(after, agent, rnd) if airline else [])
+        # option rank: (known violations, [airline: floor breaches at this turn's slack,] -own utility, key)
+        rank = lambda v, k: (v[4], len(v[5]), -v[3], k)
         excluded: set[str] = set()
         moved = False
         stop = False
         for _attempt in range(MAX_REJECTIONS_PER_SLOT):  # each failed attempt is one rejection
             avail = {k: v for k, v in info.items() if k not in excluded}
-            # a PILOT may divert only for its own fuel problem or when every runway is closed: the model is
-            # offered exactly the moves the formula may take (it was offered unjustified diversions before)
-            avail = {k: v for k, v in avail.items()
-                     if not (v[0].kind == "request_divert" and not divert_ok)} or avail
+            # a flight may divert only for its own fuel problem or when every runway is closed (`_divert_ok`): the
+            # model is offered exactly the moves the formula may take
+            avail = {k: v for k, v in avail.items() if _divert_ok(w, v[0], before_checks)} or avail
             if not avail:
                 stop = True
                 break
             # System One models judge, code does the maths: every comparison is pre-computed into words
-            ranked = sorted(avail, key=lambda k: (avail[k][4], -avail[k][3], k))
-            options = {k: {"move": v[0].label,
-                           "rule_breaches": _breach_words(v[4], k_now, _known_rules(agent, v[2], known)),
-                           "for_you": _gain_words(v[3] - u_now),
-                           "engine_rank": f"{ranked.index(k) + 1} of {len(ranked)} (fewest rule breaches, then best for you)"}
-                       for k, v in avail.items()}
+            ranked = sorted(avail, key=lambda k: rank(avail[k], k))
+            how = ("fewest rule breaches on your flights, then fewest fairness-floor breaches, then best for you"
+                   if airline else "fewest rule breaches, then best for you")
+            options = {}
+            for k, v in avail.items():
+                o = {"move": v[0].label,
+                     "rule_breaches": _breach_words(v[4], k_now, _known_rules(agent, v[2], known, own)),
+                     "for_you": _gain_words(v[3] - u_now)}
+                if airline:
+                    o["fairness"] = _fair_words(v[5])
+                o["engine_rank"] = f"{ranked.index(k) + 1} of {len(ranked)} ({how})"
+                options[k] = o
             has_accept = any(v[0].kind == "accept" for v in avail.values())
             if not has_accept:
                 options[PASS] = {"move": "Make no further move this turn", "rule_breaches": _breach_words(k_now, k_now, []),
                                  "for_you": "no change for you", "engine_rank": "keep the plan as it is"}
+                if airline:
+                    options[PASS]["fairness"] = _fair_words(run.breaches(plan, agent, rnd))
 
             def formula(avail=avail, has_accept=has_accept) -> str:
-                cand = {k: v for k, v in avail.items()
-                        if not (v[0].kind == "request_divert" and not divert_ok)} or avail
-                best = min(cand, key=lambda k: (cand[k][4], -cand[k][3], k))
+                best = min(avail, key=lambda k: rank(avail[k], k))
                 b = avail[best]
-                if b[0].kind != "accept" and (b[4] < k_now or (b[4] == k_now and b[3] > u_now + 1e-9)):
+                # strict lexicographic improvement over the plan as it is (utility with a 1e-9 tolerance)
+                better = b[4] < k_now or (b[4] == k_now and (len(b[5]) < b_now or
+                                                              (len(b[5]) == b_now and b[3] > u_now + 1e-9)))
+                if b[0].kind != "accept" and better:
                     return best
                 if has_accept:
                     return next(k for k, v in avail.items() if v[0].kind == "accept")
@@ -460,8 +583,9 @@ def _agent_moves(run: _Run, agent: str, rnd: int, table: JointPlan, known: set[s
                      "view": _view(w, plan, agent),
                      "rules_published_by_engine": sorted(known),
                      "rule_breaches_on_the_table": _breach_words(k_now, k_now, []),
-                     "guidance": "Fixing rule breaches comes first; then pick what is better for you. "
-                                 "Make no further move if nothing is better."}
+                     "guidance": "Fixing rule breaches comes first; then "
+                                 + ("keep each of your flights within its fairness floor; then " if airline else "")
+                                 + "pick what is better for you. Make no further move if nothing is better."}
             r = dec.choice(state, f"You are {agent}. Pick ONE move for your own authority, or make no further move. "
                                   "Each option's `rule_breaches` and `for_you` were computed by the safety engine; "
                                   "trust them, do not recompute.",
@@ -471,7 +595,7 @@ def _agent_moves(run: _Run, agent: str, rnd: int, table: JointPlan, known: set[s
             if pick == PASS:
                 stop = True
                 break
-            mv, after, chk, u_after, _ = avail[pick]
+            mv, after, chk, u_after = avail[pick][:4]
             if mv.kind == "accept":
                 stop = True  # accepting is a vote, not a move: the turn's moves end here
                 break
@@ -482,7 +606,7 @@ def _agent_moves(run: _Run, agent: str, rnd: int, table: JointPlan, known: set[s
                 with run.lock:
                     run.known_rules |= {c.rule for c in new_v}
                 rejected.append({"move": mv.to_dict(), "violations": [c.to_dict() for c in new_v],
-                                 "reason": f"{new_v[0].rule}: {new_v[0].detail}"[:300],
+                                 "reason": f"{new_v[0].rule}: {new_v[0].detail}"[:300], "plan_id": after.id,
                                  "decision": _choice_meta(r, info)})
                 continue
             applied.append({"move": mv.to_dict(), "utility_before": u_now, "utility_after": u_after,
@@ -530,26 +654,45 @@ def _breach_words(after: int, now: int, rules_after: list[str]) -> str:
     return f"no rule breaches" if after == 0 else f"rule breaches unchanged at {after}{tail}"
 
 
+def _floor_reason(b: dict, variant: str) -> str:
+    src = "status quo" if b["floor_source"] == "status_quo" else "best plan seen"
+    return (f"{b['callsign']} {b['metric']} {b['value']:g} > {b['allowed']:g} "
+            f"({variant} fairness floor {b['floor']:g}, {src})")
+
+
 def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[list[dict], list[dict], dict | None]:
-    """(MODEL_FALLBACK messages, votes, DecisionMeta) for `agent` on the CHECK-passed `plans`."""
+    """(MODEL_FALLBACK messages, votes, DecisionMeta) for `agent` on the CHECK-passed `plans`.
+    An AIRLINE first applies its fairness floor: when some plan in `plans` has no breach, every plan with a
+    breach is REJECTed by the floor (`decided_by: "floor"`) and is not sent to the model."""
     w = run.wave
     buf: list[dict] = []
     res = run.reservation(agent, rnd)
     if not plans:
         return buf, [], None
     us = {p.id: agent_utility(w, p, agent) for p in plans}
+    floor_votes: dict[str, dict] = {}
+    if _role(agent) == "AIRLINE":
+        br = {p.id: run.breaches(p, agent, rnd) for p in plans}
+        if any(not b for b in br.values()):
+            for p in plans:
+                if br[p.id]:
+                    floor_votes[p.id] = {"plan_id": p.id, "vote": "REJECT", "utility": us[p.id], "reservation": res,
+                                         "decided_by": "floor", "floor": [dict(b) for b in br[p.id]],
+                                         "reason": _floor_reason(br[p.id][0], run.fairness)}
+    asked = [p for p in plans if p.id not in floor_votes]
     # code compares utility with the reservation; the model only judges whether to accept, given the verdict
+    best_u = max(us[p.id] for p in asked)
     items = {p.id: {"question": f"As {agent}, do you accept plan {p.id}?",
                     "plan": p.describe()[:160],
                     "passes_every_safety_rule": "yes (engine CHECK passed)",
                     "meets_your_minimum_this_turn": _meets_words(us[p.id] - res),
                     "for_you_vs_best_plan_on_the_table": "this is the best plan for you"
-                    if us[p.id] >= max(us.values()) - 1e-9 else _gain_words(us[p.id] - max(us.values()))}
-             for p in plans}
+                    if us[p.id] >= best_u - 1e-9 else _gain_words(us[p.id] - best_u)}
+             for p in asked}
     state = {"role": _role(agent), "agent": agent, "turn": rnd, "turns_left": MAX_TURNS - rnd,
              "objective": OBJECTIVES[_role(agent)],
-             "note": "If no plan is accepted by all three agents within 3 turns, a deterministic solver decides "
-                     "for everyone; your minimum drops each turn."}
+             "note": f"If no plan is accepted by all {len(run.agents)} agents within {MAX_TURNS} turns, a "
+                     "deterministic solver decides for everyone; your minimum drops each turn."}
     criteria = {"true": "Accept: the plan meets your minimum this turn (`meets_your_minimum_this_turn` starts "
                         "with yes). Safety is already guaranteed by the engine.",
                 "false": "Reject: `meets_your_minimum_this_turn` starts with no. Not a reason to reject: the "
@@ -560,6 +703,9 @@ def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[lis
     run.account(first)
     votes = []
     for p in plans:
+        if p.id in floor_votes:
+            votes.append(floor_votes[p.id])
+            continue
         r = rs[p.id]
         pa = float(r.value)
         formula_acc = us[p.id] >= res
@@ -581,8 +727,24 @@ def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[lis
     return buf, votes, _meta("noul", first)
 
 
+def _objection_words(objections: list[dict], applied: list[dict], proposal_breaches: list[dict]) -> str:
+    """`objects: <cs> <metric> +<over the floor> vs <floor source>; counter-offer: <own moves> | rejects the plan`."""
+    b = objections[0]
+    d = b["value"] - b["floor"]
+    over = f"+{d:.1f} min" if b["metric"] == "delay_min" else f"+{d:.0f} kg"
+    metric = "delay" if b["metric"] == "delay_min" else "fuel"
+    src = "the original plan" if b["floor_source"] == "status_quo" else "the best plan so far"
+    more = f" (+{len(objections) - 1} more)" if len(objections) > 1 else ""
+    if applied and not proposal_breaches:
+        tail = "counter-offer: " + "; ".join(x["move"]["label"] for x in applied)
+    else:
+        tail = "rejects the plan"
+    return f"objects: {b['callsign']} {metric} {over} vs {src} on {b['plan_id']}{more}; {tail}"
+
+
 def _speak(st: S, agent: str) -> dict:
-    """One agent's turn: moves from the latest plan on the table, one AGENT_TURN message, engine CHECK."""
+    """One voter's turn: moves from the latest plan on the table, one AGENT_TURN message, the pilots' UNABLEs,
+    engine CHECK."""
     run: _Run = st["ctx"]
     w = run.wave
     rnd = st["round"]
@@ -596,6 +758,7 @@ def _speak(st: S, agent: str) -> dict:
     for m in buf:
         run.emit(m)
     proposal = JointPlan(plan.assignments, "")
+    run.proposed_by.setdefault(proposal.id, agent)
     run.see(proposal)
     new = proposal.id not in checked
     viol = rules.violations(w, proposal) if new else None
@@ -624,9 +787,20 @@ def _speak(st: S, agent: str) -> dict:
             "moves": applied, "rejected": rejected,
             "proposal": _plan_dict(w, proposal), "proposal_utility": u,
             "votes": votes, "rationale": rationale}
+    if _role(agent) == "AIRLINE":
+        # the breaches of each CHECK-passed plan another voter (or the engine) put on the table
+        objections = [{**b, "plan_id": p.id, "proposed_by": run.proposed_by.get(p.id, "ENGINE")}
+                      for p in valid if run.proposed_by.get(p.id) != agent
+                      for b in run.breaches(p, agent, rnd)]
+        body["objections"] = objections
+        if objections:
+            pb = run.breaches(proposal, agent, rnd) if checked[proposal.id][1] else []
+            rationale += "; " + _objection_words(objections, applied, pb)
+            body["rationale"] = rationale
     if vmeta is not None:
         body["decision"] = vmeta
     run.emit(run.msg(rnd, agent, body, rationale, vmeta))
+    _unables(run, rnd, agent, rejected, proposal if new else None, viol)
     if new:
         nchk = len(rules.check(w, proposal))
         run.emit(run.msg(rnd, "ENGINE", {"type": "CHECK", "plan_id": proposal.id, "passed": not viol,
@@ -643,8 +817,15 @@ def _atc(st: S) -> dict:
     return _speak({**st, "proposals": [], "checked": {}, "ballots": {}}, "ATC")
 
 
-def _pilot(st: S) -> dict:
-    return _speak(st, st["ctx"].agents[1])
+def _airlines(st: S) -> dict:
+    """Every airline voter speaks in turn (alphabetical), inside one node: each starts from the previous
+    proposal, exactly as separate nodes would chain; the state deltas are merged."""
+    cur, out = dict(st), {}
+    for ag in st["ctx"].airlines:
+        d = _speak(cur, ag)
+        cur.update(d)
+        out.update(d)
+    return out
 
 
 def _ground(st: S) -> dict:
@@ -657,17 +838,27 @@ def _no_consensus_reason(run: _Run, rnd: int, checked: dict, ballots: dict) -> s
         return f"turn {rnd}: no plan on the table passed the engine CHECK"
     parts = []
     for pid in valid:
-        rej = [f"{ag} (utility {v['utility']:.3f} < reservation {v['reservation']:.3f})"
-               if v["utility"] < v["reservation"] else f"{ag} ({v.get('reason', 'rejected')})"
-               for ag in run.agents for v in ballots.get(ag, []) if v["plan_id"] == pid and v["vote"] == "REJECT"]
+        rej = []
+        for ag in run.agents:
+            for v in ballots.get(ag, []):
+                if v["plan_id"] != pid or v["vote"] != "REJECT":
+                    continue
+                if v.get("decided_by") == "floor":
+                    rej.append(f"{ag} (fairness floor: {v['reason']})")
+                elif v["utility"] < v["reservation"]:
+                    rej.append(f"{ag} (utility {v['utility']:.3f} < reservation {v['reservation']:.3f})")
+                else:
+                    rej.append(f"{ag} ({v.get('reason', 'rejected')})")
         missing = [ag for ag in run.agents if not any(v["plan_id"] == pid for v in ballots.get(ag, []))]
         why = []
+        if pid in run.unable_plans:
+            why.append("refused by a pilot (UNABLE)")
         if rej:
             why.append("rejected by " + ", ".join(rej))
         if missing:
             why.append("not yet on the table when " + ", ".join(missing) + " spoke")
         parts.append(f"plan {pid}: " + "; ".join(why))
-    return f"turn {rnd}: no CHECK-passed plan accepted by all 3 agents (" + " | ".join(parts) + ")"
+    return f"turn {rnd}: no CHECK-passed plan accepted by all {len(run.agents)} agents (" + " | ".join(parts) + ")"
 
 
 def _decide_turn(st: S) -> dict:
@@ -677,14 +868,15 @@ def _decide_turn(st: S) -> dict:
     agents = run.agents
     checked, ballots = st["checked"], st["ballots"]
     valid = [p for p, ok in checked.values() if ok]
-    unanimous = [p for p in valid if all(any(v["plan_id"] == p.id and v["vote"] == "ACCEPT"
-                                             for v in ballots.get(ag, [])) for ag in agents)]
+    unanimous = [p for p in valid if p.id not in run.unable_plans
+                 and all(any(v["plan_id"] == p.id and v["vote"] == "ACCEPT" for v in ballots.get(ag, []))
+                         for ag in agents)]
     if unanimous:
         best = max(unanimous, key=lambda p: (*_maxmin(w, p), p.id))
         if rules.feasible(w, best):
             run.emit(run.msg(rnd, "ENGINE", {"type": "CONSENSUS", "plan_id": best.id, "turn": rnd,
                                              "accepted_by": agents},
-                             f"Turn {rnd}: all 3 agents accept {best.id}; max-min utility "
+                             f"Turn {rnd}: all {len(agents)} agents accept {best.id}; max-min utility "
                              f"{_maxmin(w, best)[0]:.3f} among {len(unanimous)} unanimous plan(s)"))
             return {"route": "finalize", "final": best, "outcome": "consensus", "method": "consensus"}
     reason = _no_consensus_reason(run, rnd, checked, ballots)
@@ -695,9 +887,13 @@ def _decide_turn(st: S) -> dict:
                      (reason + ("; turn limit reached" if last else "; agents concede"))[:400]))
     if last:
         return {"route": "fallback", "fallback_reason": reason}
-    # incumbent for the next turn
+    # incumbent for the next turn: fewest floor breaches over the airlines at the next turn's slack, then max-min
+    # (a floor-meeting plan stays on the table while one exists; an airline cannot move a flight back alone)
     if valid:
-        table = max(valid, key=lambda p: (*_maxmin(w, p), p.id))
+        def key(p):
+            nb = sum(len(run.breaches(p, ag, rnd + 1)) for ag in run.airlines)
+            return (-nb, *_maxmin(w, p), p.id)
+        table = max(valid, key=key)
     else:
         plans = [p for _, p in st["proposals"]]
         table = min(plans, key=lambda p: (len(rules.violations(w, p)), -_maxmin(w, p)[0], p.id))
@@ -731,15 +927,15 @@ def _finalize(st: S) -> dict:
 
 def build_graph():
     g = StateGraph(S)
-    for name, fn in [("triage", _triage), ("open", _open), ("atc", _atc), ("pilot", _pilot),
+    for name, fn in [("triage", _triage), ("open", _open), ("atc", _atc), ("airlines", _airlines),
                      ("ground", _ground), ("decide_turn", _decide_turn), ("fallback", _fallback),
                      ("finalize", _finalize)]:
         g.add_node(name, fn)
     g.add_edge(START, "triage")
     g.add_edge("triage", "open")
     g.add_edge("open", "atc")
-    g.add_edge("atc", "pilot")
-    g.add_edge("pilot", "ground")
+    g.add_edge("atc", "airlines")
+    g.add_edge("airlines", "ground")
     g.add_edge("ground", "decide_turn")
     g.add_conditional_edges("decide_turn", lambda st: st["route"],
                             {"finalize": "finalize", "next": "atc", "fallback": "fallback"})
@@ -791,13 +987,14 @@ _GRAPH = None
 
 def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None,
                    on_message: Callable[[dict], None] | None = None, run_id: str | None = None,
-                   narrate: bool = False) -> dict:
+                   narrate: bool = False, fairness: str | None = None) -> dict:
     """`narrate`: Claude writes the duty-manager brief in any mode (always on in decision+claude).
-    Narration only explains the finished outcome; it never changes the plan."""
+    Narration only explains the finished outcome; it never changes the plan.
+    `fairness`: the airline fairness-floor variant ("firm" | "relaxing"), per call; None = `fairness.current()`."""
     global _GRAPH
     if mode not in ("formulas", "decision", "decision+claude"):
         raise ValueError(f"unknown mode {mode!r}")
-    run = _Run(wave, mode, chain, on_message, run_id or uuid.uuid4().hex[:12])
+    run = _Run(wave, mode, chain, on_message, run_id or uuid.uuid4().hex[:12], fairness)
     if _GRAPH is None:
         _GRAPH = build_graph()
     st = _GRAPH.invoke({"ctx": run}, config={"recursion_limit": 200})
@@ -811,7 +1008,8 @@ def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None,
         "run_id": run.run_id, "wave_id": wave.id, "mode": mode,
         "model": run.chain[0] if run.chain else "formula",
         "outcome": st["outcome"], "rounds": min(st["round"], MAX_TURNS), "turns": min(st["round"], MAX_TURNS),
-        "agents": run.agents, "focus": run.focus,
+        "agents": run.agents, "pilots": run.pilots, "airlines": airlines_mod.describe(wave),
+        "fairness": run.fairness, "focus": run.focus,
         "revision": revision(wave, plan, run.focus), "limits": rules.limits_for(wave),
         "final_plan": plan.to_dict(), "evaluation": ev,
         "baseline": {"plan": None, "evaluation": evaluate(wave, base)},

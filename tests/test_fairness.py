@@ -15,8 +15,8 @@ def test_negotiators_and_pilots():
     w = make_wave()
     assert voters(w) == ["ATC", "AIRLINE:AA", "AIRLINE:DL", "AIRLINE:UA", "GROUND"]
     assert pilots(w) == ["PILOT:DL100", "PILOT:DL201", "PILOT:AA302", "PILOT:UA403"]
-    # negotiators keeps its 3-agent body until A5
-    assert utility.negotiators(w) == ["ATC", "PILOT:DL100", "GROUND"]
+    # from A5 on the negotiators are the voters
+    assert utility.negotiators(w) == voters(w)
 
 
 def _flight_terms(w, p, mm, cs):

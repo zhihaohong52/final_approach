@@ -190,9 +190,9 @@ def test_hold_move_offered_and_applied():
 
 def test_labels_within_120_chars():
     from backend.wave import build
-    from backend.wave.utility import negotiators
+    from backend.wave.utility import negotiators, pilots
     w = build.build_wave("F2015-75"); p = fcfs_plan(w)
-    for ag in negotiators(w):
+    for ag in negotiators(w) + pilots(w):   # voters (ATC, AIRLINE:*, GROUND) and the PILOT move menus
         assert all(len(m.label) <= 120 for m in legal_moves(w, p, ag))
 
 

@@ -80,8 +80,8 @@ def focus_callsign(wave: Wave) -> str:
 
 
 def negotiators(wave: Wave) -> list[str]:
-    """Exactly three negotiating agents (rules_of_play): ATC, the disruption flight's Pilot, Ground."""
-    return ["ATC", f"PILOT:{focus_callsign(wave)}", "GROUND"]
+    """The voting agents (= `voters`): ATC, one AIRLINE:<code> per airline in the wave (sorted), GROUND."""
+    return voters(wave)
 
 
 def voters(wave: Wave) -> list[str]:
