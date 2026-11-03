@@ -336,13 +336,15 @@ def _n_disruptions() -> int:
 def _models() -> tuple[list[dict], str]:
     keys = {"openrouter": "OPENROUTER_API_KEY", "typesafe": "TYPESAFE_API_KEY"}
     bench = _benchmark() or {}
-    winner = (bench.get("selection") or {}).get("winner")
-    rank = {}
-    for i, arm in enumerate(bench.get("arms") or []):
-        rank[_model_id(_norm_model(arm["model"]))] = i + 1
-    if winner:
-        rank[_model_id(_norm_model(winner))] = 0
+    benched = {_model_id(_norm_model(a["model"])) for a in bench.get("arms") or [] if a.get("model")}
     entries = [e for e in _default_chain() if e != "formula"]
+    # benchmark_rank: 1, 2, 3 ... over the benchmarked model arms in decision-chain order (model winner first,
+    # then _ranked_models), so no two arms share a rank; the formula arm is not ranked among the models
+    rank = {}
+    for e in entries:
+        mid = _model_id(_norm_model(e))
+        if mid in benched and mid not in rank:
+            rank[mid] = len(rank) + 1
     out = []
     for e in entries:
         provider = e.split(":", 1)[0] if ":" in e else "openrouter"
@@ -356,7 +358,7 @@ def _models() -> tuple[list[dict], str]:
     out.sort(key=lambda m: rank.get(m["id"], 1000) if m["id"] != "formula" else 10**6)
     for m in out:
         if m["id"] in rank:
-            m["benchmark_rank"] = rank[m["id"]] if rank[m["id"]] else 1
+            m["benchmark_rank"] = rank[m["id"]]
     return out, _model_id(_default_chain()[0])
 
 
@@ -372,9 +374,11 @@ def _ranked_models(live: bool = False) -> list[str]:
 
 
 def _default_mode() -> str:
-    """Follow the benchmark verdict: formulas by default when the formula agents win, else the decision models."""
-    winner = ((_benchmark() or {}).get("selection") or {}).get("winner")
-    return "formulas" if winner == "formula" else "decision"
+    """Decision mode with the best-ranked model arm (head of `_default_chain`) whenever a model is available, even
+    when the formula arm wins the benchmark (the arms are within noise at n = 50); formulas only when no model
+    in the chain has its API key."""
+    models, _ = _models()
+    return "decision" if any(m["available"] for m in models if m["id"] != "formula") else "formulas"
 
 
 def _default_chain(live: bool = False) -> list[str]:

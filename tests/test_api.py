@@ -112,16 +112,36 @@ def test_default_chain_uses_benchmark_winner(client):
     assert start["model_chain"] == [server._model_id(e) for e in chain]
 
 
-def test_formula_winner_defaults_to_formulas_mode(client):
+def test_formula_winner_still_defaults_to_best_model_arm(client, monkeypatch):
     arms = [{"model": "liquid/d1-ultra", "provider": "openrouter",
              "summary": {"error_rate_pct": 0, "latency_p95_ms": 800, "consensus_rate_pct": 82}},
             {"model": "typesafe/jev-1.14", "provider": "openrouter",
              "summary": {"error_rate_pct": 0, "latency_p95_ms": 550, "consensus_rate_pct": 90}},
             {"model": "formula", "provider": "formula", "summary": {}}]
     datastore.get_store().paths.benchmark_path.write_text(json.dumps({"selection": {"winner": "formula"}, "arms": arms}))
-    assert client.get("/api/config").json()["default_mode"] == "formulas"
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x")
+    cfg = client.get("/api/config").json()
+    assert cfg["default_mode"] == "decision" and cfg["default_model"] == "typesafe/jev-1.14"
     chain = server._default_chain()
     assert chain[:2] == ["openrouter:typesafe/jev-1.14", "openrouter:liquid/d1-ultra"] and chain[-1] == "formula"
+    ranks = {m["id"]: m["benchmark_rank"] for m in cfg["models"] if "benchmark_rank" in m}
+    assert ranks == {"typesafe/jev-1.14": 1, "liquid/d1-ultra": 2}
+    # formulas only when no model arm is available
+    monkeypatch.delenv("OPENROUTER_API_KEY"); monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    assert client.get("/api/config").json()["default_mode"] == "formulas"
+
+
+def test_benchmark_ranks_are_distinct_with_a_model_winner(client, monkeypatch):
+    arms = [{"model": m, "provider": "openrouter",
+             "summary": {"error_rate_pct": 0, "latency_p95_ms": 500, "consensus_rate_pct": c}}
+            for m, c in (("typesafe/jev-1.14", 98), ("liquid/d1-ultra", 98), ("baseten/elephant-1", 96))]
+    datastore.get_store().paths.benchmark_path.write_text(
+        json.dumps({"selection": {"winner": "baseten/elephant-1"}, "arms": arms}))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x")
+    cfg = client.get("/api/config").json()
+    ranks = {m["id"]: m["benchmark_rank"] for m in cfg["models"] if "benchmark_rank" in m}
+    assert ranks["baseten/elephant-1"] == 1 and sorted(ranks.values()) == [1, 2, 3]
+    assert cfg["default_mode"] == "decision" and cfg["default_model"] == "baseten/elephant-1"
 
 
 def test_v2_validation_error_shape(client):
