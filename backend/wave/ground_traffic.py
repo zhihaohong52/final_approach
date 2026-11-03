@@ -36,6 +36,7 @@ WINDOW_BEFORE_MIN, WINDOW_AFTER_MIN = 30.0, 120.0   # departures with wheels-off
 LOAD_EARLY_MIN = 360.0        # movements are filtered on schedule: read 6 h earlier so late departures still enter
 LOAD_LATE_MIN = 15.0          # ... and 15 min later for early ones
 PARALLEL_DEG = 10.0
+DEPARTURE_SPREAD_DEG = 60.0   # other free ends within this of the arrival flow also take departures (assumption, LIMITS)
 TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one a minute (assumption, LIMITS)
 LANDING_TAKEOFF_GAP_MIN = 1.0  # a takeoff stays this far from every landing on its strip (mixed mode; assumption, LIMITS)
 HOLD_UNTIL_TAKEOFF = True     # a departure keeps its holding-point node reserved until its takeoff: the queue behind it
@@ -84,9 +85,10 @@ class FixedTraffic:
     real: bool                                 # BTS 2015 movements exist for this wave
     takeoffs_shifted: int = 0                  # takeoffs moved past WHEELS_OFF by taxi waits
     stats: dict = field(default_factory=dict)
-    # strip -> (t_in, t_out, label, kind) of every scheduled fixed runway crossing (from leaving the hold to past the
-    # zone) and (landing slot, exit clear, label, "arrival") of every fixed arrival on the runway it lands on: a wave
-    # landing inside such a window is a conflict the fixed traffic (scheduled before the plan exists) cannot see
+    # strip -> (t_in, t_out, label, "crossing", hold node) of every scheduled fixed runway crossing (from leaving the
+    # hold to past the zone) and (landing slot, exit clear, label, "arrival", exit node) of every fixed arrival on the
+    # runway it lands on: the fixed traffic is scheduled before the plan exists, so the plan's pass checks its landings
+    # against them
     occupancy: dict = field(default_factory=dict)
 
     def __deepcopy__(self, memo):
@@ -135,7 +137,40 @@ def departure_mode(wave: Wave) -> tuple[bool, str | None, list[str]]:
     par = [r.id for r in wave.airport.runways if r.open and strip_of(r.id) != strip_of(maj)
            and _hdg_diff(r.heading_true, m.heading_true) <= PARALLEL_DEG]
     free = sorted(r for r in par if strip_of(r) not in used)
-    return (False, maj, free) if free else (True, maj, [maj])
+    # other free ends within DEPARTURE_SPREAD_DEG of the flow, no tailwind, whose strip crosses no arrival strip and
+    # no strip already chosen (crossing-runway operations are not modelled), by angle then id
+    by_id = {r.id: r for r in wave.airport.runways}
+    arr_rw = [r for r in wave.airport.runways if strip_of(r.id) in used]
+    tail = {x.runway: x.tailwind_kt for x in wave.runway_wind}
+    chosen = [by_id[e] for e in free]
+    extra = []
+    for r in sorted((r for r in wave.airport.runways if r.open and r.id not in free and strip_of(r.id) not in used
+                     and _hdg_diff(r.heading_true, m.heading_true) <= DEPARTURE_SPREAD_DEG
+                     and tail.get(r.id, 0.0) <= 0.0),
+                    key=lambda r: (_hdg_diff(r.heading_true, m.heading_true), r.id)):
+        if any(strip_of(c.id) == strip_of(r.id) for c in chosen):
+            continue
+        if any(_strips_cross(r, x) for x in arr_rw + chosen):
+            continue
+        chosen.append(r)
+        extra.append(r.id)
+    cands = free + sorted(extra)
+    return (False, maj, cands) if cands else (True, maj, [maj])
+
+
+def _strips_cross(a, b) -> bool:
+    """The two runways' centrelines (threshold to threshold) intersect (local flat projection); False without
+    coordinates."""
+    pts = [a.le_lat, a.le_lon, a.he_lat, a.he_lon, b.le_lat, b.le_lon, b.he_lat, b.he_lon]
+    if any(v is None for v in pts):
+        return False
+    k = math.cos(math.radians(a.le_lat))
+    p1, p2 = (a.le_lon * k, a.le_lat), (a.he_lon * k, a.he_lat)
+    q1, q2 = (b.le_lon * k, b.le_lat), (b.he_lon * k, b.he_lat)
+
+    def o(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    return o(p1, p2, q1) * o(p1, p2, q2) < 0 and o(q1, q2, p1) * o(q1, q2, p2) < 0
 
 
 # ---------------------------------------------------------------- graph helpers
@@ -189,6 +224,16 @@ def _forward(g: TaxiGraph, nodes: list[int]) -> TaxiPath:
 
 
 def departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> TaxiPath:
+    """Memoised on the graph per (stand, entry, strip): `_departure_path`. Shared and read-only."""
+    memo = g._trees.setdefault("dep_paths", {})
+    k = (stand_node, entry, strip)
+    hit = memo.get(k)
+    if hit is None:
+        hit = memo[k] = _departure_path(g, stand_node, entry, strip)
+    return hit
+
+
+def _departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> TaxiPath:
     """Stand -> holding point of `strip`: the reverse of the entry-rooted fastest path (one cached Dijkstra per runway
     entry, not per stand), timed in the forward direction, cut at the last node before the tail that is inside the
     strip's protected zone or on any runway's pavement. The final 30 s (PARK_S) is kept as a line-up buffer: the
@@ -439,6 +484,20 @@ def _spacing_events(events, settled: set[str] | None) -> list:
     return [e for e in events if e[1] != "takeoff" or settled is None or e[2] in settled]
 
 
+HOLD_QUEUE_MAX_RETRY = 50
+_QUEUE_BLOCK = "\x00queue"     # temporary node_busy entry: the departure must reach its holding point after this
+
+
+def _unreserve(res: Reservations, nodes: list[int], label: str) -> None:
+    """Drop every node and edge reservation of `label` along `nodes` (a schedule to be redone)."""
+    for n in set(nodes):
+        if n in res.node_busy:
+            res.node_busy[n] = [b for b in res.node_busy[n] if b[2] != label]
+    for u, v in zip(nodes, nodes[1:]):
+        if (u, v) in res.edge_dir:
+            res.edge_dir[(u, v)] = [b for b in res.edge_dir[(u, v)] if b[2] != label]
+
+
 def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[str, float, float]]:
     """(strip, from leaving the hold, to reaching the first node past the zone) for each runway crossing of a
     scheduled path, read back from its points (one arrival point per node, plus a departure point after a wait)."""
@@ -453,7 +512,7 @@ def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[st
             k += 1
         k += 1
     _, zones, _ = surface._crossing_zones(g, nodes, path.crossings)
-    return [(strip, dep[h], arr[ze]) for _, strip, h, ze, _ in zones]
+    return [(strip, dep[h], arr[ze], nodes[h]) for _, strip, h, ze, _ in zones]
 
 
 def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
@@ -513,10 +572,35 @@ def _compute(wave: Wave) -> FixedTraffic:
         # schedule() does not skip the mover's own runway event: hide it (shared node/edge tables, filtered events)
         view = Reservations(res.node_busy, res.edge_dir,
                             {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
-        s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
+        hw = surface.HEADWAY_S / 60.0
+        last = m.path.nodes[-1]
+        fifo_ok = False
+        for _attempt in range(HOLD_QUEUE_MAX_RETRY):
+            s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
+            if m.kind != "departure" or not HOLD_UNTIL_TAKEOFF or s.reason == "hold-short search did not converge":
+                fifo_ok = True
+                break
+            # FIFO at the holding point: its dwell there (until line-up) must not overlap another mover that reaches
+            # the node later (scheduled before it, e.g. an earlier takeoff); else it queues upstream behind that one
+            leave = max(m.event_min, s.points[-1]["t_min"])
+            t_to = _takeoff_time(_spacing_events([e for e in res.runway_events[m.strip] if e[2] != m.label],
+                                                 settled), spans.get(m.strip, ()), leave)
+            at_hold = next(q["t_min"] for q in s.points if q["node"] == last)
+            line_up = max(t_to - surface.PARK_S / 60.0, s.points[-1]["t_min"])
+            clash = [b for b in res.node_busy[last] if b[2] != m.label and b[0] < line_up + hw - _TOL
+                     and at_hold < b[1] + hw - _TOL]
+            if not clash:
+                fifo_ok = True
+                break
+            _unreserve(res, m.path.nodes, m.label)
+            res.node_busy[last].append((at_hold, max(b[1] for b in clash), _QUEUE_BLOCK))
+            res.node_busy[last].sort()
+        res.node_busy[last] = [b for b in res.node_busy.get(last, ()) if b[2] != _QUEUE_BLOCK]
         scheduled[m.label] = s
         if not s.ok:
             failures.append((m.label, s.reason or "not scheduled"))
+        elif not fifo_ok:
+            failures.append((m.label, "holding-point queue order not resolved"))
         points, waits = s.points, s.waits
         if m.kind == "departure":
             leave = max(m.event_min, s.points[-1]["t_min"])
@@ -532,10 +616,10 @@ def _compute(wave: Wave) -> FixedTraffic:
                 i = lst.index((m.event_min, "takeoff", m.label))
                 lst[i] = (t_to, "takeoff", m.label)
                 lst.sort()
-            last = m.path.nodes[-1]
             at_hold = next(p["t_min"] for p in s.points if p["node"] == last)
             stats["hold_point_min"].append((t_to - at_hold, m.label, last))
             stats["queue_wait_min"].append(sum(w["to_min"] - w["from_min"] for w in s.waits))
+            stats["late"] = stats.get("late", 0) + (t_to > m.event_min + _TOL)
             end = s.points[-1]["t_min"]
             line_up = t_to - surface.PARK_S / 60.0     # it leaves the holding point 30 s before takeoff (line-up)
             if HOLD_UNTIL_TAKEOFF and s.reason != "hold-short search did not converge" and line_up > end + _TOL:
@@ -548,18 +632,19 @@ def _compute(wave: Wave) -> FixedTraffic:
                 busy.sort()
                 p = s.points[-1]
                 points = s.points + [{"t_min": line_up, "lat": p["lat"], "lon": p["lon"], "node": last}]
-                waits = s.waits + [{"node": last, "lat": p["lat"], "lon": p["lon"], "from_min": end,
+                waits = waits + [{"node": last, "lat": p["lat"], "lon": p["lon"], "from_min": end,
                                     "to_min": line_up, "reason": f"hold for takeoff {m.runway}", "strip": None,
                                     "kind": None, "for": None}]
         if s.reason == "hold-short search did not converge":
             continue                     # nothing was reserved: no track to draw or verify
         cs_spans = _crossing_spans(g, m.path, s)
-        for strip, a, b in cs_spans:
+        for strip, a, b, hn in cs_spans:
             spans.setdefault(strip, []).append((a, b))
-            occupancy.setdefault(strip, []).append((a, b, m.label, "crossing"))
+            occupancy.setdefault(strip, []).append((a, b, m.label, "crossing", hn))
         if m.kind == "arrival":
             for strip in surface.runway_strips_at(g, m.path.nodes[0]):
-                occupancy.setdefault(strip, []).append((m.event_min, s.exit_clear_min, m.label, "arrival"))
+                occupancy.setdefault(strip, []).append((m.event_min, s.exit_clear_min, m.label, "arrival",
+                                                        m.path.nodes[0]))
         names = [n for i, n in enumerate(m.path.names) if n and (i == 0 or m.path.names[i - 1] != n)]
         tracks.append(GroundTrack(m.label, m.kind, False, m.runway, m.stand, names, points, waits,
                                   m.path.unimpeded_min, points[-1]["t_min"] - m.t_start_min, m.path.src))

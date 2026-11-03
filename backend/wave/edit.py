@@ -6,6 +6,7 @@ slot on the same runway where that flight breaks nothing, and nobody else breaks
 from __future__ import annotations
 
 import math
+import re
 
 from backend.wave.model import Assignment, JointPlan, Wave
 from backend.wave.utility import evaluate
@@ -110,8 +111,13 @@ def check_edit(wave: Wave, plan: JointPlan, include_trajectories: bool = False) 
     if ev["checks"] and not ev["feasible"]:
         fails = _failures(ev)
         for cs in sorted({c for _, c in fails if c}):
+            # tolerate other flights' breaches, except those that name this flight (e.g. a flight still on the
+            # runway at this one's landing): those it must clear too
+            names_cs = re.compile(rf"(?<![A-Z0-9]){re.escape(cs)}(?![A-Z0-9])")
+            caused = {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]
+                      and c.get("callsign") != cs and names_cs.search(f"{c.get('detail', '')} {c.get('evidence', '')}")}
             try:
-                s = _nearest_legal(wave, plan, plan.get(cs), {f for f in fails if f[1] != cs})
+                s = _nearest_legal(wave, plan, plan.get(cs), {f for f in fails if f[1] != cs} - caused)
             except StopIteration:
                 continue
             if s is not None:

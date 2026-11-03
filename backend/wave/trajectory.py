@@ -32,7 +32,8 @@ Pure assembly over the per-wave route cache (`route.routes_for_wave`, read-only)
     waits feed `taxi_min` and in-block. Each gets a `GroundOutcome` (scheduler ok, runway-vacate check, its landing
     against the fixed traffic's runway occupancy), which ATC-TAXI-CONFLICT reports and `conflicts` maps. Wave flights
     on the generic straight-line taxi (and every flight of a generic-surface wave) keep the unimpeded track and are not
-    checked for ground conflicts; none in the no-geometry tier. `ground` = wave tracks then the fixed tracks.
+    checked for ground conflicts; none in the no-geometry tier. `ground` = the wave tracks only (the fixed tracks are
+    plan-independent: `WaveGeo.ground_traffic`, served once per wave).
 Nothing here decides legality: the rules read these objects.
 """
 from __future__ import annotations
@@ -106,11 +107,6 @@ class AirTrack:
         return d
 
 
-# A plan landing inside a fixed mover's scheduled crossing window (or while a fixed arrival is still on that runway)
-# fails ATC-TAXI-CONFLICT for the landing wave flight (ruling T31, reversible: False reports it in evidence only).
-LANDING_VS_FIXED_FAILS = True
-
-
 @dataclass
 class GroundOutcome:
     """ATC-TAXI-CONFLICT inputs for one landing wave flight (internal, not serialised).
@@ -124,10 +120,14 @@ class GroundOutcome:
         [slot, exit_clear_min): it is still on the runway then (no pre-landing margin: JO 7110.65 §3-10-3, which is
         also the independent verifier's check (4));
       * `next_event`: the first runway event by another flight on that strip after the slot (or None).
-    For every landing (modelled or not, in a real-surface wave): `landing_conflicts` lists the fixed movers whose
-    scheduled runway crossing gap window (landing 1.5 min before to 1 min after) or runway occupancy (a fixed
-    arrival from its landing to its exit clear) contains this landing: the fixed traffic is scheduled before the plan
-    exists and is never re-timed, so the plan's landing has to keep clear of it.
+    For every landing (modelled or not, in a real-surface wave), against the fixed traffic (scheduled before the plan
+    exists, never re-timed per plan):
+      * `fixed_holds`: fixed movers whose scheduled crossing of the landing strip falls in the landing's crossing gap
+        window (from 1.5 min before to 1 min after it). Landings have runway priority: a controller holds the crosser,
+        never the arrival (ruling T31), so these never fail the rule; each is reported as an informational conflict
+        `fixed_holds_for_landing` with the hold the crosser would need (until 1 min after the landing);
+      * `landing_conflicts`: fixed arrivals still on the landing runway (from their landing to their exit clear) at
+        this landing: same-runway separation (JO 7110.65 §3-10-3), a failure.
     `passed` is the rule's verdict; `detail` its text; `at_min`, `lat`, `lon` where the conflict is drawn."""
     callsign: str
     modelled: bool
@@ -145,12 +145,13 @@ class GroundOutcome:
     next_event: tuple | None = None
     landing_conflicts: list = field(default_factory=list)
     hold_short_strip: str | None = None
+    fixed_holds: list = field(default_factory=list)
     lat: float | None = None
     lon: float | None = None
 
     @property
     def passed(self) -> bool:
-        return self.ok and not self.blocking and not (self.landing_conflicts and LANDING_VS_FIXED_FAILS)
+        return self.ok and not self.blocking and not self.landing_conflicts
 
     def at(self) -> float:
         if self.landing_conflicts and (self.ok and not self.blocking or not self.modelled):
@@ -572,12 +573,14 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     occ = fixed.occupancy
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
-        lc = []
-        for a_, b_, lab, kind in occ.get(strip, ()):
+        lc, fh = [], []
+        for a_, b_, lab, kind, hn in occ.get(strip, ()):
             if kind == "crossing":
                 before, after = surface.GAP_MIN["landing"][1], surface.GAP_MIN["landing"][0]
                 if a_ < slot + after - _TOLG and slot - before + _TOLG < b_:
-                    lc.append(f"fixed {lab} crosses {strip} {a_:.2f}-{b_:.2f} min")
+                    fh.append({"fixed": lab, "strip": strip, "crossing_from_min": a_, "crossing_to_min": b_,
+                               "landing_min": slot, "hold_min": slot + after - a_,
+                               "lat": g.nodes[hn][0], "lon": g.nodes[hn][1]})
             elif a_ - _TOLG <= slot < b_ - _TOLG:
                 lc.append(f"fixed arrival {lab} still on {strip} ({a_:.2f}-{b_:.2f} min)")
         if tx.tier != "real" or tx.path is None:
@@ -585,7 +588,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
             if t is not None:
                 wave_tracks.append(t)
             o = GroundOutcome(cs, False, tx.tier if tx.path is None and tx.tier == "real" else tx.tier, slot,
-                              landing_conflicts=lc)
+                              landing_conflicts=lc, fixed_holds=fh)
             o.lat, o.lon = _touchdown(ts, cs)
             ts.outcomes[cs] = o
             continue
@@ -604,18 +607,27 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
         o = GroundOutcome(cs, True, "real", slot, s.ok, s.reason, t_exit, s.exit_clear_min, tuple(sorted(own)),
                           s.waits, wait,
                           sorted(dict.fromkeys(st for _, st in p.crossings)), blocking, nxt, lc,
-                          max(hs, key=lambda w: w["to_min"] - w["from_min"])["strip"] if hs else None)
+                          max(hs, key=lambda w: w["to_min"] - w["from_min"])["strip"] if hs else None, fh)
         if blocking or not s.ok:
             o.lat, o.lon = s.points[0]["lat"], s.points[0]["lon"]
         else:
             o.lat, o.lon = _touchdown(ts, cs)
         ts.outcomes[cs] = o
-    ts.ground = wave_tracks + list(fixed.tracks)
+    ts.ground = wave_tracks          # the fixed tracks are served once per wave (`WaveGeo.ground_traffic`)
     for cs, o in ts.outcomes.items():
         if not o.passed:
             lat, lon = (o.lat, o.lon) if o.lat is not None else (wave.airport.lat, wave.airport.lon)
             ts.conflicts.append({"rule": "ATC-TAXI-CONFLICT", "callsign": cs, "at_min": round(o.at(), 2),
                                  "lat": lat, "lon": lon, "detail": detail(o)})
+        for h in o.fixed_holds:      # informational: the landing has priority, the fixed crosser holds
+            ts.conflicts.append({"rule": "ATC-TAXI-CONFLICT", "kind": "fixed_holds_for_landing", "callsign": cs,
+                                 "fixed": h["fixed"], "strip": h["strip"], "hold_min": round(h["hold_min"], 2),
+                                 "at_min": round(h["crossing_from_min"], 2), "lat": h["lat"], "lon": h["lon"],
+                                 "detail": f"fixed {h['fixed']} would hold short of {h['strip']} "
+                                           f"{h['hold_min']:.1f} min for landing {cs} T{h['landing_min']:+.2f} "
+                                           f"(scheduled crossing T{h['crossing_from_min']:+.2f}-"
+                                           f"T{h['crossing_to_min']:+.2f}; fixed 2015 traffic is not re-timed "
+                                           f"per plan)"})
 
 
 _TOLG = 1e-9
@@ -630,7 +642,7 @@ def detail(o: GroundOutcome) -> str:
     """ATC-TAXI-CONFLICT detail of one outcome (the rule and `conflicts` share it)."""
     cs = o.callsign
     if not o.modelled:
-        head = f"{cs}: ground conflicts not modelled ({o.tier})"
+        head = f"{cs}: ground conflicts not modelled ({'no route' if o.tier == 'real' else o.tier})"
         if o.landing_conflicts:
             return f"{cs}: lands T{o.slot_min:+.1f} inside fixed traffic's runway use: " + "; ".join(o.landing_conflicts)
         return head
@@ -645,13 +657,15 @@ def detail(o: GroundOutcome) -> str:
     if probs:
         return f"{cs}: " + "; ".join(probs)
     w = f"{len(o.waits)} wait{'s' if len(o.waits) != 1 else ''} {o.wait_min:.1f} min" if o.waits else "no waits"
+    fh = (f"; fixed {', '.join(h['fixed'] for h in o.fixed_holds)} hold short for its landing (landing priority)"
+          if o.fixed_holds else "")
     hs = [x for x in o.waits if x.get("strip")]
     if hs:
         b = max(hs, key=lambda x: x["to_min"] - x["from_min"])
         w += f" (hold short {b['strip']} {b['to_min'] - b['from_min']:.1f} min for {b['kind']} {b['for']})"
     nx = f"next {o.next_event[1]} {o.next_event[2]} T{o.next_event[0]:+.2f}" if o.next_event else "no later runway event"
     return (f"{cs}: reaches the stand with {w}; runway vacated T{o.exit_clear_min:+.2f}, {nx}"
-            + (f"; crosses {', '.join(o.crossings)}" if o.crossings else ""))
+            + (f"; crosses {', '.join(o.crossings)}" if o.crossings else "") + fh)
 
 
 _CACHE: dict[tuple[str, str], TrajectorySet] = {}

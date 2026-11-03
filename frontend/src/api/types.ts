@@ -391,6 +391,12 @@ export interface WaveGeo {
     runways: { ids: string[]; line: [number, number][]; width_m: number | null }[];
     stands: { id: string; gate?: string; lat: number; lon: number; geo_src: string }[];
     holding_positions: { id: string; lat: number; lon: number; runway?: string }[] } | null;
+  // v3-traffic: the wave's fixed ground traffic (plan-independent, drawn grey), null without a real surface tier
+  ground_traffic?: { source: string;
+    tracks: { callsign: string; kind: "arrival" | "departure"; runway: string; stand: string;
+      points: [number, number, number][];                       // [t_min, lat, lon]
+      waits: [number, number, number, number, string][] }[];    // [from_min, to_min, lat, lon, reason]
+    runway_events: Record<string, [number, "landing" | "takeoff", string][]> } | null;   // strip -> [t_min, kind, callsign]
 }
 export interface TrajectorySet {
   plan_id: string; engine_version: string;
@@ -402,5 +408,8 @@ export interface TrajectorySet {
     points: { t_min: number; lat: number; lon: number; node?: string }[];
     waits: { lat: number; lon: number; from_min: number; to_min: number; reason: string }[];
     unimpeded_min: number; taxi_min: number; src: "osm" | "synth" }[];
-  conflicts: { rule: RuleId; callsign: string; at_min: number; lat: number; lon: number; detail: string }[];   // failing checks, mapped
+  conflicts: { rule: RuleId; callsign: string; at_min: number; lat: number; lon: number; detail: string;
+    // v3-traffic: absent = a failing check; "fixed_holds_for_landing" = informational (the landing has priority, the
+    // fixed crosser `fixed` would hold short of `strip` for `hold_min`; not a violation)
+    kind?: "fixed_holds_for_landing"; fixed?: string; strip?: string; hold_min?: number }[];
 }

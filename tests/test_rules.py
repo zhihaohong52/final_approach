@@ -689,13 +689,16 @@ def test_all_benchmark_fcfs_ground_tracks_separated():
     """Brief: verify_separation on the FCFS ground tracks of the first 10 benchmark waves, with the runway events and
     the graph (carry T29 b). Every message involving a wave flight's track is a failure of the test; fixed tracks are
     scheduled before the plan exists, so a fixed track inside a strip's zone during one of the plan's landings must be
-    a failing ATC-TAXI-CONFLICT of that landing naming the fixed mover (fixed-vs-fixed separation is
+    an informational fixed_holds_for_landing conflict (landing priority) or a fixed arrival still on the runway that
+    fails the landing (fixed-vs-fixed separation is
     tests/test_ground_traffic.py's). Pairs are checked wave track x every track (fixed-vs-fixed pairs skipped: at
     movement airports there are ~160 fixed tracks)."""
     for wid in _bench_ids()[:10]:
         w = build.build_wave(wid); p = fcfs_plan(w); ts = trajectory.build(w, p)
-        wave_t = [t for t in ts.ground if t.wave]
-        fixed_t = [t for t in ts.ground if not t.wave]
+        from backend.wave import ground_traffic
+        wave_t = list(ts.ground)
+        assert all(t.wave for t in wave_t)                  # the fixed tracks live in WaveGeo.ground_traffic
+        fixed_t = ground_traffic.fixed_tracks(w) if surface._geo(w).graph is not None else []
         msgs = _verify(w, replace(ts, ground=wave_t))
         msgs += [m for a in wave_t for b in fixed_t for m in verify_separation([a, b])]
         checks = {c.callsign: c for c in rules.check(w, p) if c.rule == "ATC-TAXI-CONFLICT"}
@@ -708,11 +711,13 @@ def test_all_benchmark_fcfs_ground_tracks_separated():
         g = surface._geo(w).graph
         if not ts.runway_events or g is None:
             continue
+        info = {(x["fixed"], x["callsign"]) for x in ts.conflicts if x.get("kind") == "fixed_holds_for_landing"}
         for t in fixed_t:
             for m in verify_separation([t], runway_events=ts.runway_events, g=g):
                 cs = m.split()[-3]
-                if cs in checks:
-                    assert not checks[cs].passed and t.callsign in checks[cs].evidence["landing_conflicts"], (wid, m)
+                if cs in checks:                          # landing priority: the fixed crosser holds (informational)
+                    assert (t.callsign, cs) in info or (not checks[cs].passed and t.callsign in
+                                                        checks[cs].evidence.get("landing_conflicts", "")), (wid, m)
 
 
 @pytest.mark.usefixtures("_fixture_movements")
@@ -751,27 +756,45 @@ def test_stack_labels_come_from_the_trajectory_set():
     assert isinstance(ts.stack_labels, dict)
 
 
-@pytest.mark.usefixtures("_fixture_movements")
-def test_landing_inside_a_fixed_crossing_fails_and_matches_the_verifier():
-    """The fixed traffic is scheduled before the plan exists and never re-timed, so a plan landing inside a fixed
-    mover's runway-crossing gap window is a conflict the plan must avoid (spec §6.4: wave flights yield; §6.6: every
-    crossing meets the gap). ORD replay FCFS: OO5559 lands 04L/22R at T+58 while real 2015 departures cross it.
-    Every verifier message about a fixed track during a wave landing is a failing check naming that fixed mover."""
-    w = build.build_wave(ORD); p = fcfs_plan(w)
-    ts = trajectory.build(w, p)
+def _fixed_landing_hits(w, ts):
+    """(fixed label, wave landing callsign) of every verifier message on a fixed track during a wave flight's landing."""
+    from backend.wave import ground_traffic
     g = surface._geo(w).graph
-    checks = {c.callsign: c for c in rules.check(w, p) if c.rule == "ATC-TAXI-CONFLICT"}
     wave_cs = {f.callsign for f in w.flights}
-    msgs = [m for t in ts.ground if not t.wave
+    msgs = [m for t in ground_traffic.fixed_tracks(w)
             for m in verify_separation([t], runway_events=ts.runway_events, g=g)]
-    hits = [(m.split()[0], m.split()[-3]) for m in msgs if m.split()[-3] in wave_cs]   # (fixed label, wave landing)
-    assert hits
-    for fixed, cs in hits:
-        c = checks[cs]
-        assert not c.passed and fixed in c.evidence["landing_conflicts"]
-    c = checks["OO5559"]
-    assert not c.passed and "landing_conflicts" in c.evidence and c.evidence["waits"] == 0
-    assert any(x["callsign"] == "OO5559" and x["lat"] is not None for x in ts.conflicts)
+    return [(m.split()[0], m.split()[-3]) for m in msgs if m.split()[-3] in wave_cs]
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_landing_inside_a_fixed_crossing_is_landing_priority_not_a_failure(monkeypatch):
+    """Ruling T31: landings have runway priority, a controller holds the crosser. A plan landing inside a fixed mover's
+    scheduled crossing gap window passes ATC-TAXI-CONFLICT and is an informational `fixed_holds_for_landing` conflict
+    (fixed callsign, strip, the hold it would need); every verifier message about a fixed track during a wave landing
+    is one of them."""
+    from backend.wave import ground_traffic
+    w = build.build_wave(ORD); p = fcfs_plan(w)
+    # put OO5559's landing inside a scheduled fixed crossing of its strip
+    g = surface._geo(w).graph
+    a = p.get("OO5559")
+    strip = trajectory._strip_key(g, a.runway)
+    cr = sorted(o for o in ground_traffic._get(w).occupancy.get(strip, ()) if o[3] == "crossing")
+    assert cr
+    t_in, t_out, lab = cr[0][0], cr[0][1], cr[0][2]
+    q = p.with_assignment(replace(a, slot_min=round(t_in + 0.1, 2)))
+    ts = trajectory.build(w, q)
+    c = _by(rules.check(w, q), "ATC-TAXI-CONFLICT", "OO5559")
+    assert c.evidence["fixed_holds"] >= 1 and lab in c.evidence["fixed_holds_for_landing"]
+    assert c.passed or "landing_conflicts" in c.evidence or "blocking" in c.evidence or "reason" in c.evidence
+    info = [x for x in ts.conflicts if x.get("kind") == "fixed_holds_for_landing" and x["callsign"] == "OO5559"]
+    assert any(x["fixed"] == lab and x["strip"] == strip and x["hold_min"] > 0 for x in info)
+    assert all(x["lat"] is not None for x in info)
+    hits = _fixed_landing_hits(w, ts)
+    assert (lab.split()[0], "OO5559") in hits
+    named = {(x["fixed"].split()[0], x["callsign"]) for x in ts.conflicts if x.get("kind") == "fixed_holds_for_landing"}
+    vac = {(m_f, m_c) for m_f, m_c in hits if (m_f, m_c) not in named}
+    for fixed, cs in vac:                     # the only other kind: a fixed arrival still on the runway (a failure)
+        assert not _by(rules.check(w, q), "ATC-TAXI-CONFLICT", cs).passed
 
 
 @pytest.mark.usefixtures("_fixture_movements")

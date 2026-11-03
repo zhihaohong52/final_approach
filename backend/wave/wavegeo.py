@@ -17,12 +17,16 @@ use ("never draw a path the engine did not use"):
     ground tracks label them: OSM `ref`, else id) with the wave gate bound to it (`surface._geo`, the same binding the
     taxi times use; stands are listed only for a `real` tier), the holding positions (node id, runway strip when known). `status` is the wave's taxi tier
     (`surface.wave_tier`). null when the airport has no OSM surface.
+  * `ground_traffic` (`ground_traffic_part`, v3-traffic): the wave's fixed ground traffic, plan-independent, drawn grey
+    on the surface map: one track per scheduled fixed mover (queue arrivals, real 2015 departures) thinned to what the
+    map draws (`[t_min, lat, lon]` points, waits), plus the runway events (landings and takeoffs per strip) the wave
+    flights are scheduled against. null without a real surface tier (no ground traffic is scheduled then).
 Pure assembly over read-only caches; nothing here decides legality.
 """
 from __future__ import annotations
 
 from backend.geo import store
-from backend.wave import holding, route, surface, trajectory
+from backend.wave import ground_traffic, holding, route, surface, trajectory
 from backend.wave.model import Wave
 from backend.wave.version import ENGINE_VERSION
 
@@ -160,6 +164,27 @@ def surface_part(wave: Wave) -> dict | None:
             "stands": stands, "holding_positions": holding_positions}
 
 
+T_DP = 2       # minutes, ~0.6 s
+
+
+def ground_traffic_part(wave: Wave) -> dict | None:
+    """`WaveGeo.ground_traffic`: the fixed tracks (`ground_traffic.fixed_tracks`) and runway events, thinned."""
+    g = surface._geo(wave).graph
+    if g is None or surface.wave_tier(wave, g) != "real":
+        return None
+    ft = ground_traffic._get(wave)
+    tracks = [{"callsign": t.callsign, "kind": t.kind, "runway": t.exit, "stand": t.stand,
+               "points": [[round(q["t_min"], T_DP), _r(q["lat"]), _r(q["lon"])] for q in t.points],
+               "waits": [[round(w["from_min"], T_DP), round(w["to_min"], T_DP), _r(w["lat"]), _r(w["lon"]), w["reason"]]
+                         for w in t.waits]}
+              for t in ft.tracks]
+    events = {strip: [[round(t, T_DP), kind, cs] for t, kind, cs in sorted(lst)]
+              for strip, lst in sorted(ft.reservations.runway_events.items())}
+    return {"source": next((p.source for p in wave.provenance if p.layer == "ground_traffic"), ""),
+            "tracks": tracks, "runway_events": events}
+
+
 def wave_geo(wave: Wave) -> dict:
     """Contract `WaveGeo`. Call only when `wave.geo_available()`."""
-    return {"engine_version": ENGINE_VERSION, "procedures": procedures(wave), "surface": surface_part(wave)}
+    return {"engine_version": ENGINE_VERSION, "procedures": procedures(wave), "surface": surface_part(wave),
+            "ground_traffic": ground_traffic_part(wave)}

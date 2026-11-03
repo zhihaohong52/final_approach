@@ -266,3 +266,41 @@ def test_fixed_traffic_is_pinned_on_the_built_wave():
         datastore.set_store(None)
     reservations.cache_clear()                          # bumps the generation: the pin no longer serves
     assert GT._get(w) is not ft
+
+
+def test_departure_candidates_widen_to_non_crossing_ends_near_the_flow(monkeypatch):
+    """Controller ruling T31: ORD's only parallel (22L) saturated at 1 takeoff a minute. Free ends within 60 deg of the
+    flow, without tailwind, that cross no arrival strip and no chosen strip also take departures; a crossing end
+    does not."""
+    from backend.wave import ground_traffic as GT
+    from backend.wave.model import RunwayWind
+    # arrivals on 26R (east-west strip at lat 0), 27L parallel; 30 crosses the 26R strip, 31 lies clear north of it
+    rw = [Runway("08L", 90, 9000, le_lat=0.0, le_lon=0.0, he_lat=0.0, he_lon=0.04),
+          Runway("26R", 270, 9000, le_lat=0.0, le_lon=0.04, he_lat=0.0, he_lon=0.0),
+          Runway("09R", 90, 9000, le_lat=0.01, le_lon=0.0, he_lat=0.01, he_lon=0.04),
+          Runway("27L", 270, 9000, le_lat=0.01, le_lon=0.04, he_lat=0.01, he_lon=0.0),
+          Runway("30", 300, 9000, le_lat=-0.01, le_lon=0.03, he_lat=0.01, he_lon=0.01),       # crosses 26R
+          Runway("12", 120, 9000, le_lat=0.01, le_lon=0.01, he_lat=-0.01, he_lon=0.03),
+          Runway("31", 310, 9000, le_lat=0.02, le_lon=0.03, he_lat=0.04, he_lon=0.01),        # clear of all
+          Runway("13", 130, 9000, le_lat=0.04, le_lon=0.01, he_lat=0.02, he_lon=0.03)]
+    w = make_wave(queue=[QueueArrival("WN1", "B737", "LARGE", "26R", 2)], airport=replace(make_wave().airport,
+                                                                                           runways=rw))
+    monkeypatch.setattr(moves, "fcfs_runways", lambda wave: {f.callsign: "26R" for f in wave.flights})
+    assert departure_mode(w) == (False, "26R", ["27L", "31"])
+    w.runway_wind = [RunwayWind("31", 0.0, 0.0, 3.0, 20.0, 10.0, "x", True)]
+    assert departure_mode(w) == (False, "26R", ["27L"])               # a tailwind end is not used
+
+
+def test_ord_departures_spread_over_non_crossing_runways():
+    from backend.wave import ground_traffic as GT
+    from backend.wave.rules import strip_of
+    w = build.build_wave("F2015-270287")
+    mixed, arr_rw, cands = departure_mode(w)
+    assert not mixed and len(cands) > 1
+    by = {r.id: r for r in w.airport.runways}
+    arr = {strip_of(r) for r in moves.fcfs_runways(w).values()} | {strip_of(q.runway) for q in w.queue}
+    for i, a in enumerate(cands):
+        assert not any(GT._strips_cross(by[a], r) for r in w.airport.runways if strip_of(r.id) in arr)
+        assert not any(GT._strips_cross(by[a], by[b]) for b in cands[i + 1:])
+    used = {m.runway for m in fixed_traffic(w) if m.kind == "departure"}
+    assert len(used) > 1 and used <= set(cands)

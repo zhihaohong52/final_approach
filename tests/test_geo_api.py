@@ -293,3 +293,22 @@ def test_replay_wave_gate_labels_agree_between_tracks_and_map(wid):
     else:
         assert sp["stands"] == []
     assert all(abs(v - round(v, 6)) < 1e-12 for t in sp["taxiways"] for pt in t["line"] for v in pt)
+
+
+def test_geo_serves_fixed_ground_traffic_once_and_trajectories_only_wave_tracks():
+    """Controller ruling T31: the plan-independent fixed traffic is in the cached /geo body (`ground_traffic`), never in
+    a TrajectorySet."""
+    from backend.wave import ground_traffic
+    g = c.get(f"/api/wave/{ORD}/geo").json()
+    gt = g["ground_traffic"]
+    fixed = ground_traffic.fixed_tracks(build.build_wave(ORD))
+    assert gt and len(gt["tracks"]) == len(fixed) > 0
+    t0 = gt["tracks"][0]
+    assert {"callsign", "kind", "runway", "stand", "points", "waits"} <= set(t0) and len(t0["points"][0]) == 3
+    assert all(isinstance(e[0], float | int) and e[1] in ("landing", "takeoff") for v in gt["runway_events"].values()
+               for e in v)
+    asg = c.get(f"/api/wave/{ORD}").json()["status_quo"]["plan"]["assignments"]
+    ts = c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg}).json()
+    assert ts["ground"] and all(t["wave"] for t in ts["ground"])
+    fixed_cs = {t.callsign for t in fixed}
+    assert not fixed_cs & {t["callsign"] for t in ts["ground"]}
