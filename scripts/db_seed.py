@@ -324,7 +324,7 @@ def _load_workbook(conn) -> int:
 def _files_waves() -> list[Path]:
     """The index plus everything a summary is computed from."""
     return ([DATASETS["waves_index"].path, DATASETS["metar_2024"].path, DATASETS["airports"].path,
-             ROOT / "atm" / "wave" / "build.py"]       # the summary code: a change there makes `waves` stale
+             ROOT / "backend" / "wave" / "build.py"]       # the summary code: a change there makes `waves` stale
             + sorted((WAVES / "arrivals").glob("*.csv.gz")))
 
 
