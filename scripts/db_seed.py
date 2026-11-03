@@ -271,11 +271,7 @@ def _ord_columns(ds: Dataset) -> list[str]:
 
 _PK_ORD = ["alter table {t} add primary key (ord)"]
 _REF_INDEXES: dict[str, list[str]] = {
-    "ref.runways": _PK_ORD + ["alter table {t} add unique (airport, runway)",
-                              "update {t} set le_geog = extensions.st_makepoint(le_lon, le_lat)::extensions.geography "
-                              "where le_lat is not null and le_lon is not null",
-                              "update {t} set he_geog = extensions.st_makepoint(he_lon, he_lat)::extensions.geography "
-                              "where he_lat is not null and he_lon is not null"],
+    "ref.runways": _PK_ORD + ["alter table {t} add unique (airport, runway)"],
     "ref.runway_history": _PK_ORD,
     "ref.aircraft": _PK_ORD + ["alter table {t} add unique (tail)"],
     "ref.gates": _PK_ORD,
@@ -595,16 +591,10 @@ def _load_raw(conn, budget_mb: int = 750) -> int:
 # ------------------------------------------------------------------ geometry (empty until the flight-path M0)
 
 REF = ROOT / "data/ref"
-_GIST = "create index on {t} using gist (geog)"
 _GEO_INDEXES: dict[str, list[str]] = {
     "geo.procedures": ["alter table {t} add primary key (icao)"],
-    "geo.fixes": ["alter table {t} add primary key (icao, ident)"],
     "geo.surface": ["alter table {t} add primary key (icao)"],
-    "geo.stands": ["alter table {t} add primary key (icao, id)", _GIST],
-    "geo.osm_gates": ["alter table {t} add primary key (icao, ref)", _GIST],
-    "geo.holding_positions": ["alter table {t} add primary key (icao, node)"],
     "geo.movements2015_day": ["alter table {t} add primary key (airport, date)"],
-    "geo.coverage": ["alter table {t} add primary key (iata)"],
 }
 
 
@@ -614,13 +604,6 @@ def _geo_spec(table: str, columns: list[str], lines: Iterable[str]):
 
 def _geo_swap(conn, table: str, columns: list[str], lines: Iterable[str]) -> int:
     return swap_many(conn, [_geo_spec(table, columns, lines)])[0]
-
-
-def _point(lat, lon) -> str | None:
-    """EWKT for a geography point (lon first), or None when the coordinates are missing."""
-    if lat is None or lon is None:
-        return None
-    return f"SRID=4326;POINT({float(lon)!r} {float(lat)!r})"
 
 
 def _ref_docs(kind: str) -> list[Path]:
@@ -646,48 +629,11 @@ def _procedure_row(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
     yield [icao, str(h.get("cycle", "")), str(h.get("tier", "none")), _hex(blob), hashlib.sha256(blob).hexdigest()]
 
 
-def _fix_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
-    for ident, ll in sorted((doc.get("fixes") or {}).items()):
-        if ll:
-            yield [icao, ident, _point(ll[0], ll[1])]
-
-
 def _surface_row(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
     reach = (doc.get("quality") or {}).get("reach_pct")
     ts = (doc.get("header") or {}).get("osm_timestamp")
     yield [icao, None if ts is None else str(ts), _hex(blob), hashlib.sha256(blob).hexdigest(),
            None if reach is None else json.dumps(reach)]
-
-
-def _stand_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
-    seen = set()
-    for st in doc.get("stands") or []:
-        sid = str(st["id"])
-        if sid not in seen:
-            seen.add(sid)
-            yield [icao, sid, None if st.get("ref") is None else str(st["ref"]),
-                   None if st.get("node") is None else str(st["node"]), _point(st.get("lat"), st.get("lon"))]
-
-
-def _gate_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
-    seen = set()
-    for g in doc.get("gates") or []:
-        ref = g.get("ref")
-        if ref is not None and str(ref) not in seen:
-            seen.add(str(ref))
-            yield [icao, str(ref), _point(g.get("lat"), g.get("lon"))]
-
-
-def _hold_rows(icao: str, blob: bytes, doc: dict) -> Iterable[list]:
-    nodes = doc.get("nodes") or []
-    seen = set()
-    for h in doc.get("holding_positions") or []:
-        n = h.get("node")
-        if n is None or n in seen:
-            continue
-        seen.add(n)
-        ll = nodes[n] if 0 <= n < len(nodes) else None
-        yield [icao, str(n), h.get("strip"), None if ll is None else _point(ll[0], ll[1])]
 
 
 def _load_procedures(conn) -> int:
@@ -697,7 +643,6 @@ def _load_procedures(conn) -> int:
     return swap_many(conn, [
         _geo_spec("geo.procedures", ["icao", "cycle", "tier", "doc", "sha256"],
                   _doc_lines("procedures", _procedure_row, [True, True, True, False, True])),
-        _geo_spec("geo.fixes", ["icao", "ident", "geog"], _doc_lines("procedures", _fix_rows, [True, True, False])),
     ])[0]
 
 
@@ -708,11 +653,6 @@ def _load_surface(conn) -> int:
     return swap_many(conn, [
         _geo_spec("geo.surface", ["icao", "osm_timestamp", "doc", "sha256", "reach_pct"],
                   _doc_lines("surface", _surface_row, [True, True, False, True, True])),
-        _geo_spec("geo.stands", ["icao", "id", "ref", "node", "geog"],
-                  _doc_lines("surface", _stand_rows, [True, True, True, False, False])),
-        _geo_spec("geo.osm_gates", ["icao", "ref", "geog"], _doc_lines("surface", _gate_rows, [True, True, False])),
-        _geo_spec("geo.holding_positions", ["icao", "node", "strip", "geog"],
-                  _doc_lines("surface", _hold_rows, [True, False, True, False])),
     ])[0]
 
 
@@ -743,25 +683,6 @@ def _load_movements(conn) -> int:
                      _movements_lines())
 
 
-def _files_coverage() -> list[Path]:
-    p = ROOT / "scripts/geo_coverage.py"
-    return [p] if p.exists() else []
-
-
-def _load_coverage(conn) -> int:
-    if not (ROOT / "scripts/geo_coverage.py").exists():   # `from scripts import x` on a missing x is an ImportError,
-        print("coverage: no files yet")                      # not ModuleNotFoundError; test the file instead
-        return 0
-    from scripts import geo_coverage   # any import error inside it propagates
-    rows = geo_coverage.coverage()
-    lines = [_pg_line([r["iata"], r.get("icao"), r.get("procedures_tier"), r.get("surface_tier"),
-                       None if r.get("stands") is None else str(r["stands"]),
-                       None if r.get("movements") is None else ("t" if r["movements"] else "f")],
-                      [True, True, True, True, False, False]) for r in rows]
-    return _geo_swap(conn, "geo.coverage", ["iata", "icao", "procedures_tier", "surface_tier", "stands", "movements"],
-                     lines)
-
-
 SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("small", _files_small, _load_small),
     Seeder("workbook", _files_workbook, _load_workbook),
@@ -778,7 +699,6 @@ SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("procedures", lambda: _ref_docs("procedures"), _load_procedures),
     Seeder("surface", lambda: _ref_docs("surface"), _load_surface),
     Seeder("movements2015", _files_movements, _load_movements),
-    Seeder("coverage", _files_coverage, _load_coverage),
     Seeder("raw", _files_raw, _load_raw, budget_aware=True),
 ]}
 # raw.* (about 120 MB) is never read by the app; it loads only when named

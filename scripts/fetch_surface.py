@@ -5,7 +5,7 @@ Airports: the same set as fetch_cifp.py (flights2015 destinations plus HUBS). Pe
 ICAO, then IATA, then a 6 km bbox around the reference point; the raw response is cached in
 .cache/overpass/{ICAO}.json, so a rerun does not refetch. --offline rebuilds from the cache only.
 Overpass is a shared service: one airport at a time, 5 s between requests, 2 retries with backoff.
-Output matches _surface_row/_stand_rows/_gate_rows/_hold_rows in scripts/db_seed.py. OSM data is ODbL.
+Output matches _surface_row in scripts/db_seed.py. OSM data is ODbL.
 """
 import argparse
 import csv

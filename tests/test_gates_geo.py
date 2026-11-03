@@ -113,19 +113,3 @@ def test_ord_replay_gates_bind_to_osm():
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     assert sum(v["geo_src"] in ("osm-ref", "osm-near") for v in b.values()) >= len(w.gates) - 3
 
-
-@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py surface` into atm_test
-def test_bindings_agree_with_nearest_stand_query(live_db_url):
-    import psycopg
-    from backend.wave import build
-    w = build.build_wave("F2015-270287")
-    b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
-    with psycopg.connect(live_db_url) as c:
-        c.execute("set search_path = public, extensions")   # PostGIS lives in the `extensions` schema on Neon
-        for gid, v in list(b.items())[:20]:
-            if v["geo_src"] not in ("osm-ref", "osm-near"):
-                continue
-            row = c.execute("select 1 from geo.stands where icao = 'KORD' and id = %s and "
-                            "ST_DWithin(geog, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 150)",
-                            (v["stand"], v["lon"], v["lat"])).fetchone()
-            assert row, gid

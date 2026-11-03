@@ -3,7 +3,7 @@
 Usage: python3 scripts/fetch_cifp.py
 The zip goes to .cache/cifp/ (verified by size and SHA-256, then only parsed, never executed).
 Airports: the flights2015 destinations plus backend.wave.hubs.HUBS. Airports with no terminal data
-in the cycle are skipped and listed. Output matches _procedure_row/_fix_rows in scripts/db_seed.py.
+in the cycle are skipped and listed. Output matches _procedure_row in scripts/db_seed.py.
 """
 import gzip
 import hashlib

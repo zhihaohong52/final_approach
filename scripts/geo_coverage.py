@@ -1,5 +1,5 @@
 """Geo coverage report: per flights2015 destination, the procedures tier, surface tier, stand count and whether
-2015 ground movements exist. Also what `scripts/db_seed.py coverage` loads into geo.coverage.
+2015 ground movements exist.
 
 Usage: python3 scripts/geo_coverage.py        (writes data/ref/GEO_COVERAGE.md)
 """

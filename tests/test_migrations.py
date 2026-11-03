@@ -52,8 +52,14 @@ def test_timings_percentiles():
 def test_geo_migration_tables():
     sql = (M / "0005_geo.sql").read_text()
     for t in ("procedures", "fixes", "surface", "stands", "osm_gates", "holding_positions", "movements2015_day", "coverage"):
-        assert f"create table geo.{t}" in sql
-    assert "using gist" in sql
+        assert f"create table geo.{t}" in sql          # 0005 is append-only history; 0007 drops the point tables
+    drop = (M / "0007_drop_geo_points.sql").read_text()
+    for t in ("fixes", "stands", "osm_gates", "holding_positions", "coverage"):
+        assert f"drop table if exists geo.{t};" in drop
+    for t in ("procedures", "surface", "movements2015_day"):
+        assert f"geo.{t}" not in drop
+    assert "drop extension if exists postgis" in drop and "drop column if exists le_geog" in drop and "dataset = 'coverage'" in drop
+    assert drop.index("drop table") < drop.index("drop extension")
 
 
 def test_statement_timeout_on_role_and_lifted_by_scripts():
