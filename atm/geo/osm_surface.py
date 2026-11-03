@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import re
+import warnings
 from collections import deque
 
 EARTH_R = 6371000.0
@@ -16,6 +17,8 @@ TURN_DEG = 10.0
 RUNWAY_END_M = 150.0       # runway vertex must be this close to a threshold for the end to be "in OSM"
 STRIP_AXIS_M = 30.0        # runway vertex belongs to a strip if this close to its axis
 HOLD_STRIP_M = 150.0
+HOLD_PAVEMENT_M = 45.0     # a hold closer than this to a runway centreline lies on runway pavement: dropped
+HOLD_SNAP_M = 15.0         # off-graph hold node -> nearest taxiway/taxilane segment (split there)
 CROSS_SIDE = 0.17          # |sin| of the angle to the axis below which an edge is "along" the runway
 DEFAULT_RUNWAY_WIDTH_M = 45.0
 KINDS = {"runway": "runway", "taxiway": "taxiway", "taxilane": "taxilane"}
@@ -205,7 +208,55 @@ def build_surface(osm: dict, icao: str, runways: list[dict], ref_latlon: tuple[f
                 s["key"] = end
         if s["key"] is not None:
             special.add(s["key"])
-    hold_keys = [nid for nid, n in onode.items() if n["tags"].get("aeroway") == "holding_position" and nid in adj]
+    # holding positions stay where OSM puts them: a taxiway vertex, or (node off any way) a new vertex split into the
+    # nearest taxi segment. A hold on a runway way, or on runway pavement, is dropped (counted), never kept.
+    def runway_dist(pt) -> float:
+        ds = [_seg_dist(pt, pos[a], pos[b])[0] for rp in rpaths for a, b in zip(rp["keys"], rp["keys"][1:])]
+        ds += [_seg_dist(pt, *s["axis"])[0] for s in _strips(runways, proj)]
+        return min(ds, default=math.inf)
+
+    hold_keys: list = []
+    hold_dropped = 0
+    nhold = 0
+    for nid in sorted(onode):
+        n = onode[nid]
+        if n["tags"].get("aeroway") != "holding_position":
+            continue
+        if nid in adj:
+            if nid in rkeys or runway_dist(n["p"]) < HOLD_PAVEMENT_M:
+                hold_dropped += 1
+                continue
+            hold_keys.append(nid)
+            continue
+        if runway_dist(n["p"]) < HOLD_PAVEMENT_M:
+            hold_dropped += 1
+            continue
+        best = None
+        for i, (a, b, _at) in enumerate(segs):
+            d, _t, q = _seg_dist(n["p"], pos[a], pos[b])
+            if d <= HOLD_SNAP_M and (best is None or d < best[0]):
+                best = (d, i, q)
+        if best is None:
+            continue
+        _d, i, q = best
+        a, b, attrs = segs[i]
+        if runway_dist(q) < HOLD_PAVEMENT_M:
+            hold_dropped += 1
+            continue
+        end = next((k for k in (a, b) if _dist(q, pos[k]) <= 1.0), None)
+        if end is None:
+            nhold += 1
+            end = ("hold", nhold)
+            pos[end] = q
+            del adj[a][b], adj[b][a]
+            adj[a][end] = adj[b][end] = attrs
+            adj[end] = {a: attrs, b: attrs}
+            segs[i] = [a, end, attrs]
+            segs.append([end, b, attrs])
+        hold_keys.append(end)
+    hold_keys = list(dict.fromkeys(hold_keys))
+    if hold_dropped:
+        warnings.warn(f"{icao}: dropped {hold_dropped} holding_position node(s) on runway pavement", stacklevel=2)
     special.update(hold_keys)
 
     # nodes: junctions, endpoints, kind/name changes, turns > 10 degrees, special vertices
@@ -330,7 +381,11 @@ def build_surface(osm: dict, icao: str, runways: list[dict], ref_latlon: tuple[f
 
     holds = []
     for k in hold_keys:
-        best = min(((_seg_dist(pos[k], *s["axis"])[0], s["label"]) for s in strips), default=(None, None))
+        cands = [(_seg_dist(pos[k], *s["axis"])[0], s["label"]) for s in strips]
+        for rp in rpaths:   # runway not paired to a strip: fall back to the runway way's own ref
+            if rp["name"]:
+                cands.append((min(_seg_dist(pos[k], pos[a], pos[b])[0] for a, b in zip(rp["keys"], rp["keys"][1:])), rp["name"]))
+        best = min(cands, default=(None, None))
         holds.append({"node": index[k], "strip": best[1] if best[0] is not None and best[0] <= HOLD_STRIP_M else None})
 
     # reachability of ALL stands from each runway end present in OSM: seeded at the end's exit nodes, taxi edges

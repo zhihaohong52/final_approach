@@ -148,3 +148,55 @@ def test_stand_far_from_vertices_snaps_onto_the_middle_of_a_long_segment():
     assert sum(e[4] == "C" for e in s["edges"]) == 2            # the segment was split at the stand's projection
     assert abs(sum(e[2] for e in s["edges"] if e[4] == "C") - (2000 - 200)) < 5   # lengths stay consistent
     assert s["quality"]["reach_pct"]["09"] == 1.0
+
+
+def _with_nodes(*extra):
+    osm = json.loads(json.dumps(OSM))
+    osm["elements"] = osm["elements"] + [
+        {"type": "node", "id": i, "lat": lat, "lon": lon, "tags": tags} for i, lat, lon, tags in extra]
+    return osm
+
+
+def _xy(s, i):
+    lat, lon = s["nodes"][i]
+    return lon * 111195.0, lat * 111195.0
+
+
+def _on_runway(s, i):
+    return any(e[3] == "runway" and i in e[:2] for e in s["edges"])
+
+
+def test_hold_off_way_splits_taxiway_at_its_osm_position_not_nearest_runway_node():
+    hp = {"aeroway": "holding_position", "holding_position:type": "runway"}
+    s = build_surface(_with_nodes((9001, 0.00185, 0.0112, hp)), "KXXX", RWYS, (0.0, 0.0), "t")
+    new = [h for h in s["holding_positions"] if abs(_xy(s, h["node"])[0] - 0.0112 * 111195.0) < 1.0]
+    assert len(new) == 1
+    x, y = _xy(s, new[0]["node"])
+    assert abs(y - 0.0017986 * 111195.0) < 1.0               # on taxiway A, not the 6 m-off OSM node, not a runway node
+    assert not _on_runway(s, new[0]["node"])
+
+
+def test_hold_tagged_on_runway_vertex_dropped_with_warning():
+    import pytest
+    osm = json.loads(json.dumps(OSM))
+    for e in osm["elements"]:
+        if e["type"] == "node" and e["id"] == 1003:       # runway vertex that is also the A2 junction
+            e["tags"] = {"aeroway": "holding_position"}
+    with pytest.warns(UserWarning, match="dropped 1 holding_position"):
+        s = build_surface(osm, "KXXX", RWYS, (0.0, 0.0), "t")
+    assert [h["strip"] for h in s["holding_positions"]] == ["18/36"]
+    assert not any(_on_runway(s, h["node"]) for h in s["holding_positions"])
+
+
+def test_hold_on_pavement_snapped_to_taxiway_is_dropped():
+    import pytest
+    hp = {"aeroway": "holding_position"}
+    with pytest.warns(UserWarning, match="dropped 1"):       # 11 m up A2, inside the 45 m pavement band
+        s = build_surface(_with_nodes((9002, 0.0001, 0.0143991, hp)), "KXXX", RWYS, (0.0, 0.0), "t")
+    assert len(s["holding_positions"]) == 1
+
+
+def test_hold_strip_inferred_from_runway_way_when_no_strip_pairs():
+    hp = {"aeroway": "holding_position"}
+    s = build_surface(_with_nodes((9003, 0.0009, 0.0045066, hp)), "KXXX", [], (0.0, 0.0), "t")
+    assert "09/27" in [h["strip"] for h in s["holding_positions"]]
