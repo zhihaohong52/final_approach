@@ -674,7 +674,8 @@ def markdown(rep: dict) -> str:
     o = rep["outage_test"]
     ab = rep["ablation_no_engine_unsafe_pct"]
     L += ["", f"Status-quo diversions (mean): {b['diversions']}", "", "## Selection", "",
-          f"**Winner:** {sel['winner']}", "", f"Rule: {sel['rule']}", ""] + [f"- {r}" for r in sel["reasons"]]
+          f"**Winner:** {sel['winner']} (n = {rep['n_waves']} waves: indicative, not statistically significant)", "",
+          f"Rule: {sel['rule']}", ""] + [f"- {r}" for r in sel["reasons"]]
     L += ["", "## Outage test", "",
           f"Primary `{o['primary_disabled']}` disabled on {o['waves']} wave(s): {o['resolved']} resolved. "
           f"Fallbacks used: {json.dumps(o['fallbacks_used'])}", "",
@@ -711,7 +712,10 @@ def markdown(rep: dict) -> str:
         L += [f"Engine {at['from']} to {at['to']}. Better is: " + ", ".join(f"{k} {v}" for k, v in better.items()) + ".",
               ""] + [f"Note: {n}." for n in at.get("notes", [])]
         L += ["Physics (status quo under the new engine minus under the old): "
-              + (", ".join(f"{k} {sg(v)}" for k, v in at["physics_delta"].items()) or "n/a"), "",
+              + (", ".join(f"{k} {sg(v)}" for k, v in at["physics_delta"].items()) or "n/a")
+              + ". The status quo is never renegotiated, so this only re-scores the unchanged status-quo plans; "
+              "engine effects on negotiated plans (e.g. routed touchdown times) land in the Negotiation deltas below.",
+              "",
               "Negotiation (arm minus status quo, same engine); headline claims come from these deltas:", ""]
         L += [f"- {arm}: " + (", ".join(f"{k} {sg(v)}" for k, v in d.items()) or "n/a")
               for arm, d in at["negotiation_delta"].items()]
@@ -723,16 +727,23 @@ def markdown(rep: dict) -> str:
         if not at.get("prev_has_per_wave", True):
             L += ["", f"No per-wave data in {at['from']}; regressions start next run."]
     rg = rep.get("regressions", [])
-    L += ["", f"Regressions ({len(rg)}):", ""]
+    if at and not at.get("prev_has_per_wave", True):
+        L += ["", f"Regressions vs {at['from']} ({len(rg)}): empty by construction, not evidence of no regressions "
+                  f"({at['from']} has no per-wave data to compare against).", ""]
+    else:
+        L += ["", f"Regressions ({len(rg)}):", ""]
     L += [f"- `{r['wave_id']}` ({r['arm']}) {r['metric']} {r['v_prev']} to {r['v_cur']}; {r['cause']}"
           for r in rg[:20]] or ["- none"]
     if len(rg) > 20:
         L.append(f"- ... and {len(rg) - 20} more in benchmark.json")
+    en = rep.get("engine_notes")   # hand-written analysis of the engine change, stored in benchmark.json
+    if en:
+        L += ["", f"## {en['title']}", ""] + [f"- {x}" for x in en.get("items", [])]
     L += ["", "## Limits", "",
           "- Several data layers are simulated (gates, fuel, crew, connections, aircraft types), see per-wave provenance.",
           "- Brier is against the formula verdict (utility >= reservation), not human judgement.",
           f"- n = {rep['n_waves']} waves: differences between arms are indicative, not statistically significant.",
-          "- Cost is not measured (0.0)."]
+          "- Cost is not measured (0.0)."] + [f"- {x}" for x in (en or {}).get("limits", [])]
     return "\n".join(L) + "\n"
 
 

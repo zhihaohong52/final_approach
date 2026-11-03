@@ -246,3 +246,20 @@ def test_frozen_v2_row_is_not_current(live_db_url):
     with psycopg.connect(live_db_url) as c:
         cur = c.execute("select count(*) from eval.benchmark_reports where is_current").fetchone()[0]
     assert cur == 1
+
+
+def test_markdown_qualifies_empty_regressions_physics_and_winner():
+    import copy, json
+    from pathlib import Path
+    from backend.wave import benchmark as B
+    rep = json.loads((Path(__file__).resolve().parent.parent / "eval" / "benchmark.json").read_text())
+    rep = copy.deepcopy(rep)
+    rep["attribution"]["prev_has_per_wave"] = False
+    rep["regressions"] = []
+    rep["engine_notes"] = {"title": "vX notes", "items": ["note a"], "limits": ["limit b"]}
+    md = B.markdown(rep)
+    assert "empty by construction" in md and "never renegotiated" in md
+    assert "indicative, not statistically significant)" in md.split("**Winner:**")[1].splitlines()[0]
+    assert "## vX notes\n\n- note a" in md and md.rstrip().endswith("- limit b")
+    rep.pop("engine_notes")
+    assert "## vX notes" not in B.markdown(rep)

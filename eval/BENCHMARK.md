@@ -31,7 +31,7 @@ Status-quo diversions (mean): 0.0
 
 ## Selection
 
-**Winner:** baseten/elephant-1
+**Winner:** baseten/elephant-1 (n = 50 waves: indicative, not statistically significant)
 
 Rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
 
@@ -152,7 +152,7 @@ Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state 
 
 Engine v2 to v3-air. Better is: delay_min lower, fuel_kg lower, lap_share_pct lower, taxi_wait_min lower, pax_protected_pct higher, overtime_min lower.
 
-Physics (status quo under the new engine minus under the old): delay_min +0, fuel_kg +0, pax_protected_pct +0, overtime_min +0
+Physics (status quo under the new engine minus under the old): delay_min +0, fuel_kg +0, pax_protected_pct +0, overtime_min +0. The status quo is never renegotiated, so this only re-scores the unchanged status-quo plans; engine effects on negotiated plans (e.g. routed touchdown times) land in the Negotiation deltas below.
 
 Negotiation (arm minus status quo, same engine); headline claims come from these deltas:
 
@@ -165,9 +165,17 @@ Headline: under engine v3-air, negotiation (baseten/elephant-1) adds 8.586 min o
 
 No per-wave data in v2; regressions start next run.
 
-Regressions (0):
+Regressions vs v2 (0): empty by construction, not evidence of no regressions (v2 has no per-wave data to compare against).
 
 - none
+
+## v2 → v3-air notes
+
+- Aggregate change vs v2, same 50 waves and seed (v2 → v3-air). Fuel kg: formula 108.1 → 235.8, jev-1.14 107.8 → 230.5, d1-ultra 111.3 → 224.2, elephant-1 111.3 → 211.8. Delay min: formula 351.2 → 352.3, jev-1.14 351.2 → 352.3, d1-ultra 351.4 → 352.3, elephant-1 351.4 → 351.7. Overtime min: 1.2 → 1.75-1.97 in every arm. Failures: 10 in total (2-3 per arm) → 59 (14-15 per arm), mostly small regressions vs the status quo (0.2-10 min of delay).
+- Pax protected % is the one gain, and only in two arms: formula 25.50 → 26.00 and d1-ultra 25.50 → 25.73. jev-1.14 and elephant-1 fall slightly, 25.80 → 25.73.
+- Formula fuel split vs v2 (+127.7 kg per wave), from a flight-by-flight rerun of the v2 engine on the same waves. +121.3 is route extra: v3 lands each flight at its routed earliest touchdown on the assigned runway, and the minutes past the nominal route are charged at holding burn (+84.3 on the same runway as in v2, +37.0 where the runway changed). +6.5 is holding (v3 laps 37.2 + vector 10.8 vs v2 hold 41.5). Speed reduction adds 0.
+- Asymmetry: negative route extra (a route shorter than nominal) is floored at -hold, so with no hold a shorter route earns 0 kg credit while a longer one is charged in full. This biases fuel upward.
+- Optimiser comparison: the arms' share of the optimiser's gain over the status quo fell from ~95% (v2) to ~26%, and the gap to the optimiser grew from ~1.6-1.8 min to ~6.7-7.3 min.
 
 ## Limits
 
@@ -175,3 +183,4 @@ Regressions (0):
 - Brier is against the formula verdict (utility >= reservation), not human judgement.
 - n = 50 waves: differences between arms are indicative, not statistically significant.
 - Cost is not measured (0.0).
+- 9 lapped holds across the four arms' agreed plans (3 formula, 2 per model arm; F2015-208692 F9771, F2015-335957 UA208, F2015-165543 DL2657) exist only to relieve GND-GATE-FREE: each flight could land at its earliest touchdown with no ATC/PLT failure. They are created by ATC swap_order / shift_slot / ground_delay (never a hold move, which legal_moves filters) and were already present in v2's plans as plain hold minutes.

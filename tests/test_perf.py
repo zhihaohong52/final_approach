@@ -45,7 +45,8 @@ def test_ord_surface_rss_under_60mb_pgstore(live_db_url):
 
 
 def test_evaluate_p95_under_3ms_ord():
-    """Budget (global constraints): utility.evaluate p95 <= 3 ms on the ORD replay wave, over 200 distinct
+    """Budget (global constraints): utility.evaluate p95 <= 3 ms on ORD wave F2015-270287
+    (KORD, the recorded ORD replay in data/replay; not one of the 50 benchmark waves), over 200 distinct
     plans reached by legal_moves + apply. legal_moves already built every candidate's trajectories, so the
     plan-keyed trajectory cache is emptied first: each timed call builds its plan's paths (per-wave
     precomputation stays warm, as in a negotiation)."""
