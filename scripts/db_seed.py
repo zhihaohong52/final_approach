@@ -150,7 +150,8 @@ def _load_runs(conn) -> int:
 
 _BENCH = [   # (label, report json, markdown, current)
     ("main", EVAL / "benchmark.json", EVAL / "BENCHMARK.md", True),
-    ("engine-v2", EVAL / "archive" / "engine-v2" / "benchmark.json", EVAL / "archive" / "engine-v2" / "BENCHMARK.md", False),
+    *[(d.name, d / "benchmark.json", d / "BENCHMARK.md", False)   # every frozen engine report
+      for d in sorted((EVAL / "archive").glob("engine-*")) if (d / "benchmark.json").is_file()],
     ("100", EVAL / "benchmark_100.json", EVAL / "BENCHMARK_100.md", False),
     ("1000", None, EVAL / "BENCHMARK_1000.md", False),
 ]

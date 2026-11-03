@@ -263,3 +263,17 @@ def test_markdown_qualifies_empty_regressions_physics_and_winner():
     assert "## vX notes\n\n- note a" in md and md.rstrip().endswith("- limit b")
     rep.pop("engine_notes")
     assert "## vX notes" not in B.markdown(rep)
+
+
+def test_markdown_definition_change_caveat_under_regressions():
+    import copy, json
+    from pathlib import Path
+    from backend.wave import benchmark as B
+    rep = copy.deepcopy(json.loads((Path(__file__).resolve().parent.parent / "eval" / "benchmark.json").read_text()))
+    rep["attribution"]["prev_has_per_wave"] = True
+    rep["engine_notes"] = {"title": "t", "items": [], "definition_change": True}
+    md = B.markdown(rep)
+    head = md.split("Regressions (")[1].split("\n\n", 2)
+    assert "definition change" in head[1]
+    rep["engine_notes"].pop("definition_change")
+    assert "not flight physics" not in B.markdown(rep)

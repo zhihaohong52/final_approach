@@ -732,6 +732,9 @@ def markdown(rep: dict) -> str:
                   f"({at['from']} has no per-wave data to compare against).", ""]
     else:
         L += ["", f"Regressions ({len(rg)}):", ""]
+        if (rep.get("engine_notes") or {}).get("definition_change"):
+            L += ["Note: this version is a definition change, so the \"physics\" cause below means the new definition "
+                  "moved the status quo, not flight physics.", ""]
     L += [f"- `{r['wave_id']}` ({r['arm']}) {r['metric']} {r['v_prev']} to {r['v_cur']}; {r['cause']}"
           for r in rg[:20]] or ["- none"]
     if len(rg) > 20:

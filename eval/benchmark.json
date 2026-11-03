@@ -2438,10 +2438,13 @@
       "Overtime min: formula 1.9 \u2192 1.7, jev-1.14 2.0 \u2192 1.9, d1-ultra 1.8 \u2192 1.8, elephant-1 1.7 \u2192 1.6.",
       "Consensus rate is unchanged in formula, jev-1.14 and elephant-1 (98 %) and fell from 98 % to 96 % in d1-ultra. Lap share: formula 6.12 \u2192 4.08 %, d1-ultra 4.08 \u2192 4.17 %, the others unchanged at 4.08 %.",
       "Failures: 59 in total in v3-air \u2192 49 in v3-time (formula 13, jev-1.14 12, d1-ultra 14, elephant-1 10); 44 are regressions vs the status quo and 5 are no-consensus fallbacks. The regression list is dominated by 'physics' because the baseline moved with the definition; compare negotiation_delta, not absolute values, across versions.",
-      "Rule violations in agreed plans are 0 in every arm."
+      "Rule violations in agreed plans are 0 in every arm.",
+      "Formula lap share fell 6.12 -> 4.08 %: that is a negotiation outcome (a different set of plans was agreed on the new time base), not part of the definition change."
     ],
     "limits": [
-      "The v3-air \u2192 v3-time comparison changes what is measured, so absolute delay, pax and fuel are not comparable across the two versions; use the baseline row of each version as the reference."
-    ]
+      "The v3-air \u2192 v3-time comparison changes what is measured, so absolute delay, pax and fuel are not comparable across the two versions; use the baseline row of each version as the reference.",
+      "Gate-relief laps (airborne holds that exist only to clear GND-GATE-FREE, 9 across arms in v3-air; see eval/archive/engine-v3-air/BENCHMARK.md) were not re-counted on the v3-time plans: per-wave results do not store laps, so whether they persist is unmeasured."
+    ],
+    "definition_change": true
   }
 }

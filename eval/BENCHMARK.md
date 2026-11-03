@@ -161,6 +161,8 @@ Headline: under engine v3-time, negotiation (baseten/elephant-1) adds 8.804 min 
 
 Regressions (53):
 
+Note: this version is a definition change, so the "physics" cause below means the new definition moved the status quo, not flight physics.
+
 - `F2015-110532` (typesafe/jev-1.14) delay_min 494.9 to 502.0; negotiation
 - `F2015-112396` (typesafe/jev-1.14) delay_min 384.6 to 390.6; physics
 - `F2015-124231` (typesafe/jev-1.14) delay_min 360.1 to 369.1; physics
@@ -194,6 +196,7 @@ Regressions (53):
 - Consensus rate is unchanged in formula, jev-1.14 and elephant-1 (98 %) and fell from 98 % to 96 % in d1-ultra. Lap share: formula 6.12 → 4.08 %, d1-ultra 4.08 → 4.17 %, the others unchanged at 4.08 %.
 - Failures: 59 in total in v3-air → 49 in v3-time (formula 13, jev-1.14 12, d1-ultra 14, elephant-1 10); 44 are regressions vs the status quo and 5 are no-consensus fallbacks. The regression list is dominated by 'physics' because the baseline moved with the definition; compare negotiation_delta, not absolute values, across versions.
 - Rule violations in agreed plans are 0 in every arm.
+- Formula lap share fell 6.12 -> 4.08 %: that is a negotiation outcome (a different set of plans was agreed on the new time base), not part of the definition change.
 
 ## Limits
 
@@ -202,3 +205,4 @@ Regressions (53):
 - n = 50 waves: differences between arms are indicative, not statistically significant.
 - Cost is not measured (0.0).
 - The v3-air → v3-time comparison changes what is measured, so absolute delay, pax and fuel are not comparable across the two versions; use the baseline row of each version as the reference.
+- Gate-relief laps (airborne holds that exist only to clear GND-GATE-FREE, 9 across arms in v3-air; see eval/archive/engine-v3-air/BENCHMARK.md) were not re-counted on the v3-time plans: per-wave results do not store laps, so whether they persist is unmeasured.
