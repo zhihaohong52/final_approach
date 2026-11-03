@@ -872,10 +872,17 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--out", default=str(ROOT / "eval"))
     a = ap.parse_args(argv)
     from backend.wave import trajectory
-    # offline process: worker threads interleave waves, so give the shared plan cache 256 entries per worker
-    # (the server keeps the 256-entry default; see trajectory.PLAN_CACHE_MAX)
-    trajectory.PLAN_CACHE_MAX = max(trajectory.PLAN_CACHE_MAX, trajectory.PLAN_CACHE_PER_WORKER * max(1, a.concurrency))
+    # worker threads interleave waves, so the shared plan cache gets 256 entries per worker for this run (the
+    # server keeps the 256-entry default; see trajectory.PLAN_CACHE_MAX); restored afterwards (tests call main)
+    prev = trajectory.PLAN_CACHE_MAX
+    trajectory.PLAN_CACHE_MAX = max(prev, trajectory.PLAN_CACHE_PER_WORKER * max(1, a.concurrency))
+    try:
+        return _main(a)
+    finally:
+        trajectory.PLAN_CACHE_MAX = prev
 
+
+def _main(a: argparse.Namespace) -> dict:
     arm_list = [x.strip() for x in a.arms.split(",") if x.strip()]
     if "formula" not in arm_list:
         arm_list.append("formula")  # needed for agreement_with_formula_pct

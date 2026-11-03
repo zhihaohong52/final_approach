@@ -38,3 +38,11 @@ def test_suggestion_search_does_not_cache_its_trial_plans():
     s = out["suggestions"]["MQ3318"]
     fixed = [dict(r, slot_min=s) if r["callsign"] == "MQ3318" else r for r in rows]
     assert edit.check_edit(w, edit.plan_from_dicts(fixed))["evaluation"]["feasible"]
+
+
+def test_benchmark_restores_the_plan_cache_bound():
+    from backend.wave import benchmark
+    before = trajectory.PLAN_CACHE_MAX
+    benchmark.main(["--fixtures", "--n", "1", "--arms", "formula", "--concurrency", "3", "--no-ablation",
+                    "--outage-n", "0", "--out", str(__import__("tempfile").mkdtemp())])
+    assert trajectory.PLAN_CACHE_MAX == before
