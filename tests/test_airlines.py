@@ -13,7 +13,17 @@ def test_unknown_carrier_is_own_airline():
 
 
 def test_multi_partner_by_hub():
-    assert airline_of("EV", "ATL", 2015)[0] == "DL" and airline_of("EV", "ORD", 2015)[0] == "EV"
+    assert airline_of("EV", "ATL", 2015)[0] == "DL" and airline_of("EV", "ORD", 2015)[0] == "UA"
+    assert airline_of("OO", "ORD", 2015)[0] == "OO" and airline_of("EV", "DFW", 2015)[0] == "EV"
+
+
+def test_us_airways_2015_is_aa():
+    assert airline_of("US", "CLT", 2015)[0] == "AA"
+
+
+def test_year_outside_single_range_falls_through():
+    assert airline_of("US", "CLT", 2024) == ("US", "no grouping row: operating carrier is its own airline")
+    assert airline_of("MQ", "DFW", 2010)[0] == "MQ"
 
 
 def test_groups_stress_waves():
