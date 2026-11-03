@@ -179,8 +179,8 @@ export type RuleId = "ATC-RWY-OPEN" | "ATC-WAKE-SEP" | "ATC-TAXI-ROUTE" | "ATC-W
   | "ATC-RWY-CAPACITY"                 // v2.0: landings per physical runway in the rolling 60 min <= workbook cap
   | "PLT-EARLIEST-ETA" | "PLT-FUEL-RESERVE" | "GND-GATE-SIZE" | "GND-GATE-FREE" | "GND-CREW-DUTY"
   | "GND-GATE-NOTICE"                  // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
-  | "PLT-CREW-DUTY"
-  | "ATC-HOLD-STACK" | "ATC-TAXI-CONFLICT";   // v2.2                   // in-block (or alternate arrival) within the flight crew's duty end
+  | "PLT-CREW-DUTY"                   // in-block (or alternate arrival) within the flight crew's duty end
+  | "ATC-HOLD-STACK" | "ATC-TAXI-CONFLICT";   // v2.2
 
 export interface PlanEvaluation {
   plan_id: string;
@@ -201,8 +201,8 @@ export interface Move {
   agent: AgentId;
   kind: "swap_order" | "change_runway" | "shift_slot"                         // ATC
       | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // PILOT (own flight); ATC: speed/ground delay of non-focus flights
-      | "reassign_gate" | "remote_stand" | "swap_gates"
-      | "hold";                                                                  // v2.2                     // GROUND
+      | "reassign_gate" | "remote_stand" | "swap_gates"     // GROUND
+      | "hold";                                                                  // v2.2: ATC holds a flight in the stack
   callsigns: string[];
   params: Record<string, string | number>;   // { runway: "09R" } | { minutes: 6 } | { gate: "B4" }
   label: string;                       // "Swap landing order DL1234 ↔ AA88"

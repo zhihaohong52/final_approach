@@ -10,7 +10,7 @@ export const RULE_NAME: Record<RuleId, string> = {
   "ATC-WIND-LIMITS": "Wind limits", "ATC-RWY-CAPACITY": "Runway capacity", "PLT-EARLIEST-ETA": "Earlier than it can arrive",
   "PLT-FUEL-RESERVE": "Fuel reserve", "PLT-CREW-DUTY": "Flight crew out of hours", "GND-GATE-SIZE": "Gate too small", "GND-GATE-FREE": "Gate occupied",
   "GND-GATE-NOTICE": "Gate change too late", "GND-CREW-DUTY": "Ground crew overtime",
-  "ATC-HOLD-STACK": "Holding stack", "ATC-TAXI-CONFLICT": "Taxi conflict",
+  "ATC-HOLD-STACK": "Holding stack full", "ATC-TAXI-CONFLICT": "Taxi conflict",
 };
 
 export function deriveAlerts(wave: WaveScenario, r: NegotiationResult | null, plan: JointPlan | null, ev: PlanEvaluation | null): Alert[] {

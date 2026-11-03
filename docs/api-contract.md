@@ -5,7 +5,7 @@ one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. v2.2 (2 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). Design: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -251,9 +251,8 @@ type RuleId = "ATC-RWY-OPEN" | "ATC-WAKE-SEP" | "ATC-TAXI-ROUTE" | "ATC-WIND-LIM
   | "ATC-RWY-CAPACITY"                 // v2.0: landings per physical runway in the rolling 60 min <= workbook cap
   | "PLT-EARLIEST-ETA" | "PLT-FUEL-RESERVE" | "GND-GATE-SIZE" | "GND-GATE-FREE" | "GND-CREW-DUTY"
   | "GND-GATE-NOTICE"                  // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
-  | "PLT-CREW-DUTY"
+  | "PLT-CREW-DUTY"                   // in-block (or alternate arrival) within the flight crew's duty end
   | "ATC-HOLD-STACK" | "ATC-TAXI-CONFLICT";   // v2.2
-  //                   // in-block (or alternate arrival) within the flight crew's duty end
 // v2.0: GND-CREW-DUTY never fails any more (workbook: overtime after the 8 h shift is allowed at 1.5x cost);
 // it reports overtime. PLT-CREW-DUTY can veto; crew report time is assumed (scheduled departure - 60 min, see `limits`).
 
@@ -272,9 +271,8 @@ interface Move {
       | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // PILOT (own flight);
                                                                              // v2.0: ATC may also issue speed_reduction /
                                                                              // ground_delay for non-focus flights
-      | "reassign_gate" | "remote_stand" | "swap_gates"
-      | "hold";                                                                  // v2.2
-      //                     // GROUND
+      | "reassign_gate" | "remote_stand" | "swap_gates"     // GROUND
+      | "hold";                                                                  // v2.2: ATC holds a flight in the stack
   callsigns: string[];
   params: Record<string, string | number>;   // { runway: "09R" } | { minutes: 6 } | { gate: "B4" }
   label: string;                       // "Swap landing order DL1234 ↔ AA88"
