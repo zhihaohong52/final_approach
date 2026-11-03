@@ -42,3 +42,36 @@ def test_ord_surface_rss_under_60mb_pgstore(live_db_url):
             "a=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;print((a-b)/(1048576 if sys.platform=='darwin' else 1024))")
     mb = float(subprocess.check_output([sys.executable, "-c", code], text=True))
     assert mb <= 60
+
+
+def test_evaluate_p95_under_3ms_ord():
+    """Budget (global constraints): utility.evaluate p95 <= 3 ms on the ORD replay wave, over 200 distinct
+    plans reached by legal_moves + apply. legal_moves already built every candidate's trajectories, so the
+    plan-keyed trajectory cache is emptied first: each timed call builds its plan's paths (per-wave
+    precomputation stays warm, as in a negotiation)."""
+    import statistics, time
+    from backend.wave import build, trajectory
+    from backend.wave.moves import apply, fcfs_plan, legal_moves
+    from backend.wave.utility import evaluate, negotiators
+    w = build.build_wave("F2015-270287")
+    start = fcfs_plan(w)
+    seen, frontier = {start.id: start}, [start]
+    while frontier and len(seen) < 200:
+        p = frontier.pop(0)
+        for ag in negotiators(w):
+            for m in legal_moves(w, p, ag):
+                q = apply(w, p, m)
+                if q.id not in seen and len(seen) < 200:
+                    seen[q.id] = q
+                    frontier.append(q)
+    assert len(seen) == 200
+    evaluate(w, start)
+    trajectory._CACHE.clear()
+    ms = []
+    for p in seen.values():
+        t = time.perf_counter()
+        evaluate(w, p)
+        ms.append((time.perf_counter() - t) * 1000)
+    p95 = statistics.quantiles(ms, n=20)[18]
+    print(f"evaluate p95 on ORD: {p95:.2f} ms")
+    assert p95 <= 3.0
