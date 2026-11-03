@@ -307,12 +307,12 @@ def test_taxi_validation_values_and_cause():
 
 
 def test_coverage_tiers_and_markdown_sections():
-    # run with ATM_STORE=files: movements2015 is database-only, so ground_traffic is "partial" here; on Postgres the
-    # same wave would count as "real"
+    # ground_traffic is "real" when the 2015 movements are reachable (Postgres, or a local data/ref/movements2015)
+    # and "partial" without them, so either tier is accepted
     w = _w_ord()
     cov = B.coverage([w], n_failed=1)
     assert set(cov) == {"procedures", "surface", "ground_traffic"}
-    assert cov["surface"] == {"real": 1, "none": 1} and cov["ground_traffic"] == {"partial": 1, "none": 1}
+    assert cov["surface"] == {"real": 1, "none": 1} and sorted(cov["ground_traffic"]) in (["none", "partial"], ["none", "real"]) and sum(cov["ground_traffic"].values()) == 2
     assert sum(cov["procedures"].values()) == 2
     import json
     from pathlib import Path
