@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from atm.geo import store
-from atm.geo.gates_geo import bind_gates
-from atm.geo.osm_surface import build_surface
+from backend.geo import store
+from backend.geo.gates_geo import bind_gates
+from backend.geo.osm_surface import build_surface
 
 OSM = "tests/data/osm/mini_airport.json"
 RWY = "tests/data/osm/mini_runways.json"
@@ -108,7 +108,7 @@ def test_derive_reads_timestamp_and_skips_networkless_airports():
 
 
 def test_ord_replay_gates_bind_to_osm():
-    from atm.wave import build
+    from backend.wave import build
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     assert sum(v["geo_src"] in ("osm-ref", "osm-near") for v in b.values()) >= len(w.gates) - 3
@@ -117,7 +117,7 @@ def test_ord_replay_gates_bind_to_osm():
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py surface` into atm_test
 def test_bindings_agree_with_nearest_stand_query(live_db_url):
     import psycopg
-    from atm.wave import build
+    from backend.wave import build
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     with psycopg.connect(live_db_url) as c:

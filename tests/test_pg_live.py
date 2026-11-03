@@ -1,5 +1,5 @@
 import pytest
-from atm.datastore.pg import PgStore
+from backend.datastore.pg import PgStore
 pytestmark = pytest.mark.live_db
 
 def _clean(url, current_id=None):

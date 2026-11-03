@@ -1,6 +1,6 @@
 import math
 
-from atm.wave.benchmark import arm_vs_optimiser, fixture_waves, optimiser_summary, run_optimiser
+from backend.wave.benchmark import arm_vs_optimiser, fixture_waves, optimiser_summary, run_optimiser
 
 
 def test_optimiser_summary_fixture_waves():

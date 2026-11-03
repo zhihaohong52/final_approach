@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import atm  # noqa: E402,F401  (loads .env)
-from atm.datastore import pack  # noqa: E402
-from atm.datastore.datasets import CH2, DATASETS, WAVES, WORKBOOK, Dataset  # noqa: E402
-from atm.datastore.files import FilePaths  # noqa: E402
+import backend  # noqa: E402,F401  (loads .env)
+from backend.datastore import pack  # noqa: E402
+from backend.datastore.datasets import CH2, DATASETS, WAVES, WORKBOOK, Dataset  # noqa: E402
+from backend.datastore.files import FilePaths  # noqa: E402
 
 SCRIPT_VERSION = "1"
 _P = FilePaths()
@@ -330,9 +330,9 @@ def _files_waves() -> list[Path]:
 
 def _wave_lines() -> Iterable[str]:
     """index.csv rows with `summary` = build._summary(row) minus replay_available, computed on a FileStore."""
-    from atm import datastore
-    from atm.datastore.files import FileStore
-    from atm.wave import build
+    from backend import datastore
+    from backend.datastore.files import FileStore
+    from backend.wave import build
     ds = DATASETS["waves_index"]
     with open(ds.path, newline="") as f:
         rows = list(csv.DictReader(f))

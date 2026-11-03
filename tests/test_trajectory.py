@@ -2,9 +2,9 @@ import math
 from pathlib import Path
 
 import pytest
-from atm.wave import build, route, trajectory
-from atm.wave.moves import fcfs_plan, fcfs_runways
-from atm.wave.fixtures import make_wave
+from backend.wave import build, route, trajectory
+from backend.wave.moves import fcfs_plan, fcfs_runways
+from backend.wave.fixtures import make_wave
 
 ORD = "F2015-270287"
 REPLAYS = sorted((Path(__file__).resolve().parents[1] / "data" / "replay").glob("*.json"))
@@ -55,7 +55,7 @@ def test_vector_only_flight_not_in_stack():
 
 def test_points_within_150nm_and_replay_plans_invariant():
     import json
-    from atm.wave.edit import plan_from_dicts
+    from backend.wave.edit import plan_from_dicts
     assert REPLAYS
     for f in REPLAYS:
         d = json.loads(f.read_text()); w = build.build_wave(d["result"]["wave_id"])
@@ -132,7 +132,7 @@ def _expected_base(routes, key):
 
 
 def test_stack_shares_one_hold_per_physical_fix_with_rule_base():
-    from atm.wave import holding
+    from backend.wave import holding
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
     pl = p
@@ -198,7 +198,7 @@ def test_shared_fix_hold_lap_time_is_plan_independent_and_matches_drawing():
 
 
 def test_shared_base_constraints_win_else_lowest_interp_floored():
-    from atm.wave import holding as H
+    from backend.wave import holding as H
     mk = lambda base, src, bsrc="interp": H.make_hold("FIX", 33.0, -84.0, 90.0, "R", None, base, src, bsrc)
     mixed = [("08L", "A1", mk(15000, "synth")), ("08R", "B2", mk(11000, "synth", "constraint")),
              ("26L", "C3", mk(12000, "synth", "constraint")), ("27R", "D4", mk(9000, "synth"))]
@@ -242,10 +242,10 @@ V2_FIXTURE_TOTALS = {"delay_min": 5.7, "fuel_kg": 68.0, "hold_min": 1.7, "pax_pr
 
 
 def test_metrics_removed_and_map_is_joint():
-    import atm.wave.utility as U
+    import backend.wave.utility as U
     assert not hasattr(U, "metrics")
-    from atm.wave import build
-    from atm.wave.moves import fcfs_plan
+    from backend.wave import build
+    from backend.wave.moves import fcfs_plan
     w = build.build_wave("F2015-270287")
     mm = U.metrics_map(w, fcfs_plan(w))
     assert all(m.route_min is not None for m in mm.values())
@@ -254,8 +254,8 @@ def test_metrics_removed_and_map_is_joint():
 def _far_runway(w, cs) -> str:
     """Open runway end with the largest t_route_min, provided it exceeds the nominal runway's by > 1.0 min.
     Shared with tests/test_rules.py (T14) and tests/test_geo_api.py (T16)."""
-    from atm.wave import route
-    from atm.wave.moves import fcfs_runways
+    from backend.wave import route
+    from backend.wave.moves import fcfs_runways
     rs = route.routes_for_wave(w)
     nominal = rs[(cs, fcfs_runways(w)[cs])].t_route_min
     best = max((r for (c, _), r in rs.items() if c == cs), key=lambda r: r.t_route_min)
@@ -266,9 +266,9 @@ def _far_runway(w, cs) -> str:
 
 def test_route_extra_costs_fuel_on_far_runway():
     from dataclasses import replace
-    from atm.wave import build, route, trajectory
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import metrics_map, hold_burn
+    from backend.wave import build, route, trajectory
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import metrics_map, hold_burn
     w = build.build_wave("F2015-270287")
     p = fcfs_plan(w); a = p.assignments[0]
     rs = route.routes_for_wave(w)
@@ -282,15 +282,15 @@ def test_route_extra_costs_fuel_on_far_runway():
 
 def test_no_geometry_tier_matches_v2():
     # frozen v2 numbers for the synthetic wave (captured before this task)
-    from atm.wave.fixtures import make_wave
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import evaluate
+    from backend.wave.fixtures import make_wave
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import evaluate
     ev = evaluate(make_wave(), fcfs_plan(make_wave()))
     assert ev["totals"] == V2_FIXTURE_TOTALS
 
 
 def test_metrics_hold_identity_and_path_fields_from_track():
-    from atm.wave.utility import metrics_map
+    from backend.wave.utility import metrics_map
     w = build.build_wave("F2015-69315")
     p = fcfs_plan(w)
     a = p.assignments[0]
@@ -305,7 +305,7 @@ def test_metrics_hold_identity_and_path_fields_from_track():
 
 
 def test_metrics_slot_before_earliest_never_negative():
-    from atm.wave.utility import metrics_map
+    from backend.wave.utility import metrics_map
     w = build.build_wave("F2015-270287")
     p = fcfs_plan(w)
     a = p.assignments[0]
@@ -314,8 +314,8 @@ def test_metrics_slot_before_earliest_never_negative():
 
 
 def test_change_runway_floor_is_runway_dependent_earliest():
-    from atm.wave import moves
-    from atm.wave.model import Move
+    from backend.wave import moves
+    from backend.wave.model import Move
     w = build.build_wave("F2015-270287")
     p = fcfs_plan(w)
     for a in p.assignments:
@@ -333,7 +333,7 @@ def test_change_runway_floor_is_runway_dependent_earliest():
 
 def test_fcfs_metrics_on_geometry_wave_equal_v2_hold():
     """The FCFS plan flies the nominal runway, so route_extra is 0 and hold equals v2's slot - ETA."""
-    from atm.wave.utility import metrics_map
+    from backend.wave.utility import metrics_map
     w = build.build_wave("F2015-270287")
     p = fcfs_plan(w)
     for a in p.assignments:
@@ -345,7 +345,7 @@ def test_fcfs_metrics_on_geometry_wave_equal_v2_hold():
 
 def test_shorter_route_with_no_hold_burns_no_fuel():
     """route_extra < 0 and hold 0 (slot at the shorter route's earliest): fuel is floored at 0, never negative."""
-    from atm.wave.utility import metrics_map
+    from backend.wave.utility import metrics_map
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
     a = p.get("MQ3327")
@@ -357,8 +357,8 @@ def test_shorter_route_with_no_hold_burns_no_fuel():
 
 def test_change_runway_to_a_nearer_runway_floors_on_the_new_runway():
     """Moving a flight off a far runway must floor on the NEW (nearer) runway's earliest, not the old one's."""
-    from atm.wave import moves
-    from atm.wave.model import Move
+    from backend.wave import moves
+    from backend.wave.model import Move
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
     a = p.get("MQ3327")
@@ -372,7 +372,7 @@ def test_change_runway_to_a_nearer_runway_floors_on_the_new_runway():
 def test_status_quo_diverts_on_unrounded_hold():
     """Status quo uses the unrounded hold (as PLT-FUEL-RESERVE does): 1.24 min of hold on 1.2 min of extra fuel diverts."""
     from dataclasses import replace
-    from atm.wave import baseline
+    from backend.wave import baseline
     w = make_wave()
     f = w.flight("DL201")
     slot = fcfs_plan(w).get("DL201").slot_min

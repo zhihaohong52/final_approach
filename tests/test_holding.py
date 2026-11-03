@@ -1,5 +1,5 @@
 import pytest
-from atm.wave import holding as H
+from backend.wave import holding as H
 
 def test_lap_times_pinned():
     assert H.lap_min(12000) == pytest.approx(5.36, abs=0.03)   # 230 KIAS, 25 deg bank

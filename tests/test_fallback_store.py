@@ -1,8 +1,8 @@
 import psycopg
 import pytest
-from atm.datastore.fallback import FallbackStore
-from atm.datastore.files import FileStore
-from atm.datastore import pg
+from backend.datastore.fallback import FallbackStore
+from backend.datastore.files import FileStore
+from backend.datastore import pg
 
 class Down:
     calls = 0
@@ -51,7 +51,7 @@ import threading
 import typing
 from contextlib import nullcontext
 from psycopg_pool import PoolTimeout
-from atm.datastore.base import Store
+from backend.datastore.base import Store
 
 
 def test_store_methods_match_protocol():
@@ -193,7 +193,7 @@ def test_bound_session_drops_conn_after_operational_error():
 
 
 def test_no_retry_writes_attempted_once_reads_retried(monkeypatch, tmp_path):
-    from atm.datastore.files import FilePaths
+    from backend.datastore.files import FilePaths
     monkeypatch.setattr(pg.time, "sleep", lambda s: None)
 
     class P:
@@ -214,11 +214,11 @@ def test_no_retry_writes_attempted_once_reads_retried(monkeypatch, tmp_path):
 
 
 # ---- final review fixes ----
-from atm.datastore.base import DataUnavailable
+from backend.datastore.base import DataUnavailable
 
 
 def _tmp_files(tmp_path):
-    from atm.datastore.files import FilePaths
+    from backend.datastore.files import FilePaths
     return FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "d.jsonl",
                                replay_dir=tmp_path / "replay", benchmark_path=tmp_path / "b.json"))
 
@@ -343,7 +343,7 @@ def test_pg_replay_prefers_current_version_and_caches(monkeypatch):
 
 def test_query_canceled_is_not_retried(monkeypatch):
     import psycopg
-    from atm.datastore import pg as pgmod
+    from backend.datastore import pg as pgmod
     monkeypatch.setattr(pgmod.time, "sleep", lambda s: (_ for _ in ()).throw(AssertionError("retried")))
     calls = []
     def boom():

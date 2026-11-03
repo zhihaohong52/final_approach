@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from atm.wave.hubs import HUBS
+from backend.wave.hubs import HUBS
 
 INDEX = Path(__file__).resolve().parent.parent / "data" / "waves" / "index.csv"
 

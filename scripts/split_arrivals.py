@@ -1,5 +1,5 @@
 """Split data/waves/arrivals.csv.gz (scripts/fetch_bts.py output, ~1.2M rows) into one small file per
-destination hub: data/waves/arrivals/{IATA}.csv.gz. atm/wave/build.py loads only the airport it needs, so
+destination hub: data/waves/arrivals/{IATA}.csv.gz. backend/wave/build.py loads only the airport it needs, so
 the server fits in 512 MB. Applies the same cleaning build.py always did (drop rows without
 sched_arr/carrier/flight_no, delays -> 0, cancelled -> bool) so wave output is unchanged.
 

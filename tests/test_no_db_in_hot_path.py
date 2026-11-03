@@ -1,5 +1,5 @@
-from atm import datastore
-from atm.wave import build, graph
+from backend import datastore
+from backend.wave import build, graph
 
 class Exploding:
     def __getattr__(self, name):
@@ -11,14 +11,14 @@ def test_negotiation_and_evaluate_never_touch_the_store():
     try:
         res = graph.negotiate_wave(w, "formulas", ["formula"], lambda m: None, narrate=False)
         assert res["outcome"] in ("consensus", "fallback")
-        from atm.wave import edit
+        from backend.wave import edit
         edit.check_edit(w, edit.plan_from_dicts(res["final_plan"]["assignments"]))
     finally:
         datastore.set_store(None)
 
 
 def test_cold_2024_wave_warms_workbook_limits_before_the_hot_path():
-    from atm.wave import edit
+    from backend.wave import edit
     build._reset_caches()                       # constraints._load() is cold again
     w = build.build_wave("DCA-2024-06-22-16")
     datastore.set_store(Exploding())
@@ -35,8 +35,8 @@ MANY_F2015 = [144520, 343919, 210010, 156608, 317184, 105396, 324426, 53108, 608
 
 
 def test_routes_pinned_at_build_survive_cache_eviction():
-    from atm.wave import flights2015, route, utility
-    from atm.wave.moves import fcfs_plan
+    from backend.wave import flights2015, route, utility
+    from backend.wave.moves import fcfs_plan
     route.routes_for_wave.cache_clear()
     waves = [flights2015.build_from_row(r) for r in MANY_F2015]
     assert len(waves) > route.CACHE_MAX
@@ -53,7 +53,7 @@ def test_routes_pinned_at_build_survive_cache_eviction():
 def test_pinned_routes_not_carried_to_a_changed_wave():
     from dataclasses import replace
     import copy, pickle
-    from atm.wave import flights2015, route
+    from backend.wave import flights2015, route
     w = flights2015.build_from_row(270287)
     pinned = route.routes_for_wave(w)
     assert route.routes_for_wave(copy.deepcopy(w)).keys() == pinned.keys()

@@ -7,7 +7,7 @@ Writes data/waves/arrivals.csv.gz and data/waves/index.csv.
 Reads the 12 PREZIP months of 2015 (cached in .cache/bts/2015_M/) and writes one file per airport,
 data/ref/movements2015/{IATA}.csv.gz, with every arrival and departure there (columns MOVE_COLS), for the
 top 30 airports by 2015 arrivals plus the benchmark airports (~94 MB, gitignored; seeded to Postgres only).
-Prints the TOP30 tuple to paste into atm/geo/store.py.
+Prints the TOP30 tuple to paste into backend/geo/store.py.
 """
 import argparse
 import json
@@ -20,7 +20,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from atm.wave.hubs import HUBS, MONTHS  # noqa: E402
+from backend.wave.hubs import HUBS, MONTHS  # noqa: E402
 
 CACHE = ROOT / ".cache" / "bts"
 OUT = ROOT / "data" / "waves"

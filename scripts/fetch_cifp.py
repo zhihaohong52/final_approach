@@ -2,7 +2,7 @@
 
 Usage: python3 scripts/fetch_cifp.py
 The zip goes to .cache/cifp/ (verified by size and SHA-256, then only parsed, never executed).
-Airports: the flights2015 destinations plus atm.wave.hubs.HUBS. Airports with no terminal data
+Airports: the flights2015 destinations plus backend.wave.hubs.HUBS. Airports with no terminal data
 in the cycle are skipped and listed. Output matches _procedure_row/_fix_rows in scripts/db_seed.py.
 """
 import gzip
@@ -15,9 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from atm.geo.cifp import extract_airport  # noqa: E402
-from atm.wave.hubs import HUBS  # noqa: E402
-from atm.wave.icao import icao_or_prefix  # noqa: E402
+from backend.geo.cifp import extract_airport  # noqa: E402
+from backend.wave.hubs import HUBS  # noqa: E402
+from backend.wave.icao import icao_or_prefix  # noqa: E402
 
 CYCLE = "2611"
 URL = "https://aeronav.faa.gov/Upload_313-d/cifp/CIFP_261029.zip"

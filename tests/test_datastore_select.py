@@ -1,7 +1,7 @@
 import os
 import pytest
-from atm import datastore
-from atm.datastore.files import FileStore
+from backend import datastore
+from backend.datastore.files import FileStore
 
 def test_suite_runs_on_files():
     assert os.environ.get("ATM_STORE") == "files"

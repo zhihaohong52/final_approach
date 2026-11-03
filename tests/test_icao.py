@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import pytest
-from atm.wave.icao import icao_for, iata_for
+from backend.wave.icao import icao_for, iata_for
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -27,18 +27,18 @@ def test_db_flights2015_destinations_resolve_via_file_lookup(live_db_url):
     assert all(len(icao_for(d)) == 4 for d in dests)
 
 def test_flights2015_uses_lookup():
-    from atm.wave import flights2015
+    from backend.wave import flights2015
     assert flights2015._icao("OGG") == "PHOG"
 
 def test_bts_wave_uses_lookup(monkeypatch):
-    from atm.wave import build, icao
+    from backend.wave import build, icao
     calls = []
     monkeypatch.setattr(icao, "icao_for", lambda i: calls.append(i) or "KORD")
     build.build_wave(build.list_waves(airport="ORD", limit=1)[0]["id"])
     assert calls and set(calls) == {"ORD"}
 
 def test_summary_icao_matches_built_wave(monkeypatch):
-    from atm.wave import build, icao
+    from backend.wave import build, icao
     monkeypatch.setattr(icao, "icao_for", lambda i: "XXXX")
     s = build.list_waves(airport="ORD", limit=1)[0]
     assert s["airport"]["icao"] == "XXXX" == build.build_wave(s["id"]).airport.icao

@@ -3,10 +3,10 @@ from dataclasses import replace
 
 import pytest
 
-from atm.wave import rules
-from atm.wave.model import Move, QueueArrival
-from atm.wave.moves import _move, apply, fcfs_plan, legal_moves
-from atm.wave.utility import evaluate
+from backend.wave import rules
+from backend.wave.model import Move, QueueArrival
+from backend.wave.moves import _move, apply, fcfs_plan, legal_moves
+from backend.wave.utility import evaluate
 from tests.fixtures import make_wave
 
 
@@ -83,7 +83,7 @@ def test_apply_reslots_wake_legal():
 
 def test_swap_and_speed_reduction_effects():
     """Workbook wake times (Heavy->Large 5 nm = 129 s): FCFS DL100 T+5, DL201 T+7.2 (holds 1.2), AA302 T+8, UA403 T+12."""
-    from atm.wave.moves import _move
+    from backend.wave.moves import _move
     w = make_wave()
     p = fcfs_plan(w)
     sw = _move("ATC", "swap_order", ["DL201", "AA302"], {"runway": "26R"}, "swap")

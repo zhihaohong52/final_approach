@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import atm  # noqa: E402,F401  (loads .env)
+import backend  # noqa: E402,F401  (loads .env)
 
 IDLE_S = 6 * 60
 FIRST_WAVES_BUDGET_MS = 3000.0
@@ -60,10 +60,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     n = max(1, args.n)
 
-    from atm.datastore import FileStore, set_store
-    from atm.datastore.fallback import FallbackStore
-    from atm.datastore.pg import PgStore
-    from atm.wave import build
+    from backend.datastore import FileStore, set_store
+    from backend.datastore.fallback import FallbackStore
+    from backend.datastore.pg import PgStore
+    from backend.wave import build
 
     primary = PgStore(url)
     primary.open()

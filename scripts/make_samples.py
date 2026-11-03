@@ -1,4 +1,4 @@
-"""Regenerate frontend/src/api/samples/* from the real API (FastAPI TestClient over atm.server.app).
+"""Regenerate frontend/src/api/samples/* from the real API (FastAPI TestClient over backend.server.app).
 
 Usage: PYTHONPATH=. python3 scripts/make_samples.py [wave_id]
 Uses a pre-recorded run (replay) so no model is called; runs and decisions are written to temp dirs."""
@@ -12,8 +12,8 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from atm import datastore, server
-from atm.datastore.files import FilePaths, FileStore
+from backend import datastore, server
+from backend.datastore.files import FilePaths, FileStore
 
 OUT = Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "samples"
 WAVE_ID = sys.argv[1] if len(sys.argv) > 1 else "F2015-270287"

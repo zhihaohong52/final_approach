@@ -1,8 +1,8 @@
 import math
 
 import pytest
-from atm.wave import build, route
-from atm.wave.fixtures import make_wave
+from backend.wave import build, route
+from backend.wave.fixtures import make_wave
 
 ORD = "F2015-270287"
 
@@ -52,7 +52,7 @@ def test_far_runway_costs_more_route_time():
 
 def test_corner_post_when_no_star(monkeypatch):
     # an airport with approaches but no STARs: ABE per GEO_COVERAGE.md
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     row = F.list_rows(airport="ABE", limit=1)[0]["row_id"]
     w = build.build_wave(f"F2015-{row}")
     r = route.build_route(w, w.flights[0].callsign, next(x.id for x in w.airport.runways if x.open))
@@ -62,8 +62,8 @@ def test_corner_post_when_no_star(monkeypatch):
 
 def test_straight_in_when_no_procedures(monkeypatch):
     # spec §12 "straight-in only" (PBI/ISN cannot be built: no runways.csv rows), simulated on ABE
-    from atm.geo import store
-    from atm.wave import flights2015 as F
+    from backend.geo import store
+    from backend.wave import flights2015 as F
     monkeypatch.setattr(store, "load_procedures", lambda icao: None); route.routes_for_wave.cache_clear()
     row = F.list_rows(airport="ABE", limit=1)[0]["row_id"]
     w = build.build_wave(f"F2015-{row}")
@@ -110,7 +110,7 @@ def test_select_star_prefers_origin_bearing_and_lower_id_without_origin():
 
 def test_ord_hold_at_benky_meter_fix(monkeypatch):
     # an origin due along BENKY6's BFORD transition (SHAIN2 shares BFORD; the tie goes to the lower id)
-    from atm.geo import store
+    from backend.geo import store
     w = build.build_wave(ORD)
     bford = store.load_procedures("KORD")["fixes"]["BFORD"]
     monkeypatch.setattr(build, "_airport_coords", lambda iata: tuple(bford))
@@ -141,7 +141,7 @@ def test_queue_arrivals_carry_origin():
 
 def test_renamed_runway_uses_its_current_cifp_designator():
     # KAUS 17L/17R/35L/35R in 2015 became 18L/18R/36L/36R in 2021 (runway_history.csv `renamed`)
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     w = build.build_wave(f"F2015-{F.list_rows(airport='AUS', limit=1)[0]['row_id']}")
     rw = next(x for x in w.airport.runways if x.open and x.id.startswith("35"))
     r = route.build_route(w, w.flights[0].callsign, rw.id)
@@ -150,7 +150,7 @@ def test_renamed_runway_uses_its_current_cifp_designator():
 
 def _wave_at(iata, date, rids):
     from dataclasses import replace
-    from atm.wave.model import Runway
+    from backend.wave.model import Runway
     w = make_wave()
     rws = [Runway(x, 0.0, 9000) for x in rids]
     return replace(w, airport=replace(w.airport, iata=iata, runways=rws), window_start=f"{date}T12:00:00")
@@ -164,7 +164,7 @@ def test_current_id_refuses_closed_or_reassigned_designators():
 
 
 def test_clt_2015_routes_land_on_their_own_threshold():
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     w = build.build_wave(f"F2015-{F.list_rows(airport='CLT', limit=1)[0]['row_id']}")
     for (cs, rid), r in route.routes_for_wave(w).items():
         rw = w.runway(rid)
@@ -200,7 +200,7 @@ def test_rf_arc_from_end_course_matches_centre_fix():
 
 
 def test_cifp_end_check_accepts_same_centreline_rejects_other_ends():
-    from atm.geo import store
+    from backend.geo import store
     w = build.build_wave(ORD)
     proc = store.load_procedures("KORD")
     assert route._cifp_end_check(proc, "09R", w.runway("09R")) is None     # 0.59 NM out, on the centreline
@@ -214,7 +214,7 @@ def test_cifp_end_check_accepts_same_centreline_rejects_other_ends():
 
 
 def test_hold_fix_on_final_moves_before_the_if():
-    from atm.wave.model import Runway
+    from backend.wave.model import Runway
     w = make_wave()
     rw = Runway("27L", 270.0, 9000, le_lat=33.63, le_lon=-84.40, he_lat=33.63, he_lon=-84.43)
     b = route._Builder(w, w.flights[0].callsign, rw, None)

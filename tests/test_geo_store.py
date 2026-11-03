@@ -1,6 +1,6 @@
 import pytest
 
-from atm.geo import store
+from backend.geo import store
 
 
 def test_kord_procedures_present():
@@ -15,7 +15,7 @@ def test_absent_airports():
 
 def test_coverage_counts():
     import os
-    from atm.wave.icao import icao_for
+    from backend.wave.icao import icao_for
     dests = [f[:-7] for f in os.listdir("data/challenge2/flights")]
     have = [store.load_procedures(icao_for(d)) for d in dests]
     assert sum(bool(h and h["stars"]) for h in have) == 111
@@ -43,7 +43,7 @@ def test_geo_procedures_match_files_by_sha256(live_db_url):
 def _movements_dir(tmp_path, monkeypatch):
     """Gzip the fixture into tmp_path/movements2015/XXX.csv.gz and point the loader and the FileStore at it."""
     import gzip, shutil
-    from atm.datastore import files
+    from backend.datastore import files
     d = tmp_path / "movements2015"; d.mkdir()
     with open("tests/data/movements/mini.csv", "rb") as f, gzip.open(d / "XXX.csv.gz", "wb") as g:
         shutil.copyfileobj(f, g)
@@ -73,12 +73,12 @@ def test_movements_window_crosses_midnight(tmp_path, monkeypatch):
 
 def files_cleanup(monkeypatch):
     monkeypatch.undo()
-    from atm.datastore import files
+    from backend.datastore import files
     files._movements.cache_clear(); store.load_movements.cache_clear()
 
 
 def test_flights2015_rows_have_taxi_in():
-    from atm.datastore import files
+    from backend.datastore import files
     df = files._dest_frame("ORD")
     assert {"wheels_on", "taxi_in", "wheels_off", "taxi_out"} <= set(df.columns) and df["taxi_in"].notna().mean() > 0.99
 
@@ -94,7 +94,7 @@ def test_top30_and_movement_airports():
 
 
 def test_movements_absent_file_is_none(tmp_path, monkeypatch):
-    from atm.datastore import files
+    from backend.datastore import files
     monkeypatch.setattr(files, "REF", tmp_path)
     files._movements.cache_clear(); store.load_movements.cache_clear()
     assert files.FileStore().movements_day("ORD", "2015-08-19") is None
@@ -106,7 +106,7 @@ def test_movements_absent_file_is_none(tmp_path, monkeypatch):
 def test_movements_day_blob_matches_file(live_db_url):
     import gzip, io
     import pandas as pd
-    from atm.datastore.pg import PgStore
+    from backend.datastore.pg import PgStore
     st = PgStore(live_db_url); st.open()
     try:
         blob = st.movements_day("ORD", "2015-08-19")

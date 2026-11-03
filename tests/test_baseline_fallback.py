@@ -1,11 +1,11 @@
 import time
 from dataclasses import replace
 
-from atm.wave import moves, rules
-from atm.wave.baseline import status_quo
-from atm.wave.fallback import solve
-from atm.wave.model import Gate, agent_ids
-from atm.wave.utility import agent_utility
+from backend.wave import moves, rules
+from backend.wave.baseline import status_quo
+from backend.wave.fallback import solve
+from backend.wave.model import Gate, agent_ids
+from backend.wave.utility import agent_utility
 from tests.fixtures import make_wave
 
 

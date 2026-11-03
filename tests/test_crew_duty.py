@@ -1,8 +1,8 @@
 from dataclasses import replace
 
-from atm.wave import rules
-from atm.wave.model import Assignment
-from atm.wave.moves import fcfs_plan
+from backend.wave import rules
+from backend.wave.model import Assignment
+from backend.wave.moves import fcfs_plan
 from tests.fixtures import make_wave
 
 

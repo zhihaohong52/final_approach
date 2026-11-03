@@ -1,6 +1,6 @@
 import json
 
-from atm.geo.osm_surface import build_surface
+from backend.geo.osm_surface import build_surface
 
 OSM = json.load(open("tests/data/osm/mini_airport.json"))
 RWYS = json.load(open("tests/data/osm/mini_runways.json"))

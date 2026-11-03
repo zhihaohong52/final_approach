@@ -2,10 +2,10 @@ from dataclasses import replace
 
 import pytest
 
-from atm.wave import build, route, rules, trajectory
-from atm.wave.model import Assignment, JointPlan, QueueArrival, agent_ids
-from atm.wave.moves import fcfs_plan
-from atm.wave.utility import evaluate
+from backend.wave import build, route, rules, trajectory
+from backend.wave.model import Assignment, JointPlan, QueueArrival, agent_ids
+from backend.wave.moves import fcfs_plan
+from backend.wave.utility import evaluate
 from tests.fixtures import make_wave
 from tests.test_trajectory import _far_runway
 
@@ -42,7 +42,7 @@ def test_wake_violation_against_queue_follower():
 
 
 def test_wake_s_arrival_values():
-    from atm.wave import constraints
+    from backend.wave import constraints
     assert constraints.wake_s_arrival("Heavy", "Large") == 129     # 5 nm at 140 kt
     assert constraints.wake_s_arrival("Large", "Large") == 77      # other pair 3 nm
     assert constraints.wake_s_arrival("Super", "Small") == 206     # 8 nm
@@ -170,7 +170,7 @@ def test_evaluate_shape():
     assert set(ev) == {"plan_id", "feasible", "checks", "utilities", "totals"}
     assert ev["plan_id"] == p.id
     assert set(ev["totals"]) == {"delay_min", "fuel_kg", "hold_min", "pax_protected_pct", "overtime_min", "diversions"}
-    from atm.wave.utility import negotiators
+    from backend.wave.utility import negotiators
     assert set(ev["utilities"]) == set(negotiators(w)) and len(ev["utilities"]) == 3
     assert {"ATC", "GROUND"} <= set(ev["utilities"]) and all(0 <= u <= 1 for u in ev["utilities"].values())
     keys = {"rule", "owner", "passed", "detail", "source", "evidence", "callsign"}
@@ -278,8 +278,8 @@ def test_nan_ground_delay_rejected():
 
 
 def test_nonfinite_minutes_rejected():
-    from atm.wave.model import Move
-    from atm.wave.moves import apply as apply_move
+    from backend.wave.model import Move
+    from backend.wave.moves import apply as apply_move
     w = make_wave()
     p = fcfs_plan(w)
     for m in (float("inf"), float("nan")):
@@ -304,10 +304,10 @@ def test_assignment_dict_omits_none():
 def test_divert_delay_includes_existing_delay():
     """A diverting flight keeps the delay it already has (late inbound), plus alternate + 90."""
     from dataclasses import replace as _r
-    from atm.wave.model import Assignment, FlightMetrics
-    from atm.wave.model import JointPlan
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import DIVERT_EXTRA_DELAY_MIN, metrics_map
+    from backend.wave.model import Assignment, FlightMetrics
+    from backend.wave.model import JointPlan
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import DIVERT_EXTRA_DELAY_MIN, metrics_map
     from tests.fixtures import make_wave
     w = make_wave()
     f = w.flights[0]
@@ -320,7 +320,7 @@ def test_divert_delay_includes_existing_delay():
 
 
 def test_limits_entries_present():
-    from atm.wave import rules
+    from backend.wave import rules
     names = {l["limit"]: l for l in rules.LIMITS}
     assert names["remote stand"]["value"] == "1 stand, 2 positions"
     assert "speed reduction cap" in names
@@ -465,7 +465,7 @@ def test_earliest_eta_regression_ord_mq3327_far_runway():
     assert not c.passed and "09L" in c.detail
     assert c.evidence["earliest_min"] == pytest.approx(e, abs=0.01)
     # metrics agree: no hold is drawn for a slot before the earliest landing
-    from atm.wave.utility import metrics_map
+    from backend.wave.utility import metrics_map
     assert metrics_map(w, q)["MQ3327"].hold_min == 0.0
     # at its 09L earliest it passes
     ok = p.with_assignment(replace(a, runway="09L", slot_min=e))
@@ -490,7 +490,7 @@ def test_crew_duty_unavoidable_uses_best_open_runway():
     """'Unavoidable' compares the duty end with the earliest in-block over every open runway, not the
     assigned runway: a flight on a far runway that could have made it on another one fails."""
     from dataclasses import replace as _r
-    from atm.wave.utility import metrics_map, taxi_min
+    from backend.wave.utility import metrics_map, taxi_min
     w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
     far = _far_runway(w, a.callsign)
     best = min(trajectory.earliest(w, a.callsign, r.id) + taxi_min(w, r.id, a.gate)

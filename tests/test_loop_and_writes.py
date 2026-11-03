@@ -10,10 +10,10 @@ import httpx
 import psycopg
 import pytest
 
-from atm import datastore, mcp_server, server
-from atm.datastore import pg
-from atm.datastore.fallback import FallbackStore
-from atm.wave import stub
+from backend import datastore, mcp_server, server
+from backend.datastore import pg
+from backend.datastore.fallback import FallbackStore
+from backend.wave import stub
 
 WID = "ATL-2024-07-15-16"
 
@@ -37,7 +37,7 @@ class Slow:
 
 
 def test_slow_store_does_not_block_the_event_loop(api_client, monkeypatch):
-    from atm.wave import replay
+    from backend.wave import replay
     files = datastore.get_store()
     monkeypatch.setattr(replay, "WB", stub)
     monkeypatch.setattr(replay, "GR", stub)
@@ -148,7 +148,7 @@ def test_shutdown_waits_for_in_flight_saves(monkeypatch, tmp_path):
             return True
         def close(self): events.append("closed")
 
-    from atm.datastore.files import FilePaths, FileStore
+    from backend.datastore.files import FilePaths, FileStore
     files = FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "d.jsonl"))
     datastore.set_store(FallbackStore(Primary(), files))
     try:
@@ -215,7 +215,7 @@ def test_waves_random_uses_one_session(monkeypatch):
 
 
 def test_record_prints_when_db_write_fell_back(api_client, monkeypatch, capsys):
-    from atm.wave import replay
+    from backend.wave import replay
     monkeypatch.setattr(pg.time, "sleep", lambda s: None)
     monkeypatch.setattr(replay, "WB", stub)
     monkeypatch.setattr(replay, "GR", stub)

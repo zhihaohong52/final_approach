@@ -2,9 +2,9 @@ import time
 
 import psycopg
 
-from atm import datastore
-from atm.datastore import pg
-from atm.datastore.fallback import FallbackStore
+from backend import datastore
+from backend.datastore import pg
+from backend.datastore.fallback import FallbackStore
 
 
 class Exploding:                                     # any primary call fails the test

@@ -10,9 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from atm.datastore import FileStore  # noqa: E402
-from atm.geo import store  # noqa: E402
-from atm.wave.icao import iata_for  # noqa: E402
+from backend.datastore import FileStore  # noqa: E402
+from backend.geo import store  # noqa: E402
+from backend.wave.icao import iata_for  # noqa: E402
 from scripts.fetch_cifp import airports  # noqa: E402
 
 OUT = ROOT / "data" / "ref" / "GEO_COVERAGE.md"

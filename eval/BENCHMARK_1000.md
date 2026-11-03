@@ -1,6 +1,6 @@
 # Scale run: 1,000 flights.csv rows (31 Oct 2026)
 
-Four parallel shards of `python3 -m atm.wave.benchmark --source flights2015 --n 250 --arms openrouter:typesafe/jev-1.14 --concurrency 12 --seed {101,102,103,104} --outage-n 0 --no-ablation` (999 unique waves; one row drawn by two seeds). Live TypeSafe jev-1.14 through OpenRouter; the formula arm runs on the same waves. Aggregated from the per-wave log lines.
+Four parallel shards of `python3 -m backend.wave.benchmark --source flights2015 --n 250 --arms openrouter:typesafe/jev-1.14 --concurrency 12 --seed {101,102,103,104} --outage-n 0 --no-ablation` (999 unique waves; one row drawn by two seeds). Live TypeSafe jev-1.14 through OpenRouter; the formula arm runs on the same waves. Aggregated from the per-wave log lines.
 
 | Arm | Waves | Consensus | Mean turns | Mean total delay (min) ± 95% CI |
 |---|---|---|---|---|

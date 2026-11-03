@@ -1,6 +1,6 @@
 import gzip, io
 import pandas as pd
-from atm.datastore import pack
+from backend.datastore import pack
 
 def test_gzip_is_deterministic_and_roundtrips():
     df = pd.DataFrame({"a": [1, 2], "b": ["x", None]})

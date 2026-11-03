@@ -1,9 +1,9 @@
 import json
 import pytest
-from atm import datastore
-from atm.datastore.files import FileStore
-from atm.datastore.pg import PgStore
-from atm.wave import build
+from backend import datastore
+from backend.datastore.files import FileStore
+from backend.datastore.pg import PgStore
+from backend.wave import build
 pytestmark = pytest.mark.live_db
 
 REPLAYS = ["F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"]
@@ -37,7 +37,7 @@ def test_parity_build_wave(live_db_url, wid):
                                   dict(q="F2015-2702"), dict(q="%"), dict(q="_"), dict(offset=50), dict(limit=0),
                                   dict(airport="CID")])
 def test_parity_listings(live_db_url, args):
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     a, b = _both(live_db_url, lambda: F.search(**{"limit": 20, **args}))
     assert a == b
     a, b = _both(live_db_url, lambda: build.list_waves(airport=args.get("airport"), q=args.get("q"), limit=20))
@@ -46,7 +46,7 @@ def test_parity_listings(live_db_url, args):
 def test_like_escape_percent_matches_nothing(live_db_url):
     datastore.set_store(PgStore(live_db_url))
     try:
-        from atm.wave import flights2015 as F
+        from backend.wave import flights2015 as F
         assert F.search(q="%", limit=5) == ([], 0)
     finally:
         datastore.set_store(None)

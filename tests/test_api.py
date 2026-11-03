@@ -4,8 +4,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from atm import datastore, server
-from atm.wave import stub
+from backend import datastore, server
+from backend.wave import stub
 
 WID = "ATL-2024-07-15-16"
 
@@ -90,7 +90,7 @@ def test_replay_missing_runs_live(client):
 
 
 def test_replay_streams_saved_run(client, monkeypatch):
-    from atm.wave import replay
+    from backend.wave import replay
     monkeypatch.setattr(replay, "WB", stub)
     monkeypatch.setattr(replay, "GR", stub)
     monkey_path = datastore.get_store().paths.replay_dir
@@ -143,11 +143,11 @@ def test_note_non_string(client):
 
 def test_stub_only_when_module_missing(monkeypatch):
     import importlib
-    from atm.wave import loader
+    from backend.wave import loader
     real = importlib.import_module
 
     def boom(name, *a, **k):
-        if name == "atm.wave.graph":
+        if name == "backend.wave.graph":
             raise ModuleNotFoundError("No module named 'langgraph'", name="langgraph")
         return real(name, *a, **k)
 
@@ -156,12 +156,12 @@ def test_stub_only_when_module_missing(monkeypatch):
         loader._load("graph")
 
     def missing(name, *a, **k):
-        if name == "atm.wave.graph":
-            raise ModuleNotFoundError("No module named 'atm.wave.graph'", name="atm.wave.graph")
+        if name == "backend.wave.graph":
+            raise ModuleNotFoundError("No module named 'backend.wave.graph'", name="backend.wave.graph")
         return real(name, *a, **k)
 
     monkeypatch.setattr(loader.importlib, "import_module", missing)
-    assert loader._load("graph").__name__ == "atm.wave.stub"
+    assert loader._load("graph").__name__ == "backend.wave.stub"
     monkeypatch.setenv("ATM_REQUIRE_REAL", "1")
     with pytest.raises(ModuleNotFoundError):
         loader._load("graph")

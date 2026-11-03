@@ -1,8 +1,8 @@
 """Model votes act only when confident: P >= 0.7 accepts, P <= 0.3 rejects, the band in between defers to the formula."""
 from types import SimpleNamespace as NS
 
-from atm.decide import Decider
-from atm.wave.graph import negotiate_wave
+from backend.decide import Decider
+from backend.wave.graph import negotiate_wave
 from tests.fixtures import make_wave
 
 

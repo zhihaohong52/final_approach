@@ -5,7 +5,7 @@
 
 **Goal:** Negotiate a real arrival wave (3-5 flights) between ATC, per-flight Pilot and Ground agents under deterministic safety rules, served live to a React dashboard from a public HF Space, with a model benchmark.
 
-**Architecture:** New package `atm/wave/` (data, rules, moves, utility, graph) on shared dataclasses in `atm/wave/model.py`; decision calls through `atm/decide.py` (fallback chain + circuit breaker); LangGraph drives the protocol and emits contract-shaped messages; FastAPI streams them as SSE. v1 (`atm/negotiation.py` etc.) is frozen and untouched.
+**Architecture:** New package `backend/wave/` (data, rules, moves, utility, graph) on shared dataclasses in `backend/wave/model.py`; decision calls through `backend/decide.py` (fallback chain + circuit breaker); LangGraph drives the protocol and emits contract-shaped messages; FastAPI streams them as SSE. v1 (`backend/negotiation.py` etc.) is frozen and untouched.
 
 **Tech Stack:** Python 3.12, FastAPI, LangGraph, langchain-typesafe (fallback: typesafe-sdk 0.7.5), anthropic, pandas, pytest; Vite + React + TS (teammate); Docker on HF Spaces.
 
@@ -14,14 +14,14 @@
 ## Global Constraints
 
 - Deadline 16:00 31 Oct 2026; cut order per spec §13 if behind (outside-agent MCP → map → OSM gates → months → LangSmith → /mcp → LangGraph → React).
-- No model decides legality; only `atm/wave/rules.py`. Every rejection cites rule, source and input values.
+- No model decides legality; only `backend/wave/rules.py`. Every rejection cites rule, source and input values.
 - Wind limits: FAA Order 8400.9 §6d — dry: crosswind ≤ 20 kt incl. gusts, tailwind ≤ 5 kt; not clear/dry: crosswind ≤ 15 kt, tailwind 0 (calm 0-3 kt counts as none); stricter of FAA and aircraft-type demonstrated crosswind.
 - Max 3 rounds; consensus = accepted by all agents; then deterministic fallback.
 - Vote: ACCEPT iff P(accept) ≥ 0.5; formulas: ACCEPT iff utility ≥ reservation.
 - Decision call: 2 s timeout, 1 retry on 429/5xx, breaker opens after 3 consecutive failures for 60 s; every fallback logged as a `MODEL_FALLBACK` message.
-- Months fixed: BTS 2024-06, 2024-07, 2024-08. Airports: the 30 hubs in `atm/wave/hubs.py:HUBS` (Task 1).
+- Months fixed: BTS 2024-06, 2024-07, 2024-08. Airports: the 30 hubs in `backend/wave/hubs.py:HUBS` (Task 1).
 - Never print/commit `.env`; agents never commit (the controller commits after review).
-- v1 files (`atm/negotiation.py`, `atm/plans.py`, `atm/scenario.py`, `atm/jev.py`, `web/index.html`) are not modified.
+- v1 files (`backend/negotiation.py`, `backend/plans.py`, `backend/scenario.py`, `backend/jev.py`, `web/index.html`) are not modified.
 - Tests live in `tests/`, run with `python -m pytest -q`.
 
 ## Review Focus
@@ -40,21 +40,21 @@
 
 | File | Responsibility | Task |
 |---|---|---|
-| `atm/wave/model.py` | dataclasses for Wave, WaveFlight, Gate, Runway, Metar, Assignment, JointPlan, Move, RuleCheck, Message; `to_dict()` = contract JSON | 1 |
-| `atm/wave/hubs.py` | `HUBS` list, `MONTHS` | 1 |
+| `backend/wave/model.py` | dataclasses for Wave, WaveFlight, Gate, Runway, Metar, Assignment, JointPlan, Move, RuleCheck, Message; `to_dict()` = contract JSON | 1 |
+| `backend/wave/hubs.py` | `HUBS` list, `MONTHS` | 1 |
 | `tests/fixtures.py` | `make_wave()` synthetic 4-flight wave for unit tests | 1 |
 | `scripts/fetch_bts.py` → `data/waves/arrivals.csv.gz`, `data/waves/index.csv` | real flights + wave index | 2 |
 | `scripts/fetch_ref.py` → `data/ref/runways.csv`, `metar.csv`, `aircraft.csv`, `gates.csv` | reference data | 3 |
-| `atm/wave/wind.py` | wind components + limits + type table | 4 |
-| `atm/decide.py` | provider chain, breaker, choice/noul/score | 5 |
+| `backend/wave/wind.py` | wind components + limits + type table | 4 |
+| `backend/decide.py` | provider chain, breaker, choice/noul/score | 5 |
 | `Dockerfile`, `.github/workflows/deploy-space.yml`, `requirements.txt`, `README` HF header | deploy | 6 |
-| `atm/wave/build.py` | `list_waves`, `build_wave` from data | 7 |
-| `atm/wave/rules.py`, `atm/wave/moves.py`, `atm/wave/utility.py` | engine, legal moves, metrics/utility | 8 |
-| `atm/wave/baseline.py`, `atm/wave/fallback.py` | status quo + max-min search | 9 |
-| `atm/wave/graph.py`, `atm/wave/narrate.py` | LangGraph protocol, Claude brief | 10 |
-| `atm/server.py` (add routes), `atm/wave/replay.py`, `frontend/src/api/types.ts`, `frontend/src/api/samples/*.json` | API + SSE + contract artefacts | 11 |
-| `atm/wave/benchmark.py` → `eval/benchmark.json`, `eval/BENCHMARK.md` | benchmark, outage, ablation | 12 |
-| `atm/mcp_server.py` | MCP tool registry at `/mcp` | 13 (cut #6) |
+| `backend/wave/build.py` | `list_waves`, `build_wave` from data | 7 |
+| `backend/wave/rules.py`, `backend/wave/moves.py`, `backend/wave/utility.py` | engine, legal moves, metrics/utility | 8 |
+| `backend/wave/baseline.py`, `backend/wave/fallback.py` | status quo + max-min search | 9 |
+| `backend/wave/graph.py`, `backend/wave/narrate.py` | LangGraph protocol, Claude brief | 10 |
+| `backend/server.py` (add routes), `backend/wave/replay.py`, `frontend/src/api/types.ts`, `frontend/src/api/samples/*.json` | API + SSE + contract artefacts | 11 |
+| `backend/wave/benchmark.py` → `eval/benchmark.json`, `eval/BENCHMARK.md` | benchmark, outage, ablation | 12 |
+| `backend/mcp_server.py` | MCP tool registry at `/mcp` | 13 (cut #6) |
 
 ## Phases (parallel groups)
 
@@ -68,7 +68,7 @@
 
 ### Task 1: Shared model, hubs, fixtures, deps (controller)
 
-**Files:** Create `atm/wave/__init__.py`, `atm/wave/model.py`, `atm/wave/hubs.py`, `tests/__init__.py`, `tests/fixtures.py`, `tests/test_model.py`, `requirements.txt`.
+**Files:** Create `backend/wave/__init__.py`, `backend/wave/model.py`, `backend/wave/hubs.py`, `tests/__init__.py`, `tests/fixtures.py`, `tests/test_model.py`, `requirements.txt`.
 
 **Produces:**
 - Dataclasses with exactly the contract's fields (snake_case): `Runway`, `Metar`, `RunwayWind`, `Gate`, `QueueArrival`, `WaveFlight`, `Airport`, `Wave` (= contract `WaveScenario`), `Assignment`, `FlightMetrics`, `JointPlan`, `Move`, `RuleCheck`, `Provenance`. Each has `to_dict() -> dict`.
@@ -107,7 +107,7 @@
 
 ### Task 4: Wind module (coder-simple)
 
-**Files:** Create `atm/wave/wind.py`, `tests/test_wind.py`.
+**Files:** Create `backend/wave/wind.py`, `tests/test_wind.py`.
 
 **Produces:**
 - `components(wind_dir: float|None, wind_kt: float, gust_kt: float|None, heading_true: float) -> tuple[headwind, crosswind, tailwind]` — gust used for crosswind; `wind_dir None` (VRB/missing) → crosswind = max(wind, gust), headwind 0, tailwind = max(wind,gust) if > 3 else 0.
@@ -121,7 +121,7 @@
 
 ### Task 5: Decision layer with fallback chain (coder → architect review)
 
-**Files:** Create `atm/decide.py`, `tests/test_decide.py`.
+**Files:** Create `backend/decide.py`, `tests/test_decide.py`.
 
 **Produces:**
 - `DecisionResult` dataclass: `value` (choice id | p_yes float | score int), `probabilities: dict|None`, `confidence: float|None`, `model: str`, `provider: "openrouter"|"typesafe"|"formula"`, `latency_ms: int`, `fallback_from: list[str]`, `errors: list[str]`.
@@ -139,16 +139,16 @@
 
 ### Task 6: Deploy pipeline (coder)
 
-**Files:** Create `Dockerfile`, `.dockerignore`, `.github/workflows/deploy-space.yml`, `scripts/space_readme_header.md`; modify `atm/server.py` only to mount `frontend/dist` at `/` when it exists (else keep `web/`), behind existing routes.
+**Files:** Create `Dockerfile`, `.dockerignore`, `.github/workflows/deploy-space.yml`, `scripts/space_readme_header.md`; modify `backend/server.py` only to mount `frontend/dist` at `/` when it exists (else keep `web/`), behind existing routes.
 
-- Dockerfile: stage `node:20-slim` builds `frontend/` if `frontend/package.json` exists (`npm ci && npm run build`), else creates empty dist; stage `python:3.12-slim` installs `requirements.txt`, copies `atm/ data/ eval/ web/` + dist, `CMD uvicorn atm.server:app --host 0.0.0.0 --port 7860`.
+- Dockerfile: stage `node:20-slim` builds `frontend/` if `frontend/package.json` exists (`npm ci && npm run build`), else creates empty dist; stage `python:3.12-slim` installs `requirements.txt`, copies `backend/ data/ eval/ web/` + dist, `CMD uvicorn backend.server:app --host 0.0.0.0 --port 7860`.
 - Workflow: on push to main, `git push --force https://james77mill:$HF_TOKEN@huggingface.co/spaces/james77mill/disruption-negotiator HEAD:main` with Space README header (`sdk: docker`, `app_port: 7860`) prepended in the pushed tree. Large CSVs excluded per `.gitignore`.
 - Space creation, Space secrets and `gh secret set HF_TOKEN` are done by the controller **after asking the user**.
-- [ ] Verify: `python -c "import atm.server"` OK; workflow YAML parses (`python -c "import yaml,sys;yaml.safe_load(open(...))"`). No local docker; first real build is on HF.
+- [ ] Verify: `python -c "import backend.server"` OK; workflow YAML parses (`python -c "import yaml,sys;yaml.safe_load(open(...))"`). No local docker; first real build is on HF.
 
 ### Task 7: Wave builder (coder)
 
-**Files:** Create `atm/wave/build.py`, `tests/test_build.py`.
+**Files:** Create `backend/wave/build.py`, `tests/test_build.py`.
 
 **Interfaces:** Consumes Task 1 dataclasses, Task 2/3 files, Task 4 `runway_wind`, `surface_from_metar`. Produces:
 - `list_waves(airport: str|None=None, q: str|None=None, limit=50) -> list[dict]` (contract `WaveSummary`).
@@ -160,10 +160,10 @@
 
 ### Task 8: Rules, moves, utility (architect)
 
-**Files:** Create `atm/wave/rules.py`, `atm/wave/moves.py`, `atm/wave/utility.py`, `tests/test_rules.py`, `tests/test_moves.py`.
+**Files:** Create `backend/wave/rules.py`, `backend/wave/moves.py`, `backend/wave/utility.py`, `tests/test_rules.py`, `tests/test_moves.py`.
 
 **Interfaces:** Consumes Task 1, Task 4. Produces:
-- `utility.metrics(wave, a: Assignment) -> FlightMetrics`; `utility.evaluate(wave, plan) -> PlanEvaluation dict` (contract shape: `feasible, checks, utilities, totals`); `utility.agent_utility(wave, plan, agent_id) -> float in [0,1]` (ATC: holding/runway load/taxi; PILOT:<cs>: own fuel/delay/connections; GROUND: overtime/turnaround/reassignment/bussing — weights adapted from v1 `atm/plans.py:utility`).
+- `utility.metrics(wave, a: Assignment) -> FlightMetrics`; `utility.evaluate(wave, plan) -> PlanEvaluation dict` (contract shape: `feasible, checks, utilities, totals`); `utility.agent_utility(wave, plan, agent_id) -> float in [0,1]` (ATC: holding/runway load/taxi; PILOT:<cs>: own fuel/delay/connections; GROUND: overtime/turnaround/reassignment/bussing — weights adapted from v1 `backend/plans.py:utility`).
 - `rules.check(wave, plan) -> list[RuleCheck]` covering all 9 RuleIds; between-flight: wake separation on same runway (time-based: HEAVY→LARGE 3 min, SUPER→any 4, else 2, × weather factor), gate overlap incl. queue occupancy; ATC-WIND-LIMITS uses `wind.limits(surface, aircraft_type)`; `rules.feasible(wave, plan) -> bool`.
 - `moves.fcfs_plan(wave) -> JointPlan`; `moves.legal_moves(wave, plan, agent_id) -> list[Move]` (authority per spec §6; ≤ 12 options, most useful first); `moves.apply(wave, plan, move) -> JointPlan` (re-slots to earliest legal slot after order/runway changes).
 
@@ -171,14 +171,14 @@
 
 ### Task 9: Baseline + fallback search (coder)
 
-**Files:** Create `atm/wave/baseline.py`, `atm/wave/fallback.py`, `tests/test_baseline_fallback.py`.
+**Files:** Create `backend/wave/baseline.py`, `backend/wave/fallback.py`, `tests/test_baseline_fallback.py`.
 
 **Interfaces:** Consumes Task 8 (code against its signatures; merge after 8). Produces `baseline.status_quo(wave) -> JointPlan` (FCFS first open runway, scheduled gate with apron wait, divert if hold > extra fuel; may violate GND-CREW-DUTY, reported not hidden); `fallback.solve(wave, budget=400) -> tuple[JointPlan, str]` — beam/greedy search over `legal_moves` from `fcfs_plan`, returns max-min agent utility among feasible plans; if none feasible returns all-divert-or-ground-delay plan; method string e.g. `"beam(width=20) max-min utility"`.
 - [ ] Tests: `test_fallback_always_feasible` (incl. Review Focus 3 wave), `test_baseline_matches_fcfs_order`.
 
 ### Task 10: LangGraph negotiation + narration (architect)
 
-**Files:** Create `atm/wave/graph.py`, `atm/wave/narrate.py`, `tests/test_graph.py`.
+**Files:** Create `backend/wave/graph.py`, `backend/wave/narrate.py`, `tests/test_graph.py`.
 
 **Interfaces:** Consumes Tasks 5, 8, 9. Produces:
 - `negotiate_wave(wave: Wave, mode: "formulas"|"decision"|"decision+claude", chain: list[str]|None=None, on_message: Callable[[dict], None]|None=None) -> dict` (contract `NegotiationResult`, `log` included). Messages are contract `NegotiationMessage` dicts in contract order (§ "Message order"), emitted via `on_message` as produced.
@@ -191,7 +191,7 @@
 
 ### Task 11: API, SSE, replay, contract artefacts (coder)
 
-**Files:** Modify `atm/server.py` (add routes only); create `atm/wave/replay.py`, `frontend/src/api/types.ts`, `frontend/src/api/samples/{config,waves,wave,negotiate_stream,result,benchmark}.json`, `tests/test_api.py`.
+**Files:** Modify `backend/server.py` (add routes only); create `backend/wave/replay.py`, `frontend/src/api/types.ts`, `frontend/src/api/samples/{config,waves,wave,negotiate_stream,result,benchmark}.json`, `tests/test_api.py`.
 
 **Interfaces:** Consumes Tasks 7, 10 (start with a stub that replays fixture messages). Produces routes exactly per contract: `GET /api/config, /api/waves, /api/waves/random, /api/wave/{id}, /api/runs/{run_id}, /api/benchmark, /api/eval`; `POST /api/negotiate-wave` (SSE `start|message|result|error` frames; `stream:false` → JSON), `POST /api/decision` (v2 body `{run_id, decision, note}`, appends to `eval/decisions.jsonl`; OVERRIDE without note → 422). Runs kept in-memory + `eval/runs/{run_id}.json`. Per-IP limit 10 live runs / 10 min → 429 with `retry_after_s`. `replay.record(wave_ids)` saves runs to `data/replay/`; `replay=true` streams them with 150 ms spacing, no model calls.
 - `types.ts` = contract types verbatim; samples = real responses captured from the running server.
@@ -200,9 +200,9 @@
 
 ### Task 12: Benchmark, outage test, ablation (coder)
 
-**Files:** Create `atm/wave/benchmark.py`, `tests/test_benchmark_small.py`. Outputs `eval/benchmark.json` (contract `BenchmarkReport`), `eval/BENCHMARK.md`.
+**Files:** Create `backend/wave/benchmark.py`, `tests/test_benchmark_small.py`. Outputs `eval/benchmark.json` (contract `BenchmarkReport`), `eval/BENCHMARK.md`.
 
-- CLI: `python -m atm.wave.benchmark --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 16 --seed 7`. Same 50 waves (seeded sample of index, stratified by airport) for all arms; each arm's chain = [arm, "formula"].
+- CLI: `python -m backend.wave.benchmark --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 16 --seed 7`. Same 50 waves (seeded sample of index, stratified by airport) for all arms; each arm's chain = [arm, "formula"].
 - Metrics per contract `summary`; Brier vs formula verdict; agreement = same final plan id as formulas arm; cost from OpenRouter usage if returned else tokens × list price.
 - Outage: rerun 20 waves with chain `["openrouter:invalid/model", winner, "formula"]` → `outage_test`. Ablation: engine off (skip rules in move/vote) → % agreed plans with violations.
 - Selection: winner = best (delay, pax_protected) with error_rate < 2% and p95 < 1000 ms; else best on outcome with the threshold miss stated in `selection.reasons`. Write winner into `eval/benchmark.json`; `Config.default_model` reads it.
@@ -210,7 +210,7 @@
 
 ### Task 13: MCP endpoint (coder-simple; cut #6)
 
-**Files:** Create `atm/mcp_server.py`; modify `atm/server.py` to mount at `/mcp`.
+**Files:** Create `backend/mcp_server.py`; modify `backend/server.py` to mount at `/mcp`.
 - FastMCP tools wrapping `build.list_waves`, `build.build_wave`, `moves.legal_moves`, `rules.check`, `utility.evaluate` (read-only), plus `negotiate_wave(formulas)`. Verify with `mcp` client listing tools.
 
 ### Final (controller)

@@ -1,6 +1,6 @@
-from atm.wave import build as B
-from atm.wave import edit
-from atm.wave.graph import negotiate_wave
+from backend.wave import build as B
+from backend.wave import edit
+from backend.wave.graph import negotiate_wave
 
 
 def _agreed(wave_id="F2015-270287"):
@@ -39,7 +39,7 @@ def test_runways_follow_the_wave_date():
 
 def test_evaluate_endpoint():
     from fastapi.testclient import TestClient
-    from atm import server
+    from backend import server
     c = TestClient(server.app)
     _, rows = _agreed()
     r = c.post("/api/evaluate", json={"wave_id": "F2015-270287", "assignments": rows})
@@ -49,7 +49,7 @@ def test_evaluate_endpoint():
 
 
 def test_runway_history_layouts():
-    from atm.wave import build as B
+    from backend.wave import build as B
     ids = lambda a, d: {r.id: r for r in B._runways(a, d)}
     ord15 = ids("ORD", "2015-08-19")
     assert "09C" not in ord15 and "10R" not in ord15                 # opened 2020 / 2015-10-15

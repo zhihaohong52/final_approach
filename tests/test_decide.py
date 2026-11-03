@@ -3,8 +3,8 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from atm import decide
-from atm.decide import Decider
+from backend import decide
+from backend.decide import Decider
 
 
 @pytest.fixture(autouse=True)

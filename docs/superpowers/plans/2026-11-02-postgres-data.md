@@ -5,7 +5,7 @@
 **Goal:** Every dataset the app reads or writes (live state, reference data, raw challenge files and, later, flight-path geometry) lives in Neon Postgres. A file backend keeps tests, offline dev and outages working with identical results.
 
 **Architecture:**
-- A new `atm/datastore/` package is the only code that knows where data lives. It has three stores:
+- A new `backend/datastore/` package is the only code that knows where data lives. It has three stores:
   - `FileStore`: today's files.
   - `PgStore`: psycopg 3 over Neon's pooled endpoint.
   - `FallbackStore`: Postgres first, then files, with a circuit breaker.
@@ -30,7 +30,7 @@
 - Retention: newest **2,000** unpinned runs; `live.iem_cache` ≤ **40 MB**. Pruning runs after a write, at most once per hour per process.
 - Seeder: default size guard `--budget-mb 750`. The `raw` dataset always loads last and is the first thing `--drop raw` removes.
 - Schemas: `ref`, `geo`, `live`, `eval`, `raw`, `meta`, plus PostGIS in `extensions`. Group roles `app_read` and `app_write` (NOLOGIN); the login role `atm_app` is created by the user, never by code (deferred: optional step in Task 11).
-- Every `scripts/db_*.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import atm` (which loads `.env`) before reading env vars, so `python3 scripts/db_*.py …` works from the repo root without `PYTHONPATH`.
+- Every `scripts/db_*.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import backend` (which loads `.env`) before reading env vars, so `python3 scripts/db_*.py …` works from the repo root without `PYTHONPATH`.
 - Columns keep the source file's names and representation: flags as `int2` 0/1; every file-backed table has `ord int4` = the row's 0-based position in the source, and reads `order by ord`.
 - Budgets (design §10): wave build p95 ≤ 400 ms with the compute awake; `/api/waves` and `/api/flights` p95 ≤ 300 ms; `/api/runs/{id}` p95 ≤ 150 ms; a wake adds ≤ 1.5 s once.
 - Neon project: region `aws-us-west-2` (Render's default region is `oregon`), compute fixed at 0.25 CU.
@@ -47,7 +47,7 @@
 
 ## File Structure
 
-**New package `atm/datastore/`**
+**New package `backend/datastore/`**
 - `__init__.py`: `get_store()`, `set_store()`, backend selection.
 - `base.py`: `Store` protocol, `StoreStatus`, `DataUnavailable`.
 - `datasets.py`: registry of file-backed datasets (source path, table, columns, pandas read kwargs).
@@ -61,7 +61,7 @@
 - `scripts/db_migrate.py`, `scripts/db_seed.py`, `scripts/db_dump_live.py`, `scripts/db_timings.py`.
 
 **Modified**
-- `atm/wave/build.py`, `atm/wave/flights2015.py`, `atm/wave/constraints.py`, `atm/scenario.py`, `atm/wave/replay.py`, `atm/wave/benchmark.py`, `atm/server.py`, `scripts/make_samples.py`.
+- `backend/wave/build.py`, `backend/wave/flights2015.py`, `backend/wave/constraints.py`, `backend/scenario.py`, `backend/wave/replay.py`, `backend/wave/benchmark.py`, `backend/server.py`, `scripts/make_samples.py`.
 - `requirements.txt`, `pytest.ini`, `render.yaml`, `README.md`.
 - Contract files: `docs/api-contract.md`, `frontend/src/api/types.ts`, `frontend/src/api/samples/config.json`, `decision.json`.
 - `docs/superpowers/plans/2026-11-02-flight-paths-and-taxi.md` (Task 13).
@@ -78,7 +78,7 @@
 ### Task 1: Datastore package, backend selection, offline test guard
 
 **Files:**
-- Create: `atm/datastore/__init__.py`, `atm/datastore/base.py`, `atm/datastore/files.py` (class shell with `status()` only), `tests/conftest.py`, `tests/test_datastore_select.py`
+- Create: `backend/datastore/__init__.py`, `backend/datastore/base.py`, `backend/datastore/files.py` (class shell with `status()` only), `tests/conftest.py`, `tests/test_datastore_select.py`
 - Modify: `requirements.txt` (add `psycopg[binary]==3.3.6`, `psycopg-pool==3.3.3`), `pytest.ini` (add marker `live_db: needs DATABASE_TEST_URL (a Neon test branch)`)
 
 **Interfaces:**
@@ -103,8 +103,8 @@
 ```python
 import os
 import pytest
-from atm import datastore
-from atm.datastore.files import FileStore
+from backend import datastore
+from backend.datastore.files import FileStore
 
 def test_suite_runs_on_files():
     assert os.environ.get("ATM_STORE") == "files"
@@ -123,27 +123,27 @@ def test_files_status_is_not_persistent():
 ```
 
 `tests/conftest.py`, in this order:
-- **At module top level**, as the file's first statements (so it also covers test *collection*): `import atm` (its `.env` loader runs now, not later), then save `os.environ.get("DATABASE_TEST_URL")` in a module global `TEST_DB_URL`, delete `DATABASE_URL_POOLED`, `DATABASE_URL` and `DATABASE_TEST_URL` from `os.environ`, and set `ATM_STORE=files`. Collection-time code (e.g. `parametrize` over `benchmark.sample_wave_ids`) must never see a database URL.
+- **At module top level**, as the file's first statements (so it also covers test *collection*): `import backend` (its `.env` loader runs now, not later), then save `os.environ.get("DATABASE_TEST_URL")` in a module global `TEST_DB_URL`, delete `DATABASE_URL_POOLED`, `DATABASE_URL` and `DATABASE_TEST_URL` from `os.environ`, and set `ATM_STORE=files`. Collection-time code (e.g. `parametrize` over `benchmark.sample_wave_ids`) must never see a database URL.
 - An autouse, session-scoped fixture that calls `datastore.set_store(None)` at the start.
 - A function-scoped fixture `live_db_url(monkeypatch)`. It calls `pytest.skip("DATABASE_TEST_URL not set")` when `TEST_DB_URL` is None; otherwise it runs `monkeypatch.setenv("DATABASE_TEST_URL", TEST_DB_URL)` (scripts called with `--url-env DATABASE_TEST_URL` read it) and returns the URL.
 
 Keep `tests/fixtures.py` untouched.
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_datastore_select.py -q`. Expected: FAIL (`ModuleNotFoundError: atm.datastore`).
-- [ ] **Step 3: Implement** the files above. `pip install -r requirements.txt` must succeed. `atm/datastore/__init__.py` must not import `psycopg` at module import time; it is imported lazily in the pg branch.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_datastore_select.py -q`. Expected: FAIL (`ModuleNotFoundError: backend.datastore`).
+- [ ] **Step 3: Implement** the files above. `pip install -r requirements.txt` must succeed. `backend/datastore/__init__.py` must not import `psycopg` at module import time; it is imported lazily in the pg branch.
 - [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: all pass (existing tests + 3 new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/__init__.py atm/datastore/base.py atm/datastore/files.py tests/conftest.py tests/test_datastore_select.py requirements.txt pytest.ini
+git add backend/datastore/__init__.py backend/datastore/base.py backend/datastore/files.py tests/conftest.py tests/test_datastore_select.py requirements.txt pytest.ini
 git commit -m "feat(datastore): store package, backend selection, offline test guard"
 ```
 
 ### Task 2: FileStore reference reads; builders read through the store
 
 **Files:**
-- Create: `atm/datastore/datasets.py`, `tests/test_store_files.py`, `tests/test_no_db_in_hot_path.py`
-- Modify: `atm/datastore/files.py`, `atm/wave/build.py` (`_index`, `_index_row`, `_arrivals`, `_window_rows`, `_runways_by_airport`, `_metar_table`, `_aircraft_table`, `_gates_table`, `_airlines`, `_airports`, `_runway_history`, `_summary`, `list_waves`, `random_wave`), `atm/wave/flights2015.py` (`_index`, `_locate`, `_dest_frame`, `search`, `build_from_row`'s day filter), `atm/wave/constraints.py` (`_load`), `atm/scenario.py` (`disruptions`, `airports`, `airlines`)
+- Create: `backend/datastore/datasets.py`, `tests/test_store_files.py`, `tests/test_no_db_in_hot_path.py`
+- Modify: `backend/datastore/files.py`, `backend/wave/build.py` (`_index`, `_index_row`, `_arrivals`, `_window_rows`, `_runways_by_airport`, `_metar_table`, `_aircraft_table`, `_gates_table`, `_airlines`, `_airports`, `_runway_history`, `_summary`, `list_waves`, `random_wave`), `backend/wave/flights2015.py` (`_index`, `_locate`, `_dest_frame`, `search`, `build_from_row`'s day filter), `backend/wave/constraints.py` (`_load`), `backend/scenario.py` (`disruptions`, `airports`, `airlines`)
 
 **Interfaces:**
 - Consumes: `Store` and `FileStore` (Task 1).
@@ -171,10 +171,10 @@ git commit -m "feat(datastore): store package, backend selection, offline test g
 ```python
 # tests/test_store_files.py
 import pandas as pd
-from atm import datastore
-from atm.datastore.files import FileStore
-from atm.datastore.datasets import DATASETS
-from atm.wave import build, flights2015 as F
+from backend import datastore
+from backend.datastore.files import FileStore
+from backend.datastore.datasets import DATASETS
+from backend.wave import build, flights2015 as F
 
 def test_frame_equals_direct_read():
     for name in ("runways", "aircraft", "airports", "waves_index"):
@@ -216,8 +216,8 @@ def test_builders_go_through_the_store(monkeypatch):
 
 ```python
 # tests/test_no_db_in_hot_path.py
-from atm import datastore
-from atm.wave import build, graph
+from backend import datastore
+from backend.wave import build, graph
 
 class Exploding:
     def __getattr__(self, name):
@@ -229,26 +229,26 @@ def test_negotiation_and_evaluate_never_touch_the_store():
     try:
         res = graph.negotiate_wave(w, "formulas", ["formula"], lambda m: None, narrate=False)
         assert res["outcome"] in ("consensus", "fallback")
-        from atm.wave import edit
+        from backend.wave import edit
         edit.check_edit(w, edit.plan_from_dicts(res["final_plan"]["assignments"]))
     finally:
         datastore.set_store(None)
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_store_files.py tests/test_no_db_in_hot_path.py -q`. Expected: FAIL (`ModuleNotFoundError: atm.datastore.datasets`).
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_store_files.py tests/test_no_db_in_hot_path.py -q`. Expected: FAIL (`ModuleNotFoundError: backend.datastore.datasets`).
 - [ ] **Step 3: Implement.** Move the file reads into `FileStore` and the registry. `build._window_rows(iata, date, hour)` uses `get_store().arrivals_day(iata, date)` instead of `_arrivals(iata)` + groups. The rest of its body is unchanged: the categorical-to-object casts become no-ops on a plain-str frame. Add `build._arrivals_cache_clear()`, which clears the FileStore per-airport cache (used by tests only). `flights2015.build_from_row` uses `get_store().flights2015_day(dest, arr_date)` and keeps its `cancelled == 0` filter. `search` delegates to `get_store().search_flights2015`. Keep every public function signature unchanged.
 - [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: all pass, including `test_build.py`, `test_flights2015.py`, `test_api.py`, `test_graph.py` and `test_build_speed`. Then run `PYTHONPATH=. python3 scripts/make_samples.py` followed by `git diff --stat frontend/src/api/samples`. Expected: no changes except volatile ids/timestamps (`run_id`, `started_at`, `recorded_at`). If anything else changed, the refactor changed behaviour: fix it, do not commit samples. Then `git restore frontend/src/api/samples` so the tree is clean.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/datasets.py atm/datastore/files.py atm/wave/build.py atm/wave/flights2015.py atm/wave/constraints.py atm/scenario.py tests/test_store_files.py tests/test_no_db_in_hot_path.py
+git add backend/datastore/datasets.py backend/datastore/files.py backend/wave/build.py backend/wave/flights2015.py backend/wave/constraints.py backend/scenario.py tests/test_store_files.py tests/test_no_db_in_hot_path.py
 git commit -m "refactor(datastore): reference data read through FileStore; hot path guarded"
 ```
 
 ### Task 3: FileStore live state, replays, benchmark, IEM cache; server reads through the store
 
 **Files:**
-- Modify: `atm/datastore/files.py`, `atm/server.py` (`_save_run`, `get_run`, `decision`, `_benchmark`, `eval_results`, `_replay_summaries`, `negotiate_wave` replay load, `config.replay_available`), `atm/wave/replay.py` (`record`, `load`), `atm/wave/flights2015.py` (`_fetch_iem` disk cache), `atm/wave/build.py` (`_summary.replay_available`), `atm/wave/benchmark.py` (after writing `benchmark.json`, call `put_benchmark`), `tests/test_api.py` (fixture), `scripts/make_samples.py`
+- Modify: `backend/datastore/files.py`, `backend/server.py` (`_save_run`, `get_run`, `decision`, `_benchmark`, `eval_results`, `_replay_summaries`, `negotiate_wave` replay load, `config.replay_available`), `backend/wave/replay.py` (`record`, `load`), `backend/wave/flights2015.py` (`_fetch_iem` disk cache), `backend/wave/build.py` (`_summary.replay_available`), `backend/wave/benchmark.py` (after writing `benchmark.json`, call `put_benchmark`), `tests/test_api.py` (fixture), `scripts/make_samples.py`
 - Test: `tests/test_store_files.py` (append)
 
 **Interfaces:**
@@ -269,7 +269,7 @@ git commit -m "refactor(datastore): reference data read through FileStore; hot p
 
 ```python
 def test_runs_roundtrip_and_list(tmp_path):
-    from atm.datastore.files import FilePaths
+    from backend.datastore.files import FilePaths
     s = FileStore(FilePaths(runs_dir=tmp_path / "runs"))
     assert s.save_run({"run_id": "abcdef012345", "wave_id": "W1", "outcome": "consensus"})
     assert s.get_run("abcdef012345")["wave_id"] == "W1"
@@ -277,7 +277,7 @@ def test_runs_roundtrip_and_list(tmp_path):
     assert [r["run_id"] for r in s.list_runs("W1", 5)] == ["abcdef012345"]
 
 def test_decision_appends_both_shapes(tmp_path):
-    from atm.datastore.files import FilePaths
+    from backend.datastore.files import FilePaths
     p = tmp_path / "d.jsonl"
     s = FileStore(FilePaths(decisions_path=p))
     assert s.record_decision({"run_id": "abcdef012345", "decision": "APPROVE", "note": "", "edits": []})
@@ -288,7 +288,7 @@ def test_replay_ids_are_the_demo_set():
     assert FileStore().replay_ids() == {"F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"}
 
 def test_iem_cache_roundtrip(tmp_path):
-    from atm.datastore.files import FilePaths
+    from backend.datastore.files import FilePaths
     s = FileStore(FilePaths(iem_dir=tmp_path))
     assert s.iem_get("ORD", "2015-08-19") is None
     s.iem_put("ORD", "2015-08-19", "station,valid\nORD,2015-08-19 00:51\n")
@@ -300,8 +300,8 @@ The `tests/test_api.py` fixture becomes:
 ```python
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    from atm import datastore
-    from atm.datastore.files import FileStore, FilePaths
+    from backend import datastore
+    from backend.datastore.files import FileStore, FilePaths
     monkeypatch.setattr(server, "WB", stub)
     monkeypatch.setattr(server, "GR", stub)
     datastore.set_store(FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "decisions.jsonl",
@@ -321,7 +321,7 @@ Every other `server.RUNS_DIR` / `DECISIONS` / `REPLAY_DIR` / `BENCHMARK` referen
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/files.py atm/server.py atm/wave/replay.py atm/wave/flights2015.py atm/wave/build.py atm/wave/benchmark.py tests/test_api.py tests/test_store_files.py scripts/make_samples.py
+git add backend/datastore/files.py backend/server.py backend/wave/replay.py backend/wave/flights2015.py backend/wave/build.py backend/wave/benchmark.py tests/test_api.py tests/test_store_files.py scripts/make_samples.py
 git commit -m "refactor(datastore): runs, decisions, replays, benchmark and IEM cache through the store"
 ```
 
@@ -343,7 +343,7 @@ git commit -m "refactor(datastore): runs, decisions, replays, benchmark and IEM 
   - Pre-flight rulings:
     - `checksums(dir)` returns `{filename: sha256}` (the lint test reverses each `sha  name` line).
     - The runner applies **every** file whose version is not in `meta.schema_migrations`, in sorted order, gaps allowed. Task 8 may add a `0006_…` before Task 12 adds `0005_geo.sql`.
-    - `db_migrate.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import atm` (loads `.env`), then reads `DATABASE_URL` (direct, owner).
+    - `db_migrate.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import backend` (loads `.env`), then reads `DATABASE_URL` (direct, owner).
     - Keep the spec's DDL form `create table ref.<t> (` (lowercase, one space); the lint regex depends on it.
 
 - [ ] **Step 1: Write the failing tests**
@@ -398,8 +398,8 @@ git commit -m "feat(db): schema migrations (ref, live, eval, raw, meta; app role
 ### Task 5: PgStore connection layer and FallbackStore
 
 **Files:**
-- Create: `atm/datastore/pg.py`, `atm/datastore/fallback.py`, `tests/test_fallback_store.py`
-- Modify: `atm/datastore/__init__.py` (the pg branch)
+- Create: `backend/datastore/pg.py`, `backend/datastore/fallback.py`, `tests/test_fallback_store.py`
+- Modify: `backend/datastore/__init__.py` (the pg branch)
 
 **Interfaces:**
 - Consumes: `Store`, `StoreStatus`, `FileStore`.
@@ -428,9 +428,9 @@ git commit -m "feat(db): schema migrations (ref, live, eval, raw, meta; app role
 # tests/test_fallback_store.py
 import psycopg
 import pytest
-from atm.datastore.fallback import FallbackStore
-from atm.datastore.files import FileStore
-from atm.datastore import pg
+from backend.datastore.fallback import FallbackStore
+from backend.datastore.files import FileStore
+from backend.datastore import pg
 
 class Down:
     calls = 0
@@ -479,14 +479,14 @@ def test_pool_settings(monkeypatch):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/pg.py atm/datastore/fallback.py atm/datastore/__init__.py tests/test_fallback_store.py
+git add backend/datastore/pg.py backend/datastore/fallback.py backend/datastore/__init__.py tests/test_fallback_store.py
 git commit -m "feat(datastore): PgStore connection layer (NullConnectionPool, retries) and FallbackStore with breaker"
 ```
 
 ### Task 6: PgStore live state, replays, benchmark, IEM cache
 
 **Files:**
-- Modify: `atm/datastore/pg.py`
+- Modify: `backend/datastore/pg.py`
 - Create: `tests/test_pg_live.py` (all `live_db`)
 
 **Interfaces:**
@@ -496,7 +496,7 @@ git commit -m "feat(datastore): PgStore connection layer (NullConnectionPool, re
   - `get_run`: by PK.
   - `list_runs(wave_id, limit)`: returns `run_id, wave_id, mode, model, outcome, created_at` (ISO) and `decided` (exists in `live.decisions`), newest first, with `limit` clamped to 1..100.
   - `record_decision(row)`: inserts, and in the same transaction runs `update live.runs set pinned = true where run_id = %s` (0 rows is fine). Returns True.
-  - `replay`, `replay_ids`, `put_replay(wave_id, body, engine_version)`: `replay_ids` returns ids for `engine_version = atm.wave.version.ENGINE_VERSION` if that module exists, else `'v2'`.
+  - `replay`, `replay_ids`, `put_replay(wave_id, body, engine_version)`: `replay_ids` returns ids for `engine_version = backend.wave.version.ENGINE_VERSION` if that module exists, else `'v2'`.
   - `benchmark_current`, `put_benchmark`: `put_benchmark` with `current=True` clears the previous `is_current` row in the same transaction.
   - `v1_eval`.
   - `iem_get` returns `(fetched_at.timestamp(), body)`. `iem_put` upserts; when the table exceeds 40 MB (`pg_total_relation_size('live.iem_cache')`, checked at most hourly) it deletes the oldest-fetched rows down to 30 MB.
@@ -509,7 +509,7 @@ git commit -m "feat(datastore): PgStore connection layer (NullConnectionPool, re
 
 ```python
 import pytest
-from atm.datastore.pg import PgStore
+from backend.datastore.pg import PgStore
 pytestmark = pytest.mark.live_db
 
 def _clean(url, current_id=None):
@@ -577,14 +577,14 @@ def test_iem_roundtrip(s):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/pg.py tests/test_pg_live.py
+git add backend/datastore/pg.py tests/test_pg_live.py
 git commit -m "feat(datastore): PgStore runs, decisions, replays, benchmark and IEM cache"
 ```
 
 ### Task 7: Seeder framework and the live/eval datasets
 
 **Files:**
-- Create: `atm/datastore/pack.py`, `scripts/db_seed.py`, `tests/test_pack.py`, `tests/test_seed.py`
+- Create: `backend/datastore/pack.py`, `scripts/db_seed.py`, `tests/test_pack.py`, `tests/test_seed.py`
 
 **Interfaces:**
 - Consumes: `DATASETS` (Task 2), migrations (Task 4), `FilePaths` defaults.
@@ -608,7 +608,7 @@ git commit -m "feat(datastore): PgStore runs, decisions, replays, benchmark and 
   - Pre-flight rulings:
     - `SEEDERS` holds all 13 names of design §9 in order from this task on (`small, workbook, waves, bts_arrivals, metar_2024, iem_cache, flights2015, disruptions_v1, replays, runs_import, benchmark, v1_eval, raw`). Those owned by Task 8 (`small … flights2015`, `disruptions_v1`) and Task 9 (`raw`) are placeholders whose `load` raises `NotImplementedError("lands in Task 8/9")`; `iem_cache` is real here.
     - `swap_load`: `like … including constraints` does not copy primary keys or unique constraints (they are indexes), so `index_sql` must recreate them (`alter table <t>__new add primary key (…)`, `… add unique (…)`) along with the indexes.
-    - `db_seed.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import atm` (loads `.env`), then reads `DATABASE_URL` (or `--url-env`).
+    - `db_seed.py` starts with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import backend` (loads `.env`), then reads `DATABASE_URL` (or `--url-env`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -616,7 +616,7 @@ git commit -m "feat(datastore): PgStore runs, decisions, replays, benchmark and 
 # tests/test_pack.py
 import gzip, io
 import pandas as pd
-from atm.datastore import pack
+from backend.datastore import pack
 
 def test_gzip_is_deterministic_and_roundtrips():
     df = pd.DataFrame({"a": [1, 2], "b": ["x", None]})
@@ -676,7 +676,7 @@ def test_failed_load_keeps_old_table(live_db_url, monkeypatch):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/datastore/pack.py scripts/db_seed.py tests/test_pack.py tests/test_seed.py
+git add backend/datastore/pack.py scripts/db_seed.py tests/test_pack.py tests/test_seed.py
 git commit -m "feat(db): idempotent seeder with shadow-table swap, size guard; replays, runs, benchmark, IEM cache"
 ```
 
@@ -685,7 +685,7 @@ git commit -m "feat(db): idempotent seeder with shadow-table swap, size guard; r
 ### Task 8: Reference datasets in Postgres, PgStore reads, parity
 
 **Files:**
-- Modify: `scripts/db_seed.py` (seeders `small`, `workbook`, `waves`, `bts_arrivals`, `metar_2024`, `flights2015`, `disruptions_v1`), `atm/datastore/pg.py` (reference and wave methods), `atm/wave/build.py` (`session()` wrapping, `_reset_caches`, summaries from `wave_rows`), `atm/wave/flights2015.py` (`session()` wrapping), `tests/test_seed.py` (remove the Task 7 skip; add `test_grants_survive_reseed`)
+- Modify: `scripts/db_seed.py` (seeders `small`, `workbook`, `waves`, `bts_arrivals`, `metar_2024`, `flights2015`, `disruptions_v1`), `backend/datastore/pg.py` (reference and wave methods), `backend/wave/build.py` (`session()` wrapping, `_reset_caches`, summaries from `wave_rows`), `backend/wave/flights2015.py` (`session()` wrapping), `tests/test_seed.py` (remove the Task 7 skip; add `test_grants_survive_reseed`)
 - Create: `tests/test_parity.py` (all `live_db`)
 
 **Interfaces:**
@@ -717,10 +717,10 @@ git commit -m "feat(db): idempotent seeder with shadow-table swap, size guard; r
 ```python
 import json
 import pytest
-from atm import datastore
-from atm.datastore.files import FileStore
-from atm.datastore.pg import PgStore
-from atm.wave import build
+from backend import datastore
+from backend.datastore.files import FileStore
+from backend.datastore.pg import PgStore
+from backend.wave import build
 pytestmark = pytest.mark.live_db
 
 REPLAYS = ["F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"]
@@ -753,7 +753,7 @@ def test_parity_build_wave(live_db_url, wid):
                                   dict(q="F2015-2702"), dict(q="%"), dict(q="_"), dict(offset=50), dict(limit=0),
                                   dict(airport="CID")])
 def test_parity_listings(live_db_url, args):
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     a, b = _both(live_db_url, lambda: F.search(**{"limit": 20, **args}))
     assert a == b
     a, b = _both(live_db_url, lambda: build.list_waves(airport=args.get("airport"), q=args.get("q"), limit=20))
@@ -762,7 +762,7 @@ def test_parity_listings(live_db_url, args):
 def test_like_escape_percent_matches_nothing(live_db_url):
     datastore.set_store(PgStore(live_db_url))
     try:
-        from atm.wave import flights2015 as F
+        from backend.wave import flights2015 as F
         assert F.search(q="%", limit=5) == ([], 0)
     finally:
         datastore.set_store(None)
@@ -799,14 +799,14 @@ def test_grants_survive_reseed(live_db_url):                  # design §9: defa
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/db_seed.py atm/datastore/pg.py atm/wave/build.py atm/wave/flights2015.py tests/test_parity.py tests/test_seed.py
+git add scripts/db_seed.py backend/datastore/pg.py backend/wave/build.py backend/wave/flights2015.py tests/test_parity.py tests/test_seed.py
 git commit -m "feat(db): reference data in Postgres (flights2015, waves, BTS day blobs, METAR, refs) with parity tests"
 ```
 
 ### Task 9: Raw challenge tables
 
 **Files:**
-- Modify: `scripts/db_seed.py` (seeder `raw`, `--drop raw`), `atm/datastore/pack.py` (`infer_pg_types`), `tests/test_pack.py`, `tests/test_seed.py`
+- Modify: `scripts/db_seed.py` (seeder `raw`, `--drop raw`), `backend/datastore/pack.py` (`infer_pg_types`), `tests/test_pack.py`, `tests/test_seed.py`
 
 **Interfaces:**
 - Consumes: `swap_load`, size guard (Task 7).
@@ -854,7 +854,7 @@ def test_raw_loads_last_and_drops(live_db_url):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/db_seed.py atm/datastore/pack.py tests/test_pack.py tests/test_seed.py
+git add scripts/db_seed.py backend/datastore/pack.py tests/test_pack.py tests/test_seed.py
 git commit -m "feat(db): raw challenge datasets as typed tables (loaded last, dropped first)"
 ```
 
@@ -863,7 +863,7 @@ git commit -m "feat(db): raw challenge datasets as typed tables (loaded last, dr
 ### Task 10: Contract v2.1.1, lifespan, config status
 
 **Files:**
-- Modify: `atm/server.py` (lifespan replaces `@app.on_event("startup")`; `config()` adds `store`; `decision()` adds `persisted`; new `GET /api/runs` list route; `V2_PREFIXES` gains `/api/runs`), `docs/api-contract.md`, `frontend/src/api/types.ts`, `frontend/src/api/samples/config.json`, `frontend/src/api/samples/decision.json`, `tests/conftest.py` (gains the `api_client` fixture), `tests/test_api.py` (its `client` fixture becomes an alias: `@pytest.fixture` `def client(api_client): return api_client`)
+- Modify: `backend/server.py` (lifespan replaces `@app.on_event("startup")`; `config()` adds `store`; `decision()` adds `persisted`; new `GET /api/runs` list route; `V2_PREFIXES` gains `/api/runs`), `docs/api-contract.md`, `frontend/src/api/types.ts`, `frontend/src/api/samples/config.json`, `frontend/src/api/samples/decision.json`, `tests/conftest.py` (gains the `api_client` fixture), `tests/test_api.py` (its `client` fixture becomes an alias: `@pytest.fixture` `def client(api_client): return api_client`)
 - Create: `tests/test_runs_api.py`
 
 **Interfaces:**
@@ -879,9 +879,9 @@ git commit -m "feat(db): raw challenge datasets as typed tables (loaded last, dr
 
 ```python
 import psycopg
-from atm import datastore
-from atm.datastore import pg
-from atm.datastore.fallback import FallbackStore
+from backend import datastore
+from backend.datastore import pg
+from backend.datastore.fallback import FallbackStore
 
 class Exploding:                                     # any primary call fails the test
     def __getattr__(self, name):
@@ -934,7 +934,7 @@ def test_runs_list_requires_wave_id(api_client):
 - [ ] **Step 5: Commit** (contract commit)
 
 ```bash
-git add atm/server.py tests/test_runs_api.py tests/conftest.py tests/test_api.py docs/api-contract.md frontend/src/api/types.ts frontend/src/api/samples/config.json frontend/src/api/samples/decision.json
+git add backend/server.py tests/test_runs_api.py tests/conftest.py tests/test_api.py docs/api-contract.md frontend/src/api/types.ts frontend/src/api/samples/config.json frontend/src/api/samples/decision.json
 git commit -m "contract: v2.1.1 — Config.store, decision persisted flag, GET /api/runs?wave_id="
 ```
 
@@ -956,7 +956,7 @@ git commit -m "contract: v2.1.1 — Config.store, decision persisted flag, GET /
     - the commands `python3 scripts/db_migrate.py`, `python3 scripts/db_seed.py`, `python3 scripts/db_seed.py --check`;
     - the fallback behaviour and how to read `/api/config`'s `store`;
     - the CU-hour advice (no keep-alive).
-  - Both scripts start with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import atm` (loads `.env`). `db_dump_live.py` defaults to `--url-env DATABASE_URL` (direct, dev machine).
+  - Both scripts start with `sys.path.insert(0, str(Path(__file__).resolve().parents[1]))` and `import backend` (loads `.env`). `db_dump_live.py` defaults to `--url-env DATABASE_URL` (direct, dev machine).
 
 - [ ] **Step 1: Write the failing test** (append to `tests/test_migrations.py`)
 
@@ -988,7 +988,7 @@ git commit -m "chore(deploy): DATABASE_URL_POOLED on Render; dump and timing scr
 
 **Files:**
 - Create: `migrations/0005_geo.sql`
-- Modify: `migrations/CHECKSUMS`, `atm/datastore/files.py`, `atm/datastore/pg.py`, `scripts/db_seed.py` (seeders `procedures`, `surface`, `movements2015`, `coverage`), `tests/test_store_files.py`, `tests/test_migrations.py`
+- Modify: `migrations/CHECKSUMS`, `backend/datastore/files.py`, `backend/datastore/pg.py`, `scripts/db_seed.py` (seeders `procedures`, `surface`, `movements2015`, `coverage`), `tests/test_store_files.py`, `tests/test_migrations.py`
 
 **Interfaces:**
 - Consumes: design §6.7; `swap_load`, `pack.gzip_csv`, `pack.split_by`.
@@ -1027,7 +1027,7 @@ def test_geo_migration_tables():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add migrations/0005_geo.sql migrations/CHECKSUMS atm/datastore/files.py atm/datastore/pg.py scripts/db_seed.py tests/test_store_files.py tests/test_migrations.py
+git add migrations/0005_geo.sql migrations/CHECKSUMS backend/datastore/files.py backend/datastore/pg.py scripts/db_seed.py tests/test_store_files.py tests/test_migrations.py
 git commit -m "feat(db): geo schema and store methods, ready for flight-path M0"
 ```
 
@@ -1039,14 +1039,14 @@ git commit -m "feat(db): geo schema and store methods, ready for flight-path M0"
 **Precondition:** `git status --short docs/superpowers/plans/2026-11-02-flight-paths-and-taxi.md` must be empty. On 2 Nov 2026 that file had uncommitted edits by someone else. If it is still modified, **stop and ask the user** whether those edits should be committed first; do not stage someone else's changes.
 
 - [ ] **Step 1: Edit** the plan per the table in design §15. Each changed task gains:
-  - one interface line (`atm/geo/store.py` loaders delegate to `get_store().procedures/surface/movements_day` and gunzip/parse);
+  - one interface line (`backend/geo/store.py` loaders delegate to `get_store().procedures/surface/movements_day` and gunzip/parse);
   - one step running `python3 scripts/db_seed.py <dataset>` (skip when `DATABASE_URL` is unset);
   - its `live_db` test from §15, written in the plan's own test style.
 
   Global Constraints gains the line from §15. T8 gains the three verification steps from §15.
 
   Pre-flight rulings when copying §15: write the plan's method names, not the design's (`get_store().rows("openflights")` where §15 T1 says `get_store().csv("openflights")`; the Store protocol has no `csv`). Apply the env-var ruling of Global Constraints: §15's `DATABASE_OWNER_URL` becomes `DATABASE_URL`, and T8's "`docker run` with and without `DATABASE_URL`" becomes `DATABASE_URL_POOLED`. (On 3 Nov 2026 the precondition held: the file was clean.)
-- [ ] **Step 2: Verify** with `grep -n "db_seed.py\|atm.datastore\|live_db" docs/superpowers/plans/2026-11-02-flight-paths-and-taxi.md`. Expected: hits in Global Constraints and in T1, T3, T5, T6, T7, T8, T16, T18 and T19.
+- [ ] **Step 2: Verify** with `grep -n "db_seed.py\|backend.datastore\|live_db" docs/superpowers/plans/2026-11-02-flight-paths-and-taxi.md`. Expected: hits in Global Constraints and in T1, T3, T5, T6, T7, T8, T16, T18 and T19.
 - [ ] **Step 3: Commit**
 
 ```bash

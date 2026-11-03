@@ -599,7 +599,7 @@ function loadEval(){
   el.innerHTML='<h2>Evaluation</h2><div class="muted"><span class="spinner"></span>Loading...</div>';
   api("/api/eval").then(renderEval).catch(function(e){
     if(e && e.status==null && !/HTTP/.test(e.message||"")) { el.innerHTML='<h2>Evaluation</h2><div class="err">Render error: '+esc(e.message)+'</div>'; return; }
-    el.innerHTML='<h2>Evaluation</h2><div class="empty">'+(e.status===404?'No batch evaluation generated yet. Run <span class="mono">python -m atm.evaluate</span> on the server.':'Could not load evaluation ('+esc(e.message)+').')+'</div>';
+    el.innerHTML='<h2>Evaluation</h2><div class="empty">'+(e.status===404?'No batch evaluation generated yet. Run <span class="mono">python -m backend.evaluate</span> on the server.':'Could not load evaluation ('+esc(e.message)+').')+'</div>';
   });
 }
 function renderEval(ev){

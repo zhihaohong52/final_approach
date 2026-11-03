@@ -1,7 +1,7 @@
 # Disruption Negotiator v2: Design
 
 Autonomous SG 2026, Airbus track, Challenge 2. Submission **16:00 today (31 Oct 2026)**, 3-minute pitch.
-Builds on the working v1 in this repo (`atm/`, `web/index.html`, `eval/`).
+Builds on the working v1 in this repo (`backend/`, `web/index.html`, `eval/`).
 
 ## 1. Intent
 
@@ -55,8 +55,8 @@ time, gate assignment or flight-plan adjustment in under 3 turns; input = a real
 ## 4. Architecture (decided)
 
 ```
-frontend/ (Vite + React + TS)  ──/api──▶  FastAPI (atm/server.py)
-                                             ├─ LangGraph negotiation graph (atm/graph.py)
+frontend/ (Vite + React + TS)  ──/api──▶  FastAPI (backend/server.py)
+                                             ├─ LangGraph negotiation graph (backend/graph.py)
                                              │    nodes: OPEN → MOVES(agent i) → CHECK → VOTE → CONSENSUS | CONCEDE → … → FALLBACK
                                              ├─ Domain tool registry (MCP-shaped, per-agent scoping)  ──also served at /mcp
                                              ├─ Decision layer: langchain-typesafe TypeSafeClassifier
@@ -222,5 +222,5 @@ plain Python state machine · (8) React → v1 HTML dashboard.
 
 ## 15. Left to the builder
 Exact utility weights for joint plans; move-list generation details; fallback search method;
-LangGraph state schema; file layout inside `atm/`; how many candidate moves to show per Choice
+LangGraph state schema; file layout inside `backend/`; how many candidate moves to show per Choice
 (within model context limits: elephant-1 16k, d1-ultra 32k tokens); React component structure.

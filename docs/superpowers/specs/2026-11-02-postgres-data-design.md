@@ -36,7 +36,7 @@ move and utility runs in memory, exactly as today (§10).
 ## 2. Goals, non-goals, anti-goals
 
 **Goals**
-- G1. One data access module (`atm/datastore/`) is the only code that knows where data lives.
+- G1. One data access module (`backend/datastore/`) is the only code that knows where data lives.
 - G2. Postgres holds every dataset in §3 (including the raw challenge files) behind versioned, idempotent
   migrations and seed scripts.
 - G3. Runs, decisions, edits, replays, benchmark reports and the IEM METAR cache persist across restarts.
@@ -120,7 +120,7 @@ out (our call): the BTS zips re-download, and `drive_new` duplicates the challen
   code then runs unchanged, which is what makes the two backends byte-for-byte comparable (§8.2).
 - `list_waves` builds each summary by reading that wave's arrival slice and METAR (`build._summary`), so a
   50-row listing reads 50 slices. In Postgres those summary fields are **precomputed at seed time** (§6.2).
-- `atm/__init__.py` loads `.env` into `os.environ` on import, using `setdefault`. Once the user adds
+- `backend/__init__.py` loads `.env` into `os.environ` on import, using `setdefault`. Once the user adds
   `DATABASE_URL` to `.env`, **every local test run would see it**. Backend selection must therefore be explicit
   for tests (§8.1, §13).
 - `tests/test_api.py` and `scripts/make_samples.py` monkeypatch `server.RUNS_DIR`, `DECISIONS`, `REPLAY_DIR`
@@ -161,7 +161,7 @@ instance sleeps when idle and cold-starts on the next request.
 FastAPI handlers (sync def, threadpool)          offline scripts (fetch_*, split_*, benchmark, replay.record)
         │                                                    │ write the committed seed files (unchanged role)
         ▼                                                    ▼
-atm/datastore/  get_store() -> Store                scripts/db_seed.py ──COPY──▶ Postgres (Neon)
+backend/datastore/  get_store() -> Store                scripts/db_seed.py ──COPY──▶ Postgres (Neon)
    ├─ PgStore    (psycopg 3, NullConnectionPool,      scripts/db_migrate.py ─▶ migrations/*.sql
    │              pooled endpoint, app role)                   (owner role, direct endpoint)
    ├─ FileStore  (today's file locations)
@@ -172,10 +172,10 @@ atm/datastore/  get_store() -> Store                scripts/db_seed.py ──COP
 build_wave → Wave (in memory) → negotiation / rules / utility / moves  (never touch the store)
 ```
 
-- **One module (our call):** `atm/datastore/` with `base.py` (the `Store` protocol and `StoreStatus`),
+- **One module (our call):** `backend/datastore/` with `base.py` (the `Store` protocol and `StoreStatus`),
   `datasets.py` (the dataset registry: file path ↔ table ↔ columns), `files.py`, `pg.py`, `fallback.py` and
   `__init__.py` (`get_store()`, `set_store()`). The name avoids a clash with the flight-path plan's
-  `atm/geo/store.py`, which becomes a thin shim over it (§15).
+  `backend/geo/store.py`, which becomes a thin shim over it (§15).
 - **Postgres is the runtime source in production; the committed files stay as the seed and the offline backend
   (our call).** Reasons: the tests and offline dev must run without network; git keeps data changes reviewable
   and re-seedable; and Neon Free keeps only a 6-hour restore history, so reference data must be reproducible
@@ -480,7 +480,7 @@ should not be repeated within 6 hours unless it has to be.
 
 `get_store()` picks the backend once per process (`set_store()` replaces it, for tests and scripts):
 1. `ATM_STORE=files` → `FileStore`. **The test suite sets this in `tests/conftest.py`** (an autouse,
-   session-scoped fixture that also removes `DATABASE_URL` from `os.environ`), because `atm/__init__.py`
+   session-scoped fixture that also removes `DATABASE_URL` from `os.environ`), because `backend/__init__.py`
    would otherwise load it from `.env`.
 2. `ATM_STORE=pg`, or `DATABASE_URL` present → `FallbackStore(PgStore, FileStore)`. Postgres is tried first;
    files serve when it fails (logged, visible in `Config.store`). There is no "require DB" switch: the
@@ -509,7 +509,7 @@ the blob/text column) for `PgStore`.
 | `record_decision(row)` | `bool` persisted | `DECISIONS.open("a")` | `live.decisions` (+ pin the run) | – |
 | `replay(wave_id)`, `replay_ids()`, `put_replay(wave_id, body)` | dict or None / set / – | `replay.load/record`, `_replay_summaries`, `replay_available` | `eval.replays` | ids cached; bodies LRU 8 |
 | `benchmark_current()`, `put_benchmark(report, markdown, label)`, `v1_eval(name)` | dict or None | `server._benchmark`, `eval_results` | `eval.*` | cached until a write |
-| `procedures(icao)`, `surface(icao)`, `movements_day(iata, date)` (D4) | bytes (gzip) or None | the plan's `atm/geo/store.load_*` | `geo.*` by PK | LRU 4 airports (plan budget ≤ 60 MB each) |
+| `procedures(icao)`, `surface(icao)`, `movements_day(iata, date)` (D4) | bytes (gzip) or None | the plan's `backend/geo/store.load_*` | `geo.*` by PK | LRU 4 airports (plan budget ≤ 60 MB each) |
 | `status()` | `StoreStatus` | – | none (last known state) | – |
 
 `FileStore` reads today's paths. Its constructor takes overridable paths (`runs_dir`, `decisions_path`,
@@ -727,14 +727,14 @@ That keeps Render's health check green, and it never wakes the compute.
 
 The plan's rule "derived files go to `data/ref/`, runtime reads committed files" becomes: **derived files
 still go to `data/ref/` (seed and offline backend); `scripts/db_seed.py <dataset>` loads them into `geo.*`; the
-runtime reads through `atm.datastore`** (PgStore in production, FileStore offline). Each task keeps its tests
+runtime reads through `backend.datastore`** (PgStore in production, FileStore offline). Each task keeps its tests
 and its file outputs. The DB step is additive, so the 35-task plan stays executable in order. The Postgres plan
 (`docs/superpowers/plans/2026-11-02-postgres-data.md`, last task) applies these edits to the flight-path plan
 file.
 
 | Plan task | Change |
 |---|---|
-| Global Constraints | Add: "Runtime reads geometry through `atm.datastore`. After generating files, run `python3 scripts/db_seed.py <dataset>` (it needs `DATABASE_OWNER_URL`; skip it when unset). New tables come only via `migrations/`." `atm/geo/store.py` stays the plan's import surface; its loaders gunzip what `get_store().procedures/surface/movements_day` return |
+| Global Constraints | Add: "Runtime reads geometry through `backend.datastore`. After generating files, run `python3 scripts/db_seed.py <dataset>` (it needs `DATABASE_OWNER_URL`; skip it when unset). New tables come only via `migrations/`." `backend/geo/store.py` stays the plan's import surface; its loaders gunzip what `get_store().procedures/surface/movements_day` return |
 | T1 IATA→ICAO | `icao_for` parses `get_store().csv("openflights")` (FileStore: `data/challenge3/airports.dat`, as planned; Postgres: `raw.ch3_airports_dat` is not used at runtime, a `ref.openflights` copy is). `test_every_flights2015_destination_resolves` keeps `os.listdir` (FileStore) and gains a `live_db` twin over `ref.flights2015` destinations |
 | T3 CIFP procedures | `load_procedures` delegates. Add `db_seed.py procedures` (doc blob + `geo.fixes` points). `test_procedures_size_cap` stays (it checks files); add a `live_db` check that `geo.procedures` matches by sha256. `test_coverage_counts` unchanged (FileStore) |
 | T5 OSM surface | `load_surface` delegates. Add `db_seed.py surface` (doc blob + stands, gates, holding positions as PostGIS points). `bind_gates` stays Python (offline tests, no PostGIS dependency); a `live_db` check compares a sample of bindings with nearest-stand queries via `ST_DWithin(…, 150)` |
@@ -749,7 +749,7 @@ file.
 
 | Milestone | Scope | Done when |
 |---|---|---|
-| **D0 Foundation** | `atm/datastore` with `FileStore` = today's readers, rewired; `tests/conftest.py` forcing files; `migrations/` + `db_migrate.py`; `psycopg` dependency | 130 tests pass unchanged; (with the DB) migrations apply twice cleanly and the baseline `pg_database_size()` is recorded |
+| **D0 Foundation** | `backend/datastore` with `FileStore` = today's readers, rewired; `tests/conftest.py` forcing files; `migrations/` + `db_migrate.py`; `psycopg` dependency | 130 tests pass unchanged; (with the DB) migrations apply twice cleanly and the baseline `pg_database_size()` is recorded |
 | **D1 Live state** | `live.runs`, `live.decisions`, `eval.*`; seed of replays, the 97 runs, benchmark, v1 eval; `PgStore` + `FallbackStore`; `Config.store`, `persisted`, `GET /api/runs?wave_id=` (`contract:` v2.1.1); `DATABASE_URL` on Render | a run and a decision survive a Render redeploy (manual check, recorded); fallback test green |
 | **D2 Reference, part 1** | small tables, workbook, `ref.metar_2024`, `live.iem_cache`, `ref.flights2015`, `ref.waves` with precomputed summaries; parity tests | `live_db` parity green for the waves in §13; budgets in §10 measured from Render |
 | **D3 Reference, part 2 + raw** | `ref.bts_arrivals_day`, `ref.disruptions_v1`; production on PgStore for every read; `raw.*` loaded last under the 750 MB guard | all reads come from Postgres in production (no FileStore hits in the log over a full demo click-through); `pg_database_size()` within 30 % of §7 or the estimate updated |
@@ -772,7 +772,7 @@ file.
 ## 18. Decisions made (all "our call")
 
 1. Postgres is the runtime source. The committed files stay as the seed and the offline/test backend, and `data/` stays in the image as the fallback.
-2. One module `atm/datastore/` (`Store` protocol, `PgStore`, `FileStore`, `FallbackStore`, dataset registry). The store returns source-format text, so the existing parse code runs on both backends. The plan's `atm/geo/store.py` delegates to it.
+2. One module `backend/datastore/` (`Store` protocol, `PgStore`, `FileStore`, `FallbackStore`, dataset registry). The store returns source-format text, so the existing parse code runs on both backends. The plan's `backend/geo/store.py` delegates to it.
 3. Sync psycopg 3.3.6 with a `NullConnectionPool` (no idle connections, so scale-to-zero works) on the Neon pooled endpoint, with `prepare_threshold=None`, `connect_timeout=10` and 2 retries with jitter.
 4. Fallback Postgres → files → 503, with a circuit breaker, visible in an additive `Config.store`. `/api/config` never touches the DB, and nothing queries it on a timer.
 5. The two bulk time series (BTS 2024 arrivals, 2015 movements) and the geometry documents are gzip `bytea`. Point features are PostGIS rows. Everything else is rows in the source's column representation, with an `ord` column. Raw challenge files are plain inferred-type tables in `raw`, loaded last and dropped first.

@@ -22,7 +22,7 @@ Local:
 
 ```bash
 pip install -r requirements.txt
-uvicorn atm.server:app --port 8000        # API, MCP and (if built) the dashboard at http://localhost:8000
+uvicorn backend.server:app --port 8000        # API, MCP and (if built) the dashboard at http://localhost:8000
 ```
 
 Frontend build (served at `/` from `frontend/dist` when present; without it the API still runs):
@@ -132,9 +132,9 @@ graph TD;
 	classDef last fill:#bfb6fc
 ```
 
-Protocol (`atm/wave/graph.py`, LangGraph). Per turn each agent (ATC, then PILOT, then GROUND) sends ONE `AGENT_TURN` message holding its moves, the moves the engine rejected with their violations, its proposal, its votes and a rationale. The engine runs a `CHECK` after every proposal. Consensus means all 3 agents `ACCEPT` the same plan that passed `CHECK`, within a turn. After at most 3 turns without consensus, a deterministic beam solver with a safety net produces the plan and the reason is logged.
+Protocol (`backend/wave/graph.py`, LangGraph). Per turn each agent (ATC, then PILOT, then GROUND) sends ONE `AGENT_TURN` message holding its moves, the moves the engine rejected with their violations, its proposal, its votes and a rationale. The engine runs a `CHECK` after every proposal. Consensus means all 3 agents `ACCEPT` the same plan that passed `CHECK`, within a turn. After at most 3 turns without consensus, a deterministic beam solver with a safety net produces the plan and the reason is logged.
 
-Components (all under `atm/`):
+Components (all under `backend/`):
 
 - **Wave builder** (`wave/flights2015.py`, `wave/build.py`): builds the wave from a `flights.csv` row (or a BTS 2024 wave), real runways, METAR, FAA registry and OSM gates, plus seeded simulation of what no public source has. Deterministic per id.
 - **Workbook limits** (`wave/constraints.py`): airport capacity, wake table, fuel and crew rules parsed from `data/challenge2/challenge2_operational_constraints.xlsx` (sheet `rules_of_play`), with hard-coded fallbacks equal to the workbook.
@@ -260,7 +260,7 @@ The `statement_timeout` line gives `atm_app` the same 5 s limit that `0006` give
 
 **What the measured impact is:** every final plan obeys every rule (0 violations in every arm), while the uncoordinated status quo breaks at least one rule on 16 of 50 waves; with the rule engine switched off, 32% of the agents' plans are illegal; a negotiation takes about 1 s in formulas mode and 4-8 s with jev-1.14 (`stats.elapsed_ms`). Delay is roughly neutral: on the 34 waves where the status quo is legal, the negotiated plans are about 2 min better in total. Negotiation buys legality first; minutes are a small bonus.
 
-Method (`python3 -m atm.wave.benchmark --n 50 --arms <models>,formula --concurrency 4 --seed 7`):
+Method (`python3 -m backend.wave.benchmark --n 50 --arms <models>,formula --concurrency 4 --seed 7`):
 
 - 50 seeded `flights.csv` rows, stratified over the 30 busiest hubs (BTS 2024 waves remain available with `--source bts`).
 - Selection rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie goes to lower Brier.
@@ -277,7 +277,7 @@ Method (`python3 -m atm.wave.benchmark --n 50 --arms <models>,formula --concurre
 - Engine-off ablation: the share of formula-arm final plans that are infeasible under the real rules when the rules engine is disabled.
 
 <!-- BENCHMARK -->
-Run: `python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (re-run 2 Nov 2026 after the runway-history fix, live models, final rules). Same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50.
+Run: `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (re-run 2 Nov 2026 after the runway-history fix, live models, final rules). Same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50.
 
 | Arm | Consensus (raw-number prompts → judgement-only) | Mean turns | Rule violations | Total delay, all wave arrivals (min) [95% CI] | Gap to optimiser (min) | Pax protected | Brier* | p50 / p95 ms | Errors | Same plan as formulas |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -355,7 +355,7 @@ Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan
 ## 8. Repo map and tests
 
 ```
-atm/             backend
+backend/             backend
   server.py        FastAPI app, SSE, mounts /mcp and the built frontend
   decide.py        decision layer: model chain, timeout, breaker
   jev.py           Jev (TypeSafe) client

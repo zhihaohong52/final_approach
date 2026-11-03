@@ -23,8 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from atm.geo.osm_surface import build_surface  # noqa: E402
-from atm.wave.icao import iata_for  # noqa: E402
+from backend.geo.osm_surface import build_surface  # noqa: E402
+from backend.wave.icao import iata_for  # noqa: E402
 from fetch_cifp import airports  # noqa: E402
 
 URL = "https://overpass-api.de/api/interpreter"

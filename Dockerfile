@@ -12,7 +12,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY atm/ ./atm/
+COPY backend/ ./backend/
 COPY data/ ./data/
 COPY eval/ ./eval/
 COPY web/ ./web/
@@ -22,4 +22,4 @@ USER user
 ENV PORT=7860
 ENV ATM_REQUIRE_REAL=1
 EXPOSE 7860
-CMD ["sh", "-c", "uvicorn atm.server:app --host 0.0.0.0 --port ${PORT:-7860}"]
+CMD ["sh", "-c", "uvicorn backend.server:app --host 0.0.0.0 --port ${PORT:-7860}"]

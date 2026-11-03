@@ -3,11 +3,11 @@ from dataclasses import replace
 
 import pytest
 
-from atm import decide
-from atm.decide import Decider
-from atm.wave import graph, rules
-from atm.wave.graph import negotiate_wave
-from atm.wave.model import JointPlan
+from backend import decide
+from backend.decide import Decider
+from backend.wave import graph, rules
+from backend.wave.graph import negotiate_wave
+from backend.wave.model import JointPlan
 from tests.fixtures import make_wave
 
 CONTRACT_TYPES = {"TRIAGE", "OPEN", "AGENT_TURN", "CHECK", "CONSENSUS", "NO_CONSENSUS", "FALLBACK",
@@ -33,7 +33,7 @@ def _hard_wave():
 
 
 def _plan(wave, d: dict) -> JointPlan:
-    from atm.wave.model import Assignment
+    from backend.wave.model import Assignment
     return JointPlan([Assignment(**{k: v for k, v in a.items() if k != "metrics"}) for a in d["assignments"]])
 
 
@@ -165,14 +165,14 @@ def test_graph_mermaid_written(tmp_path):
     text = graph.mermaid()
     for node in ("triage", "open", "atc", "pilot", "ground", "decide_turn", "fallback", "finalize"):
         assert node in text
-    path = tmp_path / "graph.mmd"   # docs/graph.mmd: python3 -m atm.wave.graph --mermaid docs/graph.mmd
+    path = tmp_path / "graph.mmd"   # docs/graph.mmd: python3 -m backend.wave.graph --mermaid docs/graph.mmd
     path.write_text(text)
     assert path.stat().st_size > 0
     assert "decide_turn -.-> fallback" in text and "decide_turn -. &nbsp;next&nbsp; .-> atc" in text
 
 
 def test_narration_template_without_key(monkeypatch):
-    from atm.wave import narrate
+    from backend.wave import narrate
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     r = negotiate_wave(make_wave(), "formulas")
     n = narrate.brief(r)
@@ -253,19 +253,19 @@ def _result_with_focus_metrics(**metrics):
 
 
 def test_template_mentions_laps():
-    from atm.wave import narrate
+    from backend.wave import narrate
     r = _result_with_focus_metrics(hold_laps=2, hold_fix="BENKY", fuel_kg=428.0)
     assert "2 laps at BENKY (428 kg)" in narrate._template(r)["brief"]
 
 
 def test_template_one_lap_singular():
-    from atm.wave import narrate
+    from backend.wave import narrate
     r = _result_with_focus_metrics(hold_laps=1, hold_fix="BENKY", fuel_kg=214.0)
     assert "1 lap at BENKY" in narrate._template(r)["brief"]
 
 
 def test_template_no_lap_clause_when_absent():
-    from atm.wave import narrate
+    from backend.wave import narrate
     r = _result_with_focus_metrics(hold_laps=0, hold_fix=None)
     assert " lap" not in narrate._template(r)["brief"].replace("overlap", "")
     r2 = _result_with_focus_metrics(hold_laps=None, hold_fix=None, taxi_wait_min=None)
@@ -273,7 +273,7 @@ def test_template_no_lap_clause_when_absent():
 
 
 def test_template_hold_short_and_laps_survive_trim():
-    from atm.wave import narrate
+    from backend.wave import narrate
     r = _result_with_focus_metrics(hold_laps=3, hold_fix="BENKY", fuel_kg=500.0, taxi_wait_min=2.5,
                                    hold_short_strip="27R/09L")
     b = narrate._template(r)["brief"]
@@ -281,7 +281,7 @@ def test_template_hold_short_and_laps_survive_trim():
 
 
 def test_compact_passes_path_fields():
-    from atm.wave import narrate
+    from backend.wave import narrate
     r = _result_with_focus_metrics(hold_laps=2, hold_fix="BENKY", taxi_wait_min=1.5)
     c = narrate._compact(r)
     assert (c["hold_laps"], c["hold_fix"], c["taxi_wait_min"]) == (2, "BENKY", 1.5)

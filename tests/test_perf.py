@@ -24,7 +24,7 @@ def test_surface_tier():
 def test_ord_surface_rss_under_60mb():
     # fresh interpreter: ru_maxrss is a high-water mark, so an in-process delta can read 0
     import subprocess, sys
-    code = ("import resource,sys;from atm.geo import store;"
+    code = ("import resource,sys;from backend.geo import store;"
             "b=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;store.load_surface('KORD');store.load_procedures('KORD');"
             "a=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;print((a-b)/(1048576 if sys.platform=='darwin' else 1024))")
     mb = float(subprocess.check_output([sys.executable, "-c", code], text=True))
@@ -35,7 +35,7 @@ def test_ord_surface_rss_under_60mb():
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; PgStore variant of the RSS check (needs surface and procedures seeded)
 def test_ord_surface_rss_under_60mb_pgstore(live_db_url):
     import subprocess, sys
-    code = ("import resource,sys;from atm.datastore.pg import PgStore;"
+    code = ("import resource,sys;from backend.datastore.pg import PgStore;"
             "import os;st=PgStore(os.environ['DATABASE_TEST_URL']);st.open();"
             "b=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;"
             "import gzip,json;[json.loads(gzip.decompress(f(i))) for f,i in ((st.surface,'KORD'),(st.procedures,'KORD'))];"

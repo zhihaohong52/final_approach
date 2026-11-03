@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from atm.wave import build
-from atm.wave.model import Metar
+from backend.wave import build
+from backend.wave.model import Metar
 
 pytestmark = pytest.mark.skipif(
     not (build.WAVES / "index.csv").exists() or not (build.WAVES / "arrivals").exists(),
@@ -88,7 +88,7 @@ def test_runway_closed_reason_cites_faa(monkeypatch):
 def test_crew_shift_not_infeasible_by_construction():
     """Crew shift end is anchored to the delayed ETA: landing at the earliest ETA with typical taxi
     never breaches GND-CREW-DUTY (regression: ~70% of real flights did before any move)."""
-    from atm.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
+    from backend.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
     idx = build._index()
     for wid in idx["wave_id"].head(25):
         for f in build.build_wave(wid).flights:

@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from atm.wave.hubs import HUBS
+from backend.wave.hubs import HUBS
 
 REF = Path(__file__).resolve().parent.parent / "data" / "ref"
 

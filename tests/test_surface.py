@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from atm.geo.osm_surface import build_surface
-from atm.wave import build
-from atm.wave.model import Runway
-from atm.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations,
+from backend.geo.osm_surface import build_surface
+from backend.wave import build
+from backend.wave.model import Runway
+from backend.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations,
                               TaxiGraph, _from_doc, choose_exit, generic_taxi_min, load_graph, rot_s, schedule,
                               unimpeded, verify_separation)
 
@@ -269,7 +269,7 @@ def _line_path(g, at, xs):
 
 
 def _assert_no_wait_in_zone(g, s, strips):
-    from atm.wave.surface import strip_distance_m
+    from backend.wave.surface import strip_distance_m
     for w in s.waits:
         for strip in strips:
             ok_hold = g.holds.get(w["node"], "-") in (None, strip)
@@ -391,7 +391,7 @@ def _any_route(g, pred, ends=None):
 def test_untagged_crossing_found_geometrically_ord_ss():
     # KORD taxiway SS meets 09R/27L at a runway node, but its OSM edges carry no strip tag (found by property,
     # not by node id, so a surface rebuild does not break the test)
-    from atm.wave.surface import runway_strips_at
+    from backend.wave.surface import runway_strips_at
     g = load_graph("KORD")
 
     def untagged_ss(u):
@@ -409,7 +409,7 @@ def test_untagged_crossing_found_geometrically_ord_ss():
 
 def test_ksea_untagged_crossing_waits_at_the_osm_hold():
     # KSEA taxiway N crosses 16L/34R with no shared node (node 71 is 1 m from the centreline)
-    from atm.wave.surface import strip_distance_m
+    from backend.wave.surface import strip_distance_m
     g = load_graph("KSEA")
     p = _route_via(g, "16R", lambda p: 71 in p.nodes and 72 in p.nodes)
     assert any(st == "16L/34R" for _, st in p.crossings)
@@ -427,7 +427,7 @@ def test_ksea_untagged_crossing_waits_at_the_osm_hold():
 def test_starting_inside_another_strips_zone_fails_ord_27c():
     # a KORD 27C exit on 09C/27C that lies inside 04L/22R's zone (45-90 m: off its pavement) and whose route crosses
     # 04L/22R next: the aircraft cannot back out
-    from atm.wave.surface import runway_strips_at, strip_distance_m
+    from backend.wave.surface import runway_strips_at, strip_distance_m
     g = load_graph("KORD")
     starts = {e["node"] for e in g.exits["27C"] if "09C/27C" in runway_strips_at(g, e["node"])
               and RUNWAY_ON_PAVEMENT_M <= strip_distance_m(g, e["node"], "04L/22R") < RUNWAY_HOLD_CLEARANCE_M}
@@ -455,7 +455,7 @@ def test_no_wait_in_the_vacate_stretch_and_exit_clear_is_off_the_runway_zone():
 
 
 def test_guard_trip_reserves_nothing(mini, monkeypatch):
-    import atm.wave.surface as S
+    import backend.wave.surface as S
     monkeypatch.setattr(S, "_MAX_ITER", 2)
     res = Reservations({}, {}, {"18/36": [(t / 2, "landing", f"L{t}") for t in range(0, 80)]})
     s = schedule(mini, path_across_1836(mini), 0.0, res, "AA1")
@@ -488,7 +488,7 @@ def _hand_track(g, p, cs, t0, wait_idx, wait_to):
 
 def test_osm_hold_on_the_runway_does_not_end_the_vacate_stretch():
     # the route starts on runway R; an OSM hold for R snapped 20 m off its centreline must not end the vacate stretch
-    from atm.wave.surface import on_runway
+    from backend.wave.surface import on_runway
     xs = [0, 20, 60, 120, 400]
     g, at = _line_graph(xs, {"R": 0}, holds={20: "R"})
     assert on_runway(g, at[20], "R")
@@ -509,7 +509,7 @@ def test_osm_hold_on_the_runway_does_not_end_the_vacate_stretch():
 
 def test_osm_hold_on_the_runway_is_not_a_wait_spot():
     # crossing R: an OSM hold for R 30 m from the centreline (on the pavement) is skipped; the one at 75 m is used
-    from atm.wave.surface import on_runway
+    from backend.wave.surface import on_runway
     xs = [-400, -200, -75, -30, 40, 76, 300]
     g, at = _line_graph(xs, {"R": 0}, holds={-75: "R", -30: "R"})
     assert on_runway(g, at[-30], "R") and not on_runway(g, at[-75], "R")

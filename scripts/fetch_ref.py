@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from atm.wave.hubs import HUBS, MONTHS  # noqa: E402,F401
+from backend.wave.hubs import HUBS, MONTHS  # noqa: E402,F401
 
 OUT = ROOT / "data" / "ref"
 CACHE = ROOT / ".cache" / "ref"

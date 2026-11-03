@@ -80,12 +80,12 @@ approves. v3 makes the thing they decide about physically real.
 
 ## 3. Current state (verified by reading and running, 2 Nov 2026)
 
-- `atm/wave/utility.py`: `TAXI_NEAR_MIN = 6`, `TAXI_FAR_MIN = 10`, `TYPICAL_TAXI_MIN = 6`. Taxi is the
+- `backend/wave/utility.py`: `TAXI_NEAR_MIN = 6`, `TAXI_FAR_MIN = 10`, `TYPICAL_TAXI_MIN = 6`. Taxi is the
   halves heuristic. Hold = `slot - eta_earliest - speed_reduction - ground_delay`. Fuel = hold x workbook
   burn (narrow 2400 kg/h, wide 6500 kg/h) + speed reduction x 20 %. `metrics(wave, a)` is per flight and
   independent of the other flights.
-- `atm/wave/rules.py`: 12 rules. `ATC-TAXI-ROUTE` always passes ("no taxiway closures in data").
-- `atm/wave/moves.py`: ATC `swap_order | change_runway | shift_slot` (±2 min) plus speed/ground-delay
+- `backend/wave/rules.py`: 12 rules. `ATC-TAXI-ROUTE` always passes ("no taxiway closures in data").
+- `backend/wave/moves.py`: ATC `swap_order | change_runway | shift_slot` (±2 min) plus speed/ground-delay
   instructions for non-focus flights. PILOT and GROUND move sets as in contract v2.0. The earliest slot is
   runway-independent (`_min_slot`).
 - Gates: `data/ref/gates.csv` holds OSM `aeroway=gate` refs for **10 hubs only** (ORD, ATL, DEN, DFW, LAX,
@@ -237,7 +237,7 @@ the existing rule from the v2 design (§4 there).
 | `scripts/fetch_bts.py` (extend) | 2015 PREZIP months | `data/ref/movements2015/{IATA}.csv.gz` for the **top 30 airports by 2015 arrivals**: every arrival and departure with tail, sched/actual, wheels on/off, taxi in/out | ~30-45 MB est.; hard cap 50 MB, otherwise keep only ±2 h around each hour that holds a flights.csv row |
 | `scripts/split_flights2015.py` (extend) | `flights.csv` | add `wheels_on, taxi_in, wheels_off, taxi_out` to `data/challenge2/flights/{DEST}.csv.gz` | +~2 MB |
 | `scripts/fetch_ref.py gates` (retire) | – | gates now come from the surface file. `gates.csv` stays as the id source for the 10 hubs, so scheduled-gate seeding is unchanged | – |
-| `atm/wave/icao.py` (new, tiny) | `data/challenge3/airports.dat` | IATA→ICAO lookup replacing `flights2015._icao` | – |
+| `backend/wave/icao.py` (new, tiny) | `data/challenge3/airports.dat` | IATA→ICAO lookup replacing `flights2015._icao` | – |
 
 The **derived files are the contract with the engine**. Each starts with a header holding the source,
 fetch timestamp, cycle or OSM timestamp, script version and quality tier (§6.9). A `data/ref/GEO_COVERAGE.md`
@@ -274,7 +274,7 @@ mixed up with physics changes.
 - Crew and turnaround floors that use `TYPICAL_TAXI_MIN` (`build.py:462`, `flights2015.py:320`) switch to
   the flight's unimpeded routed taxi time, so they stay feasible by construction.
 
-### 6.2 Airborne 4D trajectory (`atm/wave/trajectory.py`, new)
+### 6.2 Airborne 4D trajectory (`backend/wave/trajectory.py`, new)
 
 For each flight and each open runway end, a **route** is built once per wave and cached:
 
@@ -350,7 +350,7 @@ timed to land at its fixed time, so it shows on the radar.
   arrives at the fix. It steps down as lower levels empty. It leaves from the bottom.
   `ATC-HOLD-STACK` (§6.6) checks level count and exit order.
 
-### 6.4 Surface (`atm/wave/surface.py`, new)
+### 6.4 Surface (`backend/wave/surface.py`, new)
 
 - **Graph:** a directed graph from the derived surface file; both directions for every taxiway. Edge time
   = length / speed, where speed is 20 kt, or 10 kt when the turn into the edge exceeds 30° or the edge

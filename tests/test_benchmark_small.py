@@ -1,4 +1,4 @@
-from atm.wave.benchmark import main
+from backend.wave.benchmark import main
 
 SUMMARY_KEYS = {"consensus_rate_pct", "mean_rounds", "fallback_rate_pct", "rule_violations_in_agreed_plans",
                 "delay_min", "fuel_kg", "pax_protected_pct", "overtime_min", "agreement_with_formula_pct", "brier",
@@ -35,7 +35,7 @@ def _fake_negotiate(real, dead_arm, fail_ids=()):
 
 def test_dead_arm_cannot_win(tmp_path, monkeypatch):
     import json
-    from atm.wave import benchmark
+    from backend.wave import benchmark
     monkeypatch.setattr(benchmark, "negotiate_wave", _fake_negotiate(benchmark.negotiate_wave, "openrouter:dead/m"))
     rep = benchmark.main(["--fixtures", "--n", "3", "--arms", "openrouter:dead/m,formula", "--concurrency", "2",
                           "--no-ablation", "--outage-n", "1", "--out", str(tmp_path)])
@@ -47,7 +47,7 @@ def test_dead_arm_cannot_win(tmp_path, monkeypatch):
 
 
 def test_failed_waves_excluded_from_means(tmp_path, monkeypatch):
-    from atm.wave import benchmark
+    from backend.wave import benchmark
     ids = [w.id for w in benchmark.fixture_waves(3)]
     monkeypatch.setattr(benchmark, "negotiate_wave",
                         _fake_negotiate(benchmark.negotiate_wave, None, fail_ids={ids[0]}))
@@ -61,7 +61,7 @@ def test_failed_waves_excluded_from_means(tmp_path, monkeypatch):
 
 
 def test_decisions_and_brier_read_agent_turns():
-    from atm.wave.benchmark import brier, decisions
+    from backend.wave.benchmark import brier, decisions
     mdl = {"kind": "noul", "model": "m", "provider": "openrouter", "latency_ms": 300}
     mv = {"kind": "choice", "model": "m", "provider": "openrouter", "latency_ms": 200, "fallback_from": ["x"]}
     fm = {"kind": "formula", "model": "formula", "provider": "formula", "latency_ms": 0}
@@ -78,7 +78,7 @@ def test_decisions_and_brier_read_agent_turns():
 
 
 def test_outage_uses_best_model_arm_even_if_formula_wins():
-    from atm.wave.benchmark import select
+    from backend.wave.benchmark import select
     summ = lambda d: {"delay_min": d, "pax_protected_pct": 90, "brier": 0.1, "latency_p95_ms": 100.0,
                       "error_rate_pct": 0.0, "consensus_rate_pct": 100.0, "fallback_rate_pct": 0.0}
     arm = lambda m, d, p: {"model": m, "provider": p, "label": m, "n_ok": 3, "failed_ids": [], "p95_all_ms": 100.0,
@@ -91,7 +91,7 @@ def test_outage_uses_best_model_arm_even_if_formula_wins():
 
 
 def test_high_fallback_arm_with_better_delay_loses():
-    from atm.wave.benchmark import select
+    from backend.wave.benchmark import select
     def arm(m, d, cons, fb, p="openrouter"):
         return {"model": m, "provider": p, "label": m, "n_ok": 50, "failed_ids": [], "p95_all_ms": 100.0,
                 "summary": {"delay_min": d, "pax_protected_pct": 90, "brier": 0.1, "latency_p95_ms": 100.0,
@@ -104,7 +104,7 @@ def test_high_fallback_arm_with_better_delay_loses():
 
 
 def test_engine_history_and_attribution(tmp_path):
-    from atm.wave import benchmark as B
+    from backend.wave import benchmark as B
     prev = {"engine_version": "v2", "baseline": {"delay_min": 10.0, "fuel_kg": 1.0}, "arms": [{"model": "formula", "summary": {"delay_min": 8.0, "fuel_kg": 1.0}}]}
     cur = {"engine_version": "v3-air", "baseline": {"delay_min": 12.0, "fuel_kg": 3.0}, "arms": [{"model": "formula", "summary": {"delay_min": 9.0, "fuel_kg": 2.0}}]}
     a = B.attribution(prev, cur)
@@ -112,8 +112,8 @@ def test_engine_history_and_attribution(tmp_path):
 
 
 def test_report_has_engine_version_and_lap_share(tmp_path):
-    from atm.wave import benchmark as B
-    from atm.wave.version import ENGINE_VERSION
+    from backend.wave import benchmark as B
+    from backend.wave.version import ENGINE_VERSION
     rep = B.main(["--fixtures", "--n", "3", "--arms", "formula", "--no-ablation", "--outage-n", "0",
                   "--concurrency", "2", "--out", str(tmp_path)])
     assert rep["engine_version"] == ENGINE_VERSION and "lap_share_pct" in rep["baseline"]
@@ -130,7 +130,7 @@ def _res(outcome, laps):
 
 
 def test_lap_share_pct():
-    from atm.wave.benchmark import lap_share_pct
+    from backend.wave.benchmark import lap_share_pct
     runs = {"a": _res("consensus", [0, 2]), "b": _res("consensus", [0, 0]), "c": _res("fallback", [3]),
             "d": {"error": "boom"}}
     assert lap_share_pct(runs) == 50.0
@@ -138,7 +138,7 @@ def test_lap_share_pct():
 
 
 def test_veto_counts():
-    from atm.wave.benchmark import veto_counts
+    from backend.wave.benchmark import veto_counts
     chk = lambda r, p=False: {"rule": r, "passed": p}   # noqa: E731
     log = [{"type": "AGENT_TURN", "body": {"rejected": [{"violations": [chk("R1"), chk("R2"), chk("R1")]},
                                                         {"violations": [chk("R1", True)]}]}},
@@ -148,7 +148,7 @@ def test_veto_counts():
 
 def test_engine_history_reads_archive(tmp_path):
     import json
-    from atm.wave.benchmark import engine_history
+    from backend.wave.benchmark import engine_history
     arm = {"model": "formula", "n_ok": 3, "summary": {"delay_min": 8.0, "fuel_kg": 1.0, "pax_protected_pct": 50.0,
            "overtime_min": 0.0, "consensus_rate_pct": 100.0, "rule_violations_in_agreed_plans": 0}}
     (tmp_path / "engine-v2").mkdir()
@@ -165,7 +165,7 @@ def test_engine_history_reads_archive(tmp_path):
 
 def test_frozen_v2_archive():
     import json
-    from atm.wave.benchmark import ROOT
+    from backend.wave.benchmark import ROOT
     d = ROOT / "eval" / "archive" / "engine-v2"
     assert json.loads((d / "benchmark.json").read_text())["engine_version"] == "v2"
     assert (d / "BENCHMARK.md").read_text().startswith("# Benchmark")
@@ -174,9 +174,9 @@ def test_frozen_v2_archive():
 def test_max_prompt_chars_tracks_every_decider_call(monkeypatch):
     import json
     from dataclasses import replace
-    from atm.decide import Decider
-    from atm.wave import benchmark as B
-    from atm.wave.fixtures import make_wave
+    from backend.decide import Decider
+    from backend.wave import benchmark as B
+    from backend.wave.fixtures import make_wave
 
     def fake(wave, mode, chain=None, **kw):
         d = Decider(chain=["formula"])   # the formula entry never reaches the network
@@ -199,7 +199,7 @@ def _pw(delay, fuel, cause="x"):
 
 
 def test_find_regressions():
-    from atm.wave.benchmark import find_regressions
+    from backend.wave.benchmark import find_regressions
     cur = {"formula": {"w1": _pw(12, 5), "w2": _pw(10, 5), "w3": _pw(9, 5)},
            "baseline": {"w1": _pw(14, 5), "w2": _pw(10, 5), "w3": _pw(9, 5)}}
     prev = {"formula": {"w1": _pw(10, 5), "w2": _pw(10, 5), "w3": _pw(10, 5)},
@@ -213,7 +213,7 @@ def test_find_regressions():
 
 
 def test_per_wave_table():
-    from atm.wave.benchmark import per_wave_table
+    from backend.wave.benchmark import per_wave_table
     asg = [{"metrics": {"hold_min": 4.0, "hold_laps": 1, "vector_min": 1.5, "taxi_wait_min": 0.5}},
            {"metrics": {"hold_min": 0.0, "hold_laps": 0}}]
     runs = {"w1": {"result": {"final_plan": {"assignments": asg},
@@ -225,7 +225,7 @@ def test_per_wave_table():
 
 def test_archive_order_and_attribution_notes(tmp_path):
     import json
-    from atm.wave.benchmark import attribution, load_archive
+    from backend.wave.benchmark import attribution, load_archive
     for d, v in (("a-late", "v3-time"), ("z-early", "v2")):
         (tmp_path / d).mkdir()
         (tmp_path / d / "benchmark.json").write_text(json.dumps({"engine_version": v, "baseline": {}, "arms": []}))

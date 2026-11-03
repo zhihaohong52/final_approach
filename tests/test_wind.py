@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from atm.wave.wind import TYPE_XWIND_KT, components, limits, runway_wind, surface_from_metar, within_limits
+from backend.wave.wind import TYPE_XWIND_KT, components, limits, runway_wind, surface_from_metar, within_limits
 from tests.fixtures import make_wave
 
 

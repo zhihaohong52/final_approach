@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from atm.geo.cifp import parse_lat, parse_lon, parse_leg, extract_airport
+from backend.geo.cifp import parse_lat, parse_lon, parse_leg, extract_airport
 
 LINES = Path("tests/data/cifp/kord_2611.txt").read_text(encoding="latin-1").splitlines()
 

@@ -1,8 +1,8 @@
 """MCP tool tests: in-process, fixture-backed, no network."""
 import asyncio
 
-from atm import mcp_server
-from atm.wave import build, fixtures, moves
+from backend import mcp_server
+from backend.wave import build, fixtures, moves
 
 
 def test_tools_registered():

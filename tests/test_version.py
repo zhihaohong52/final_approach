@@ -1,4 +1,4 @@
-from atm.wave.version import ENGINE_VERSION
+from backend.wave.version import ENGINE_VERSION
 
 
 def test_version():

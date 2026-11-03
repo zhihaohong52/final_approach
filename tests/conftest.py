@@ -1,6 +1,6 @@
 import os
 
-import atm  # noqa: F401  (its .env loader runs now, before the URLs are stripped below)
+import backend  # noqa: F401  (its .env loader runs now, before the URLs are stripped below)
 import pytest
 
 TEST_DB_URL = os.environ.get("DATABASE_TEST_URL")
@@ -8,7 +8,7 @@ for _k in ("DATABASE_URL_POOLED", "DATABASE_URL", "DATABASE_TEST_URL"):
     os.environ.pop(_k, None)
 os.environ["ATM_STORE"] = "files"
 
-from atm import datastore  # noqa: E402
+from backend import datastore  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -31,9 +31,9 @@ def api_client(tmp_path, monkeypatch):
     """TestClient over the stub-backed app with a FileStore in tmp_path (shared by the API test files)."""
     from fastapi.testclient import TestClient
 
-    from atm import server
-    from atm.datastore.files import FilePaths, FileStore
-    from atm.wave import stub
+    from backend import server
+    from backend.datastore.files import FilePaths, FileStore
+    from backend.wave import stub
     monkeypatch.setattr(server, "WB", stub)
     monkeypatch.setattr(server, "GR", stub)
     datastore.set_store(FileStore(FilePaths(runs_dir=tmp_path / "runs", decisions_path=tmp_path / "decisions.jsonl",

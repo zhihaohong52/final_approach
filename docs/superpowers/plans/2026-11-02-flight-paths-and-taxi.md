@@ -24,7 +24,7 @@
 - No model decides legality. Every `RuleCheck` cites `rule`, `source` and `evidence`. Every new limit is a row in `rules.LIMITS` with `source: "workbook" | "real data" | "assumption"`.
 - Every trajectory point and taxi segment carries `src: "cifp" | "osm" | "synth"`. Synthesized parts are drawn dashed. Never draw a path the engine did not use.
 - Runtime never fetches CIFP/OSM/BTS. Raw downloads go to `.cache/` (gitignored and dockerignored); derived files go to `data/ref/` (and are seeded into `geo.*`, see the Datastore line above).
-- Datastore (Postgres plan, design §15): derived files still go to `data/ref/` (seed and offline backend), but the runtime reads geometry through `atm.datastore` (`get_store().procedures(icao) / surface(icao) / movements_day(iata, date)` return gzipped bytes or `None`; PgStore in production, FileStore offline). `atm/geo/store.py` stays this plan's import surface: its loaders delegate to those methods and gunzip/parse. After generating files, run `python3 scripts/db_seed.py <dataset>` (datasets `procedures`, `surface`, `movements2015`, `coverage`; it needs `DATABASE_URL`, the direct owner URL; skip the step when it is unset). The runtime uses `DATABASE_URL_POOLED`. New tables come only via `migrations/`. `live_db` tests are opt-in: they need `DATABASE_TEST_URL` (a separate `atm_test` database) and `ATM_LIVE_DB=1`; the offline suite is `python3 -m pytest -q -m "not live_db"`.
+- Datastore (Postgres plan, design §15): derived files still go to `data/ref/` (seed and offline backend), but the runtime reads geometry through `backend.datastore` (`get_store().procedures(icao) / surface(icao) / movements_day(iata, date)` return gzipped bytes or `None`; PgStore in production, FileStore offline). `backend/geo/store.py` stays this plan's import surface: its loaders delegate to those methods and gunzip/parse. After generating files, run `python3 scripts/db_seed.py <dataset>` (datasets `procedures`, `surface`, `movements2015`, `coverage`; it needs `DATABASE_URL`, the direct owner URL; skip the step when it is unset). The runtime uses `DATABASE_URL_POOLED`. New tables come only via `migrations/`. `live_db` tests are opt-in: they need `DATABASE_TEST_URL` (a separate `atm_test` database) and `ATM_LIVE_DB=1`; the offline suite is `python3 -m pytest -q -m "not live_db"`.
 - CIFP: pinned cycle **2611**, `https://aeronav.faa.gov/Upload_313-d/cifp/CIFP_261029.zip`. UI string: "Procedures: FAA CIFP 2611, not for navigation". The FAA disclaimer goes next to the derived files.
 - OSM attribution "© OpenStreetMap contributors" is always visible on the surface map and in the README.
 - Pinned physics: holding IAS 200 KIAS ≤ 6,000 ft, 230 KIAS 6,001-14,000 ft, 265 KIAS above; inbound leg 1.0 min ≤ 14,000 ft, 1.5 min above; right turns unless published; TAS = IAS × (1 + 0.02 × alt_ft/1000); turn rate is the least-bank option among 3°/s, 30° and 25° bank; g = 9.80665.
@@ -44,12 +44,12 @@
   - move label ≤ 120 chars;
   - movements data ≤ 50 MB;
   - procedures data ≤ 3 MB total.
-- Engine versions: `"v2"` (implicit, no field), `"v3-air"` (M1), `"v3-time"` (M2a), `"v3-taxi"` (M2), `"v3-traffic"` (M3). Tests compare versions to `atm.wave.version.ENGINE_VERSION`. The literal is pinned in exactly one test, `tests/test_version.py::test_version`, which each version-bumping task (T9, T21, T24, T31) updates.
-- Caches (`routes_for_wave`, `trajectory.build`, `reservations`, per-wave precomputation) are keyed on a **content fingerprint** of the wave, `atm.wave.route.wave_key(wave) -> str` (defined in T11) (sha1 of `json.dumps(wave.to_dict(), sort_keys=True)`, memoised on the object), never on `wave.id` alone. Tests build variants of `make_wave()` that share an id.
+- Engine versions: `"v2"` (implicit, no field), `"v3-air"` (M1), `"v3-time"` (M2a), `"v3-taxi"` (M2), `"v3-traffic"` (M3). Tests compare versions to `backend.wave.version.ENGINE_VERSION`. The literal is pinned in exactly one test, `tests/test_version.py::test_version`, which each version-bumping task (T9, T21, T24, T31) updates.
+- Caches (`routes_for_wave`, `trajectory.build`, `reservations`, per-wave precomputation) are keyed on a **content fingerprint** of the wave, `backend.wave.route.wave_key(wave) -> str` (defined in T11) (sha1 of `json.dumps(wave.to_dict(), sort_keys=True)`, memoised on the object), never on `wave.id` alone. Tests build variants of `make_wave()` that share an id.
 - New path fields in `FlightMetrics` are stored unrounded. Tests that compare a path field to an existing rounded field (`in_block_min`, `hold_min`, `fuel_kg` are rounded to 0.1) use `abs=0.05`.
 - Import order: `utility` imports `trajectory` lazily, inside `metrics_map`; `trajectory` imports `moves` lazily, inside functions. This avoids the `build`/`rules`/`moves` → `utility` import cycle.
 - Benchmark: same 50 ids, seed 7, same 4 arms. Failing waves are listed in `failures`, never dropped. The command (README, verbatim):
-  `python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`
+  `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`
 
 ## Review Focus
 
@@ -63,37 +63,37 @@
 
 ## File Structure
 
-**New, offline data (`atm/geo/` is offline-build logic plus runtime loaders; no engine logic)**
-- `atm/wave/icao.py`: IATA→ICAO lookup from `data/challenge3/airports.dat`.
-- `atm/geo/__init__.py`.
-- `atm/geo/cifp.py`: fixed-column ARINC 424-18 record parsing and per-airport extraction.
-- `atm/geo/osm_surface.py`: OSM JSON → simplified taxi graph dict (offline).
-- `atm/geo/gates_geo.py`: gate id → stand coordinates binding.
-- `atm/geo/store.py`: runtime loaders `load_procedures`, `load_surface`, `load_movements` (LRU, maxsize 4).
+**New, offline data (`backend/geo/` is offline-build logic plus runtime loaders; no engine logic)**
+- `backend/wave/icao.py`: IATA→ICAO lookup from `data/challenge3/airports.dat`.
+- `backend/geo/__init__.py`.
+- `backend/geo/cifp.py`: fixed-column ARINC 424-18 record parsing and per-airport extraction.
+- `backend/geo/osm_surface.py`: OSM JSON → simplified taxi graph dict (offline).
+- `backend/geo/gates_geo.py`: gate id → stand coordinates binding.
+- `backend/geo/store.py`: runtime loaders `load_procedures`, `load_surface`, `load_movements` (LRU, maxsize 4).
 - `scripts/__init__.py` (new, empty, so tests can import `scripts.*`), `scripts/fetch_cifp.py`, `scripts/fetch_surface.py`, `scripts/geo_coverage.py`, `scripts/pick_replays.py`.
 - Modified: `scripts/fetch_bts.py` (new `--movements2015` step) and `scripts/split_flights2015.py` (taxi columns).
 - Data: `data/ref/procedures/{ICAO}.json.gz`, `data/ref/procedures/README.md` (FAA disclaimer), `data/ref/surface/{ICAO}.json.gz`, `data/ref/movements2015/{IATA}.csv.gz`, `data/ref/GEO_COVERAGE.md`.
 
 **New engine**
-- `atm/wave/version.py`: `ENGINE_VERSION`.
-- `atm/wave/holding.py`: hold geometry, lap time, stack levels.
-- `atm/wave/route.py`: STAR / approach / synthetic route per (flight, runway end).
-- `atm/wave/trajectory.py`: `TrajectorySet` per plan, earliest landing, memoisation.
-- `atm/wave/surface.py`: runtime taxi graph, exit choice, ROT, unimpeded routes, hold-short scheduler.
-- `atm/wave/ground_traffic.py`: fixed ground traffic (queue arrivals and real departures), reservations.
+- `backend/wave/version.py`: `ENGINE_VERSION`.
+- `backend/wave/holding.py`: hold geometry, lap time, stack levels.
+- `backend/wave/route.py`: STAR / approach / synthetic route per (flight, runway end).
+- `backend/wave/trajectory.py`: `TrajectorySet` per plan, earliest landing, memoisation.
+- `backend/wave/surface.py`: runtime taxi graph, exit choice, ROT, unimpeded routes, hold-short scheduler.
+- `backend/wave/ground_traffic.py`: fixed ground traffic (queue arrivals and real departures), reservations.
 
 **Modified engine**
-- `atm/wave/model.py`: new `FlightMetrics` fields, `Gate` geo fields, `QueueArrival.origin`.
-- `atm/wave/utility.py`: `metrics_map` replaces `metrics`.
-- `atm/wave/rules.py`: 14 rules and new `LIMITS` rows.
-- `atm/wave/moves.py`: `fcfs_runways`, runway-dependent `_min_slot`, the `hold` move, labels.
-- `atm/wave/graph.py`: views and prompt.
-- `atm/wave/build.py` and `atm/wave/flights2015.py`: ICAO, time base, gate geo, provenance.
-- `atm/wave/replay.py`: `engine_version`.
-- `atm/wave/benchmark.py`: engine history, lap share, taxi validation, coverage.
-- `atm/wave/narrate.py`: brief mentions laps and hold-shorts.
-- `atm/mcp_server.py`: `get_trajectory` tool.
-- `atm/server.py`: `/api/wave/{id}/geo`, `POST /api/trajectories`, evaluate flag, result embedding, 409 guard.
+- `backend/wave/model.py`: new `FlightMetrics` fields, `Gate` geo fields, `QueueArrival.origin`.
+- `backend/wave/utility.py`: `metrics_map` replaces `metrics`.
+- `backend/wave/rules.py`: 14 rules and new `LIMITS` rows.
+- `backend/wave/moves.py`: `fcfs_runways`, runway-dependent `_min_slot`, the `hold` move, labels.
+- `backend/wave/graph.py`: views and prompt.
+- `backend/wave/build.py` and `backend/wave/flights2015.py`: ICAO, time base, gate geo, provenance.
+- `backend/wave/replay.py`: `engine_version`.
+- `backend/wave/benchmark.py`: engine history, lap share, taxi validation, coverage.
+- `backend/wave/narrate.py`: brief mentions laps and hold-shorts.
+- `backend/mcp_server.py`: `get_trajectory` tool.
+- `backend/server.py`: `/api/wave/{id}/geo`, `POST /api/trajectories`, evaluate flag, result embedding, 409 guard.
 
 **Frontend**
 - `frontend/src/geo/track.ts` (new): `positionAt`, `projector` (pure; vitest).
@@ -115,19 +115,19 @@
 ### Task 1: IATA→ICAO lookup
 
 **Files:**
-- Create: `atm/wave/icao.py`, `tests/test_icao.py`
-- Modify: `atm/wave/flights2015.py:151-155` (`_icao` delegates); `atm/wave/build.py:516` (BTS waves: `icao=icao_for(iata)` instead of `"K" + iata`, keeping the prefix rule only on `KeyError`)
+- Create: `backend/wave/icao.py`, `tests/test_icao.py`
+- Modify: `backend/wave/flights2015.py:151-155` (`_icao` delegates); `backend/wave/build.py:516` (BTS waves: `icao=icao_for(iata)` instead of `"K" + iata`, keeping the prefix rule only on `KeyError`)
 
 **Interfaces:**
 - Produces: `icao_for(iata: str) -> str` (raises `KeyError` if unknown) and `iata_for(icao: str) -> str | None`. The source is OpenFlights `data/challenge3/airports.dat` (columns 5 = IATA, 6 = ICAO), loaded once via `functools.cache`.
-  - Datastore: `icao_for` parses `get_store().rows("openflights")` (from `atm.datastore import get_store`), whose keys are `c1`..`c14` (so IATA = `c5`, ICAO = `c6`). FileStore reads `data/challenge3/airports.dat` as planned; Postgres serves the `ref.openflights` copy. `raw.ch3_airports_dat` is not used at runtime. No seed step: `openflights` is seeded by the Postgres plan's `small` dataset.
+  - Datastore: `icao_for` parses `get_store().rows("openflights")` (from `backend.datastore import get_store`), whose keys are `c1`..`c14` (so IATA = `c5`, ICAO = `c6`). FileStore reads `data/challenge3/airports.dat` as planned; Postgres serves the `ref.openflights` copy. `raw.ch3_airports_dat` is not used at runtime. No seed step: `openflights` is seeded by the Postgres plan's `small` dataset.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 import os
 import pytest
-from atm.wave.icao import icao_for, iata_for
+from backend.wave.icao import icao_for, iata_for
 
 @pytest.mark.parametrize("iata,icao", [("OGG", "PHOG"), ("SJU", "TJSJ"), ("FCA", "KGPI"),
                                        ("KOA", "PHKO"), ("ORD", "KORD"), ("PBI", "KPBI")])
@@ -151,31 +151,31 @@ def test_db_flights2015_destinations_resolve_via_file_lookup(live_db_url):
     assert all(len(icao_for(d)) == 4 for d in dests)
 
 def test_flights2015_uses_lookup():
-    from atm.wave import flights2015
+    from backend.wave import flights2015
     assert flights2015._icao("OGG") == "PHOG"
 
 def test_bts_wave_uses_lookup(monkeypatch):
-    from atm.wave import build, icao
+    from backend.wave import build, icao
     calls = []
     monkeypatch.setattr(icao, "icao_for", lambda i: calls.append(i) or "KORD")
     build.build_wave(build.list_waves(airport="ORD", limit=1)[0]["id"])
     assert calls == ["ORD"]
 ```
 
-- [ ] **Step 2: Run** `python3 -m pytest tests/test_icao.py -q`. Expected: FAIL (`ModuleNotFoundError: atm.wave.icao`).
-- [ ] **Step 3: Implement** `icao_for` / `iata_for` in `atm/wave/icao.py`. Make `flights2015._icao(iata)` return `icao_for(iata)`, falling back to the old prefix rule only on `KeyError`. In `build.build_wave`, call `icao.icao_for` through the module (`from atm.wave import icao`), so the monkeypatch in the test takes effect.
+- [ ] **Step 2: Run** `python3 -m pytest tests/test_icao.py -q`. Expected: FAIL (`ModuleNotFoundError: backend.wave.icao`).
+- [ ] **Step 3: Implement** `icao_for` / `iata_for` in `backend/wave/icao.py`. Make `flights2015._icao(iata)` return `icao_for(iata)`, falling back to the old prefix rule only on `KeyError`. In `build.build_wave`, call `icao.icao_for` through the module (`from backend.wave import icao`), so the monkeypatch in the test takes effect.
 - [ ] **Step 4: Run** `python3 -m pytest tests/test_icao.py tests/test_flights2015.py tests/test_build.py -q -m "not live_db"`. Expected: PASS. With `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` set, also run `python3 -m pytest tests/test_icao.py -q -m live_db`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/icao.py atm/wave/flights2015.py atm/wave/build.py tests/test_icao.py
+git add backend/wave/icao.py backend/wave/flights2015.py backend/wave/build.py tests/test_icao.py
 git commit -m "fix: IATA to ICAO from OpenFlights (OGG was PHGG, SJU TJJU, FCA KFCA, KOA PHOA)"
 ```
 
 ### Task 2: CIFP record parser and per-airport extractor
 
 **Files:**
-- Create: `atm/geo/__init__.py`, `atm/geo/cifp.py`, `tests/test_cifp.py`, `tests/data/cifp/kord_2611.txt`
+- Create: `backend/geo/__init__.py`, `backend/geo/cifp.py`, `tests/test_cifp.py`, `tests/data/cifp/kord_2611.txt`
 
 **Interfaces:**
 - Produces:
@@ -213,7 +213,7 @@ git commit -m "fix: IATA to ICAO from OpenFlights (OGG was PHGG, SJU TJJU, FCA K
 ```python
 from pathlib import Path
 import pytest
-from atm.geo.cifp import parse_lat, parse_lon, parse_leg, extract_airport
+from backend.geo.cifp import parse_lat, parse_lon, parse_leg, extract_airport
 
 LINES = Path("tests/data/cifp/kord_2611.txt").read_text(encoding="latin-1").splitlines()
 
@@ -270,20 +270,20 @@ def test_matches_arinc424_decode():
 
   `_field(dec, name)` looks up a field by its decoded name in `arinc424`'s JSON output. Inspect one decoded record once to find the exact key names, and add `import json` at the top. The `arinc424` calls (`Record().read(line)`, `.json()`) are unverified: confirm them against the package README on first run and adapt. The test skips when `arinc424` is not installed; install it locally with `pip install arinc424==0.3.0`, which is not in `requirements.txt`.
 
-- [ ] **Step 3: Run** `python3 -m pytest tests/test_cifp.py -q`. Expected: FAIL (`ModuleNotFoundError: atm.geo`).
-- [ ] **Step 4: Implement** `atm/geo/cifp.py` with the signatures and columns above. STAR route types: `1/4` enroute, `2/5` common, `3/6` runway transition. Approach route type `A` is a transition. `extract_airport` sets `header.fetched_at` from an optional `fetched_at: str | None = None` keyword argument, defaulting to the current UTC time. `header.tier` is `"star+iap"` if the airport has STARs and approaches, `"iap"` if it has approaches only, else `"none"`.
+- [ ] **Step 3: Run** `python3 -m pytest tests/test_cifp.py -q`. Expected: FAIL (`ModuleNotFoundError: backend.geo`).
+- [ ] **Step 4: Implement** `backend/geo/cifp.py` with the signatures and columns above. STAR route types: `1/4` enroute, `2/5` common, `3/6` runway transition. Approach route type `A` is a transition. `extract_airport` sets `header.fetched_at` from an optional `fetched_at: str | None = None` keyword argument, defaulting to the current UTC time. `header.tier` is `"star+iap"` if the airport has STARs and approaches, `"iap"` if it has approaches only, else `"none"`.
 - [ ] **Step 5: Run** `python3 -m pytest tests/test_cifp.py -q`. Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add atm/geo/__init__.py atm/geo/cifp.py tests/test_cifp.py tests/data/cifp/kord_2611.txt
+git add backend/geo/__init__.py backend/geo/cifp.py tests/test_cifp.py tests/data/cifp/kord_2611.txt
 git commit -m "feat(geo): ARINC 424-18 CIFP parser and per-airport extractor"
 ```
 
 ### Task 3: CIFP fetch script, derived procedures and loader
 
 **Files:**
-- Create: `scripts/fetch_cifp.py`, `atm/geo/store.py`, `data/ref/procedures/README.md`, `data/ref/procedures/*.json.gz` (generated), `tests/test_geo_store.py`
+- Create: `scripts/fetch_cifp.py`, `backend/geo/store.py`, `data/ref/procedures/README.md`, `data/ref/procedures/*.json.gz` (generated), `tests/test_geo_store.py`
 
 **Interfaces:**
 - Consumes: `extract_airport` (Task 2), `icao_for` (Task 1).
@@ -293,13 +293,13 @@ git commit -m "feat(geo): ARINC 424-18 CIFP parser and per-airport extractor"
   - `fetch_cifp.py` steps:
     - download to `.cache/cifp/CIFP_261029.zip`;
     - verify the SHA-256 constant `CIFP_SHA256` (recorded on the first run and pasted into the script) and the size 9,113,631 bytes;
-    - extract one file per ICAO of: the 320 flights2015 destinations, plus `atm.wave.hubs.HUBS`.
-  - Datastore: `load_procedures` delegates to `get_store().procedures(icao)` (`from atm.datastore import get_store`), which returns the gzipped JSON document or `None`; the loader gunzips and parses it. `scripts/db_seed.py procedures` loads `data/ref/procedures/*.json.gz` into `geo.procedures` (doc blob) and `geo.fixes` (points), swapped atomically. The seeder reads only `header.cycle`, `header.tier` and `fixes` (a map of ident to `[lat, lon]`) from the document: keep the output of `fetch_cifp.py` in sync with `_procedure_row` and `_fix_rows` in `scripts/db_seed.py`, or update them.
+    - extract one file per ICAO of: the 320 flights2015 destinations, plus `backend.wave.hubs.HUBS`.
+  - Datastore: `load_procedures` delegates to `get_store().procedures(icao)` (`from backend.datastore import get_store`), which returns the gzipped JSON document or `None`; the loader gunzips and parses it. `scripts/db_seed.py procedures` loads `data/ref/procedures/*.json.gz` into `geo.procedures` (doc blob) and `geo.fixes` (points), swapped atomically. The seeder reads only `header.cycle`, `header.tier` and `fixes` (a map of ident to `[lat, lon]`) from the document: keep the output of `fetch_cifp.py` in sync with `_procedure_row` and `_fix_rows` in `scripts/db_seed.py`, or update them.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-from atm.geo import store
+from backend.geo import store
 
 def test_kord_procedures_present():
     d = store.load_procedures("KORD")
@@ -311,7 +311,7 @@ def test_absent_airports():
 
 def test_coverage_counts():
     import os
-    from atm.wave.icao import icao_for
+    from backend.wave.icao import icao_for
     dests = [f[:-7] for f in os.listdir("data/challenge2/flights")]
     have = [store.load_procedures(icao_for(d)) for d in dests]
     assert sum(bool(h and h["stars"]) for h in have) == 111
@@ -341,14 +341,14 @@ def test_geo_procedures_match_files_by_sha256(live_db_url):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/fetch_cifp.py atm/geo/store.py data/ref/procedures tests/test_geo_store.py
+git add scripts/fetch_cifp.py backend/geo/store.py data/ref/procedures tests/test_geo_store.py
 git commit -m "data: FAA CIFP 2611 procedures per airport (STARs, approaches, coded holds)"
 ```
 
 ### Task 4: OSM surface graph builder
 
 **Files:**
-- Create: `atm/geo/osm_surface.py`, `tests/test_osm_surface.py`, `tests/data/osm/mini_airport.json`, `tests/data/osm/mini_runways.json` (the runway rows for the fixture, shared by T4, T5 and T23)
+- Create: `backend/geo/osm_surface.py`, `tests/test_osm_surface.py`, `tests/data/osm/mini_airport.json`, `tests/data/osm/mini_runways.json` (the runway rows for the fixture, shared by T4, T5 and T23)
 
 **Interfaces:**
 - Produces: `build_surface(osm: dict, icao: str, runways: list[dict], ref_latlon: tuple[float, float], osm_timestamp: str) -> dict`. Here `runways` are rows of `data/ref/runways.csv` for the airport (`runway, le_lat, le_lon, he_lat, he_lon`). Surface schema:
@@ -384,7 +384,7 @@ git commit -m "data: FAA CIFP 2611 procedures per airport (STARs, approaches, co
 
 ```python
 import json
-from atm.geo.osm_surface import build_surface
+from backend.geo.osm_surface import build_surface
 
 OSM = json.load(open("tests/data/osm/mini_airport.json"))
 RWYS = json.load(open("tests/data/osm/mini_runways.json"))
@@ -421,20 +421,20 @@ def test_no_tier_stored_offline():
 - [ ] **Step 6: Commit**
 
 ```bash
-git add atm/geo/osm_surface.py tests/test_osm_surface.py tests/data/osm/mini_airport.json tests/data/osm/mini_runways.json
+git add backend/geo/osm_surface.py tests/test_osm_surface.py tests/data/osm/mini_airport.json tests/data/osm/mini_runways.json
 git commit -m "feat(geo): OSM taxiway graph builder with exits, crossings and per-end reachability"
 ```
 
 ### Task 5: Surface fetch, gate→stand binding, derived surface files
 
 **Files:**
-- Create: `atm/geo/gates_geo.py`, `scripts/fetch_surface.py`, `tests/test_gates_geo.py`, `data/ref/surface/*.json.gz` (generated)
-- Modify: `atm/geo/store.py`
+- Create: `backend/geo/gates_geo.py`, `scripts/fetch_surface.py`, `tests/test_gates_geo.py`, `data/ref/surface/*.json.gz` (generated)
+- Modify: `backend/geo/store.py`
 
 **Interfaces:**
 - Consumes: `build_surface` (Task 4), `icao_for`.
 - Produces:
-  - `store.load_surface(icao: str) -> dict | None`. It delegates to `get_store().surface(icao)` (`from atm.datastore import get_store`; gzipped JSON document or `None`) and gunzips/parses.
+  - `store.load_surface(icao: str) -> dict | None`. It delegates to `get_store().surface(icao)` (`from backend.datastore import get_store`; gzipped JSON document or `None`) and gunzips/parses.
   - `scripts/db_seed.py surface` loads `data/ref/surface/*.json.gz` into `geo.surface` (doc blob, `reach_pct`), `geo.stands`, `geo.osm_gates` and `geo.holding_positions` (PostGIS points), swapped atomically. The seeder reads only these keys of the surface document: `header.osm_timestamp`, `quality.reach_pct`, `stands` (`id`, `ref`, `node`, `lat`, `lon`), `gates` (`ref`, `lat`, `lon`), `holding_positions` (`node`, `strip`) and `nodes` (`[lat, lon]` by index). `build_surface` (Task 4) and `fetch_surface.py` must keep those output keys in sync with `_surface_row`, `_stand_rows`, `_gate_rows` and `_hold_rows` in `scripts/db_seed.py`, or update the builders.
   - `gates_geo.bind_gates(gate_ids: list[tuple[str, bool]], surface: dict) -> dict[str, dict]`. The input is `(gate_id, remote)` pairs. The output maps `gate_id → {"lat", "lon", "stand": str, "node": int, "geo_src": "osm-ref"|"osm-near"|"osm-gate"|"osm-generic"|"synth"}`. Order (spec §5 steps 1-4, then the generic fallbacks):
     1. a stand whose `ref` equals the id (`osm-ref`);
@@ -455,12 +455,12 @@ git commit -m "feat(geo): OSM taxiway graph builder with exits, crossings and pe
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-from atm.geo import store
-from atm.geo.gates_geo import bind_gates
+from backend.geo import store
+from backend.geo.gates_geo import bind_gates
 
 def test_bind_exact_ref_and_generic_on_fixture():
     import json
-    from atm.geo.osm_surface import build_surface
+    from backend.geo.osm_surface import build_surface
     s = build_surface(json.load(open("tests/data/osm/mini_airport.json")), "KXXX",
                       json.load(open("tests/data/osm/mini_runways.json")), (0.0, 0.0), "t")
     b = bind_gates([("1", False), ("A1", False), ("RS", True)], s)
@@ -474,7 +474,7 @@ def test_replay_hubs_have_real_surface():
 
 def test_gate_node_fallback_when_no_stand_matches():
     import json
-    from atm.geo.osm_surface import build_surface
+    from backend.geo.osm_surface import build_surface
     osm = json.load(open("tests/data/osm/mini_airport.json"))
     osm["elements"].append({"type": "node", "id": 990001, "lat": 0.0021, "lon": 0.0090,
                             "tags": {"aeroway": "gate", "ref": "G9"}})   # > 150 m from both stands
@@ -482,7 +482,7 @@ def test_gate_node_fallback_when_no_stand_matches():
     assert bind_gates([("G9", False)], s)["G9"]["geo_src"] == "osm-gate"
 
 def test_ord_replay_gates_bind_to_osm():
-    from atm.wave import build
+    from backend.wave import build
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     assert sum(v["geo_src"] in ("osm-ref", "osm-near") for v in b.values()) >= len(w.gates) - 3
@@ -492,7 +492,7 @@ import pytest
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL, after `db_seed.py surface` into atm_test
 def test_bindings_agree_with_nearest_stand_query(live_db_url):
     import psycopg
-    from atm.wave import build
+    from backend.wave import build
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     with psycopg.connect(live_db_url) as c:
@@ -512,33 +512,33 @@ def test_bindings_agree_with_nearest_stand_query(live_db_url):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/geo/gates_geo.py atm/geo/store.py scripts/fetch_surface.py tests/test_gates_geo.py data/ref/surface
+git add backend/geo/gates_geo.py backend/geo/store.py scripts/fetch_surface.py tests/test_gates_geo.py data/ref/surface
 git commit -m "data: OSM surface graphs per airport (ODbL) and gate to stand binding"
 ```
 
 ### Task 6: 2015 ground movements and taxi columns
 
 **Files:**
-- Modify: `scripts/fetch_bts.py` (new `--movements2015` mode); `scripts/split_flights2015.py:14-22` (add `WHEELS_ON, TAXI_IN, WHEELS_OFF, TAXI_OUT` to the `SRC` rename map as `wheels_on, taxi_in, wheels_off, taxi_out`, and to `FILE_COLS`; convert `WHEELS_ON`/`WHEELS_OFF` from HHMM to local minutes since midnight, adding 1440 when the time wraps past midnight relative to the scheduled time); `atm/geo/store.py`
+- Modify: `scripts/fetch_bts.py` (new `--movements2015` mode); `scripts/split_flights2015.py:14-22` (add `WHEELS_ON, TAXI_IN, WHEELS_OFF, TAXI_OUT` to the `SRC` rename map as `wheels_on, taxi_in, wheels_off, taxi_out`, and to `FILE_COLS`; convert `WHEELS_ON`/`WHEELS_OFF` from HHMM to local minutes since midnight, adding 1440 when the time wraps past midnight relative to the scheduled time); `backend/geo/store.py`
 - Create: `tests/data/movements/mini.csv`, `data/ref/movements2015/{IATA}.csv.gz` (generated), regenerated `data/challenge2/flights/*.csv.gz`
 - Test: `tests/test_geo_store.py` (append)
 
 **Interfaces:**
 - Produces:
-  - In `atm/geo/store.py`: `MOVEMENTS_DIR = ROOT / "data/ref/movements2015"` and `@dataclass Movement(callsign: str, tail: str | None, kind: Literal["arrival", "departure"], date: str, sched_min_abs: int, wheels_min_abs: int | None, taxi_min: float | None, other_airport: str)`.
+  - In `backend/geo/store.py`: `MOVEMENTS_DIR = ROOT / "data/ref/movements2015"` and `@dataclass Movement(callsign: str, tail: str | None, kind: Literal["arrival", "departure"], date: str, sched_min_abs: int, wheels_min_abs: int | None, taxi_min: float | None, other_airport: str)`.
   - `store.load_movements(iata: str, date: str, from_abs: int, to_abs: int) -> list[Movement] | None`. `None` means no file for the airport; minutes are local minutes since midnight.
   - The movements CSV columns are `date,kind,carrier,flight_no,tail,other,sched,wheels,taxi,cancelled`.
-  - `store.TOP30: tuple[str, ...]` is a constant in `atm/geo/store.py`: the top 30 IATA codes by 2015 arrivals. `fetch_bts.py --movements2015` computes it once from the downloaded months and prints the tuple to paste in. It is also listed in `GEO_COVERAGE.md`.
+  - `store.TOP30: tuple[str, ...]` is a constant in `backend/geo/store.py`: the top 30 IATA codes by 2015 arrivals. `fetch_bts.py --movements2015` computes it once from the downloaded months and prints the tuple to paste in. It is also listed in `GEO_COVERAGE.md`.
   - `store.MOVEMENT_AIRPORTS: tuple[str, ...]` = sorted union of `TOP30` and the 30 benchmark airports (the `dest` of the `eval/benchmark.json` `wave_ids`). Movements are written for all of them if the total fits the 50 MB cap; otherwise for `TOP30` only, and `MOVEMENT_AIRPORTS = TOP30` (the rest are badged partial, spec §6.9).
   - flights2015 rows gain `wheels_on, taxi_in, wheels_off, taxi_out` (floats, NaN when missing).
-  - Datastore: `load_movements(iata, date, from_abs, to_abs)` keeps its signature but does one `get_store().movements_day(iata, date)` fetch (`from atm.datastore import get_store`; a gzipped CSV for that airport-day or `None`), gunzips, parses and filters to the window. When the window crosses midnight (`to_abs > 1440`), it also reads the next day's `movements_day` blob and concatenates it before filtering. `scripts/db_seed.py movements2015` repacks `data/ref/movements2015/{IATA}.csv.gz` per airport-day into `geo.movements2015_day`; it finds the day through the first of `atm.datastore.pack.MOVEMENT_DATE_COLS` present in the CSV, so the `date` column here must stay among those candidates. `scripts/db_seed.py flights2015` carries the new taxi columns into `ref.flights2015` (they exist from the Postgres plan's D2 and are null until then).
+  - Datastore: `load_movements(iata, date, from_abs, to_abs)` keeps its signature but does one `get_store().movements_day(iata, date)` fetch (`from backend.datastore import get_store`; a gzipped CSV for that airport-day or `None`), gunzips, parses and filters to the window. When the window crosses midnight (`to_abs > 1440`), it also reads the next day's `movements_day` blob and concatenates it before filtering. `scripts/db_seed.py movements2015` repacks `data/ref/movements2015/{IATA}.csv.gz` per airport-day into `geo.movements2015_day`; it finds the day through the first of `backend.datastore.pack.MOVEMENT_DATE_COLS` present in the CSV, so the `date` column here must stay among those candidates. `scripts/db_seed.py flights2015` carries the new taxi columns into `ref.flights2015` (they exist from the Postgres plan's D2 and are null until then).
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 def test_movements_window_from_fixture(tmp_path, monkeypatch):
     import shutil, gzip
-    from atm.geo import store
+    from backend.geo import store
     p = tmp_path / "XXX.csv.gz"
     with open("tests/data/movements/mini.csv", "rb") as f, gzip.open(p, "wb") as g:
         shutil.copyfileobj(f, g)
@@ -548,12 +548,12 @@ def test_movements_window_from_fixture(tmp_path, monkeypatch):
     assert store.load_movements("NOPE", "2015-08-19", 0, 1440) is None
 
 def test_flights2015_rows_have_taxi_in():
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     df = F._dest_frame("ORD")
     assert {"wheels_on", "taxi_in", "wheels_off", "taxi_out"} <= set(df.columns) and df["taxi_in"].notna().mean() > 0.99
 
 def test_top30_and_movement_airports():
-    from atm.geo import store
+    from backend.geo import store
     assert len(store.TOP30) == 30 and set(store.TOP30) <= set(store.MOVEMENT_AIRPORTS)
     from pathlib import Path
     assert {p.name[:3] for p in Path("data/ref/movements2015").glob("*.csv.gz")} == set(store.MOVEMENT_AIRPORTS)
@@ -566,7 +566,7 @@ def test_movements_size_cap():
 def test_movements_day_blob_matches_file(live_db_url):
     import gzip, io
     import pandas as pd
-    from atm.datastore.pg import PgStore
+    from backend.datastore.pg import PgStore
     st = PgStore(live_db_url); st.open()
     try:
         blob = st.movements_day("ORD", "2015-08-19")
@@ -585,7 +585,7 @@ def test_movements_day_blob_matches_file(live_db_url):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/fetch_bts.py scripts/split_flights2015.py atm/geo/store.py data/ref/movements2015 data/challenge2/flights data/challenge2/flights_index.csv tests/data/movements/mini.csv tests/test_geo_store.py
+git add scripts/fetch_bts.py scripts/split_flights2015.py backend/geo/store.py data/ref/movements2015 data/challenge2/flights data/challenge2/flights_index.csv tests/data/movements/mini.csv tests/test_geo_store.py
 git commit -m "data: BTS 2015 arrivals and departures (top-30 and benchmark airports); taxi columns in flights2015 split"
 ```
 
@@ -603,7 +603,7 @@ git commit -m "data: BTS 2015 arrivals and departures (top-30 and benchmark airp
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-from atm.geo import store
+from backend.geo import store
 
 def test_coverage_rows_and_totals():
     from scripts.geo_coverage import coverage
@@ -613,7 +613,7 @@ def test_coverage_rows_and_totals():
 def test_ord_surface_rss_under_60mb():
     # fresh interpreter: ru_maxrss is a high-water mark, so an in-process delta can read 0
     import subprocess, sys
-    code = ("import resource,sys;from atm.geo import store;"
+    code = ("import resource,sys;from backend.geo import store;"
             "b=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;store.load_surface('KORD');store.load_procedures('KORD');"
             "a=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;print((a-b)/(1048576 if sys.platform=='darwin' else 1024))")
     mb = float(subprocess.check_output([sys.executable, "-c", code], text=True))
@@ -624,7 +624,7 @@ import pytest
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; PgStore variant of the RSS check (needs surface and procedures seeded)
 def test_ord_surface_rss_under_60mb_pgstore(live_db_url):
     import subprocess, sys
-    code = ("import resource,sys;from atm.datastore.pg import PgStore;"
+    code = ("import resource,sys;from backend.datastore.pg import PgStore;"
             "import os;st=PgStore(os.environ['DATABASE_TEST_URL']);st.open();"
             "b=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss;"
             "import gzip,json;[json.loads(gzip.decompress(f(i))) for f,i in ((st.surface,'KORD'),(st.procedures,'KORD'))];"
@@ -667,8 +667,8 @@ git commit -m "contract: samples regenerated after ICAO fix (no schema change)"
 ### Task 9: Engine version and contract v2.2 part 1 (model + types)
 
 **Files:**
-- Create: `atm/wave/version.py`, `tests/test_version.py`, `frontend/src/api/samples/v2.1/` (a frozen copy of today's `wave.json`, `result.json`, `benchmark.json`), `frontend/src/api/samples.typecheck.ts`
-- Modify: `atm/wave/model.py` (`FlightMetrics`, `Gate`, `QueueArrival`, `Provenance` doc), `frontend/src/api/types.ts`, `frontend/tsconfig.json` (only if `resolveJsonModule` is missing), `docs/api-contract.md`, `tests/test_model.py`
+- Create: `backend/wave/version.py`, `tests/test_version.py`, `frontend/src/api/samples/v2.1/` (a frozen copy of today's `wave.json`, `result.json`, `benchmark.json`), `frontend/src/api/samples.typecheck.ts`
+- Modify: `backend/wave/model.py` (`FlightMetrics`, `Gate`, `QueueArrival`, `Provenance` doc), `frontend/src/api/types.ts`, `frontend/tsconfig.json` (only if `resolveJsonModule` is missing), `docs/api-contract.md`, `tests/test_model.py`
 
 **Interfaces:**
 - Produces:
@@ -683,20 +683,20 @@ git commit -m "contract: samples regenerated after ICAO fix (no schema change)"
 
 ```python
 def test_v22_fields_defaulted_and_serialised():
-    from atm.wave.model import FlightMetrics, Gate
-    from atm.wave.fixtures import make_wave
+    from backend.wave.model import FlightMetrics, Gate
+    from backend.wave.fixtures import make_wave
     m = FlightMetrics()
     assert m.hold_laps == 0 and m.taxi_min is None and "route_extra_min" in m.to_dict()
     assert Gate("A1", "narrow", "A").to_dict()["geo_src"] is None
     d = make_wave().to_dict()
-    from atm.wave.version import ENGINE_VERSION
+    from backend.wave.version import ENGINE_VERSION
     assert d["engine_version"] == ENGINE_VERSION and d["geo_available"] is False
 ```
 
 `tests/test_version.py` (the only test that pins the literal; T21, T24 and T31 update it):
 
 ```python
-from atm.wave.version import ENGINE_VERSION
+from backend.wave.version import ENGINE_VERSION
 
 def test_version():
     assert ENGINE_VERSION == "v3-air"
@@ -722,14 +722,14 @@ Use direct assignment without `as` if the JSON's literal types allow it; keep `a
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/version.py atm/wave/model.py frontend/src/api/types.ts frontend/src/api/samples/v2.1 frontend/src/api/samples.typecheck.ts frontend/tsconfig.json docs/api-contract.md tests/test_model.py tests/test_version.py
+git add backend/wave/version.py backend/wave/model.py frontend/src/api/types.ts frontend/src/api/samples/v2.1 frontend/src/api/samples.typecheck.ts frontend/tsconfig.json docs/api-contract.md tests/test_model.py tests/test_version.py
 git commit -m "contract: v2.2 part 1 (FlightMetrics path fields, Gate geo, engine_version, WaveGeo/TrajectorySet types)"
 ```
 
 ### Task 10: Holding geometry
 
 **Files:**
-- Create: `atm/wave/holding.py`, `tests/test_holding.py`
+- Create: `backend/wave/holding.py`, `tests/test_holding.py`
 
 **Interfaces:**
 - Produces:
@@ -747,7 +747,7 @@ git commit -m "contract: v2.2 part 1 (FlightMetrics path fields, Gate geo, engin
 
 ```python
 import pytest
-from atm.wave import holding as H
+from backend.wave import holding as H
 
 def test_lap_times_pinned():
     assert H.lap_min(12000) == pytest.approx(5.36, abs=0.03)   # 230 KIAS, 25 deg bank
@@ -781,15 +781,15 @@ def test_stack_fifo_and_capacity():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/holding.py tests/test_holding.py
+git add backend/wave/holding.py tests/test_holding.py
 git commit -m "feat(engine): AIM 5-3-8 holding geometry, lap time and stack levels"
 ```
 
 ### Task 11: Route builder (STAR, approach, synthetic fallbacks)
 
 **Files:**
-- Create: `atm/wave/route.py`, `tests/test_route.py`
-- Modify: `atm/wave/flights2015.py` and `atm/wave/build.py` (set `QueueArrival.origin`)
+- Create: `backend/wave/route.py`, `tests/test_route.py`
+- Modify: `backend/wave/flights2015.py` and `backend/wave/build.py` (set `QueueArrival.origin`)
 
 **Interfaces:**
 - Consumes: `store.load_procedures`, `holding.make_hold`, `Wave`, `build._airport_coords(iata)`.
@@ -814,8 +814,8 @@ git commit -m "feat(engine): AIM 5-3-8 holding geometry, lap time and stack leve
 
 ```python
 import pytest
-from atm.wave import build, route
-from atm.wave.fixtures import make_wave
+from backend.wave import build, route
+from backend.wave.fixtures import make_wave
 
 ORD = "F2015-270287"
 
@@ -845,7 +845,7 @@ def test_far_runway_costs_more_route_time():
 
 def test_corner_post_when_no_star(monkeypatch):
     # an airport with approaches but no STARs: ABE per GEO_COVERAGE.md
-    from atm.wave import flights2015 as F
+    from backend.wave import flights2015 as F
     row = F.list_rows(airport="ABE", limit=1)[0]["row_id"]
     w = build.build_wave(f"F2015-{row}")
     r = route.build_route(w, w.flights[0].callsign, next(x.id for x in w.airport.runways if x.open))
@@ -853,8 +853,8 @@ def test_corner_post_when_no_star(monkeypatch):
 
 def test_straight_in_when_no_procedures(monkeypatch):
     # spec §12 "straight-in only" (PBI/ISN cannot be built: no runways.csv rows), simulated on ABE
-    from atm.geo import store
-    from atm.wave import flights2015 as F
+    from backend.geo import store
+    from backend.wave import flights2015 as F
     monkeypatch.setattr(store, "load_procedures", lambda icao: None); route.routes_for_wave.cache_clear()
     row = F.list_rows(airport="ABE", limit=1)[0]["row_id"]
     w = build.build_wave(f"F2015-{row}")
@@ -883,15 +883,15 @@ def test_no_geometry_returns_none():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/route.py atm/wave/build.py atm/wave/flights2015.py tests/test_route.py
+git add backend/wave/route.py backend/wave/build.py backend/wave/flights2015.py tests/test_route.py
 git commit -m "feat(engine): routes from CIFP STAR and approach, synthetic vectors, corner posts, straight-in"
 ```
 
 ### Task 12: Trajectory assembly per plan
 
 **Files:**
-- Create: `atm/wave/trajectory.py`, `tests/test_trajectory.py`
-- Modify: `atm/wave/moves.py` (extract `fcfs_runways(wave) -> dict[str, str]` from `fcfs_plan`; `fcfs_plan` uses it)
+- Create: `backend/wave/trajectory.py`, `tests/test_trajectory.py`
+- Modify: `backend/wave/moves.py` (extract `fcfs_runways(wave) -> dict[str, str]` from `fcfs_plan`; `fcfs_plan` uses it)
 
 **Interfaces:**
 - Consumes: `routes_for_wave`, `wave_key`, `holding.stack_levels`, `holding.racetrack`.
@@ -911,9 +911,9 @@ git commit -m "feat(engine): routes from CIFP STAR and approach, synthetic vecto
 ```python
 import math
 import pytest
-from atm.wave import build, trajectory
-from atm.wave.moves import fcfs_plan, fcfs_runways
-from atm.wave.fixtures import make_wave
+from backend.wave import build, trajectory
+from backend.wave.moves import fcfs_plan, fcfs_runways
+from backend.wave.fixtures import make_wave
 
 ORD = "F2015-270287"
 
@@ -945,7 +945,7 @@ def test_vector_only_flight_not_in_stack():
 
 def test_points_within_150nm_and_replay_plans_invariant():
     import glob, json
-    from atm.wave.edit import plan_from_dicts
+    from backend.wave.edit import plan_from_dicts
     for f in sorted(glob.glob("data/replay/*.json")):
         d = json.load(open(f)); w = build.build_wave(d["result"]["wave_id"])
         for p in (fcfs_plan(w), plan_from_dicts(d["result"]["final_plan"]["assignments"])):
@@ -970,7 +970,7 @@ def test_earliest_no_geometry_tier_is_v2():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/trajectory.py atm/wave/moves.py tests/test_trajectory.py
+git add backend/wave/trajectory.py backend/wave/moves.py tests/test_trajectory.py
 git commit -m "feat(engine): per-plan 4D trajectories with holding laps, vectors and stack levels"
 ```
 
@@ -978,11 +978,11 @@ git commit -m "feat(engine): per-plan 4D trajectories with holding laps, vectors
 
 **Files:**
 - Modify:
-  - `atm/wave/utility.py` (remove `metrics`, add public `metrics_map`, fuel and route terms);
-  - `atm/wave/moves.py:19,73-76,228,242` (`_min_slot(wave, a)` uses `trajectory.earliest`; per-flight metrics via `metrics_map`);
-  - `atm/wave/graph.py:54,86,167,178,712`;
-  - `atm/wave/rules.py:14,check` (default `mm` from `metrics_map`);
-  - `atm/wave/baseline.py:8,20` (status quo diverts iff `hold_min + max(0, route_extra_min) > extra_min`, matching PLT-FUEL-RESERVE; uses `metrics_map(wave, plan)`);
+  - `backend/wave/utility.py` (remove `metrics`, add public `metrics_map`, fuel and route terms);
+  - `backend/wave/moves.py:19,73-76,228,242` (`_min_slot(wave, a)` uses `trajectory.earliest`; per-flight metrics via `metrics_map`);
+  - `backend/wave/graph.py:54,86,167,178,712`;
+  - `backend/wave/rules.py:14,check` (default `mm` from `metrics_map`);
+  - `backend/wave/baseline.py:8,20` (status quo diverts iff `hold_min + max(0, route_extra_min) > extra_min`, matching PLT-FUEL-RESERVE; uses `metrics_map(wave, plan)`);
   - `tests/test_rules.py:303-313` (`test_divert_delay_includes_existing_delay` is rewritten to call `metrics_map(w2, JointPlan([...divert assignment..., other FCFS assignments]))[f.callsign]`, keeping its assertion).
 - Test: `tests/test_trajectory.py` (append), all existing tests.
 
@@ -1000,10 +1000,10 @@ git commit -m "feat(engine): per-plan 4D trajectories with holding laps, vectors
 
 ```python
 def test_metrics_removed_and_map_is_joint():
-    import atm.wave.utility as U
+    import backend.wave.utility as U
     assert not hasattr(U, "metrics")
-    from atm.wave import build
-    from atm.wave.moves import fcfs_plan
+    from backend.wave import build
+    from backend.wave.moves import fcfs_plan
     w = build.build_wave("F2015-270287")
     mm = U.metrics_map(w, fcfs_plan(w))
     assert all(m.route_min is not None for m in mm.values())
@@ -1011,8 +1011,8 @@ def test_metrics_removed_and_map_is_joint():
 def _far_runway(w, cs) -> str:
     """Open runway end with the largest t_route_min, provided it exceeds the nominal runway's by > 1.0 min.
     Shared with tests/test_rules.py (T14) and tests/test_geo_api.py (T16)."""
-    from atm.wave import route
-    from atm.wave.moves import fcfs_runways
+    from backend.wave import route
+    from backend.wave.moves import fcfs_runways
     rs = route.routes_for_wave(w)
     nominal = rs[(cs, fcfs_runways(w)[cs])].t_route_min
     best = max((r for (c, _), r in rs.items() if c == cs), key=lambda r: r.t_route_min)
@@ -1022,9 +1022,9 @@ def _far_runway(w, cs) -> str:
 
 def test_route_extra_costs_fuel_on_far_runway():
     from dataclasses import replace
-    from atm.wave import build, route, trajectory
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import metrics_map, hold_burn
+    from backend.wave import build, route, trajectory
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import metrics_map, hold_burn
     w = build.build_wave("F2015-270287")
     p = fcfs_plan(w); a = p.assignments[0]
     rs = route.routes_for_wave(w)
@@ -1037,9 +1037,9 @@ def test_route_extra_costs_fuel_on_far_runway():
 
 def test_no_geometry_tier_matches_v2():
     # frozen v2 numbers for the synthetic wave (captured before this task; paste the dict)
-    from atm.wave.fixtures import make_wave
-    from atm.wave.moves import fcfs_plan
-    from atm.wave.utility import evaluate
+    from backend.wave.fixtures import make_wave
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import evaluate
     ev = evaluate(make_wave(), fcfs_plan(make_wave()))
     assert ev["totals"] == V2_FIXTURE_TOTALS
 ```
@@ -1054,14 +1054,14 @@ def test_no_geometry_tier_matches_v2():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/utility.py atm/wave/moves.py atm/wave/graph.py atm/wave/rules.py atm/wave/baseline.py tests/test_trajectory.py tests/test_rules.py
+git add backend/wave/utility.py backend/wave/moves.py backend/wave/graph.py backend/wave/rules.py backend/wave/baseline.py tests/test_trajectory.py tests/test_rules.py
 git commit -m "feat(engine): joint metrics from trajectories; runway-dependent earliest landing and route fuel"
 ```
 
 ### Task 14: Rules for the airborne model (`ATC-HOLD-STACK`, changed PLT rules)
 
 **Files:**
-- Modify: `atm/wave/rules.py` (`LIMITS`, `check`, `_duty_check`), `tests/test_rules.py`
+- Modify: `backend/wave/rules.py` (`LIMITS`, `check`, `_duty_check`), `tests/test_rules.py`
 
 **Interfaces:**
 - Consumes: `TrajectorySet.stack_violations`, `trajectory.earliest`, `FlightMetrics` path fields.
@@ -1123,14 +1123,14 @@ def test_limits_list_new_rows():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/rules.py tests/test_rules.py
+git add backend/wave/rules.py tests/test_rules.py
 git commit -m "feat(rules): ATC-HOLD-STACK; earliest ETA and fuel reserve use routes and laps"
 ```
 
 ### Task 15: `hold` move, labels and agent views
 
 **Files:**
-- Modify: `atm/wave/moves.py` (`AUTHORITY["ATC"]` += `"hold"`, `_candidates`, `_validate`, `apply`, labels), `atm/wave/graph.py:_view`, `tests/test_moves.py`, `tests/test_graph.py`
+- Modify: `backend/wave/moves.py` (`AUTHORITY["ATC"]` += `"hold"`, `_candidates`, `_validate`, `apply`, labels), `backend/wave/graph.py:_view`, `tests/test_moves.py`, `tests/test_graph.py`
 
 **Interfaces:**
 - Produces:
@@ -1164,7 +1164,7 @@ def test_largest_prompt_under_8k_tokens(monkeypatch):
     assert max(_prompt_chars(wid, monkeypatch) for wid in REPLAY_IDS) / 4 <= 8000
 ```
 
-  `_prompt_chars(wid, monkeypatch)` runs `graph.negotiate_wave(build.build_wave(wid), "decision", chain=["formula"])`. Formulas mode sets `_Run.chain = []` and builds no prompt, so decision mode with the local formula chain is used: no network. It wraps `atm.decide.Decider.choice` (signature `choice(self, state, instructions, options, ...)`) with `monkeypatch.setattr` to record `len(json.dumps(state)) + len(instructions) + len(json.dumps(options))` before calling the original, and returns the max. Imports: `json`, `Path`, `build`, `graph`, `moves`.
+  `_prompt_chars(wid, monkeypatch)` runs `graph.negotiate_wave(build.build_wave(wid), "decision", chain=["formula"])`. Formulas mode sets `_Run.chain = []` and builds no prompt, so decision mode with the local formula chain is used: no network. It wraps `backend.decide.Decider.choice` (signature `choice(self, state, instructions, options, ...)`) with `monkeypatch.setattr` to record `len(json.dumps(state)) + len(instructions) + len(json.dumps(options))` before calling the original, and returns the max. Imports: `json`, `Path`, `build`, `graph`, `moves`.
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_moves.py tests/test_graph.py -q`. Expected: FAIL.
 - [ ] **Step 3: Implement** the changes.
@@ -1172,14 +1172,14 @@ def test_largest_prompt_under_8k_tokens(monkeypatch):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/moves.py atm/wave/graph.py tests/test_moves.py tests/test_graph.py
+git add backend/wave/moves.py backend/wave/graph.py tests/test_moves.py tests/test_graph.py
 git commit -m "feat: hold move; path-aware move labels and agent views"
 ```
 
 ### Task 16: API: `/geo` (procedures), `/api/trajectories`, result embedding, replay guard
 
 **Files:**
-- Modify: `atm/server.py`, `atm/wave/graph.py` (`negotiate_wave` result dict: add `engine_version` and `trajectories {final, baseline}` here, so `replay.record` writes them into the recorded files), `atm/wave/replay.py`, `atm/wave/edit.py`, `scripts/make_samples.py` (add `geo.json`, `trajectories.json`), `docs/api-contract.md`
+- Modify: `backend/server.py`, `backend/wave/graph.py` (`negotiate_wave` result dict: add `engine_version` and `trajectories {final, baseline}` here, so `replay.record` writes them into the recorded files), `backend/wave/replay.py`, `backend/wave/edit.py`, `scripts/make_samples.py` (add `geo.json`, `trajectories.json`), `docs/api-contract.md`
 - Create: `tests/test_geo_api.py`
 
 **Interfaces:**
@@ -1199,9 +1199,9 @@ git commit -m "feat: hold move; path-aware move labels and agent views"
 ```python
 import glob, json
 from fastapi.testclient import TestClient
-from atm import server
-from atm.wave import build, trajectory
-from atm.wave.version import ENGINE_VERSION
+from backend import server
+from backend.wave import build, trajectory
+from backend.wave.version import ENGINE_VERSION
 from scripts.make_samples import WAVE_ID as ORD_REPLAY   # the ORD replay id; T18 may change it
 from tests.test_trajectory import _far_runway
 
@@ -1214,7 +1214,7 @@ def test_geo_procedures_for_ord():
     assert all(f["src"] in ("cifp", "synth") for f in g["procedures"]["fixes"])
 
 def test_geo_404_when_unavailable(monkeypatch):
-    from atm.wave.fixtures import make_wave
+    from backend.wave.fixtures import make_wave
     monkeypatch.setattr(server.WB, "build_wave", lambda wid: make_wave())   # fixture: no runway coordinates
     r = c.get(f"/api/wave/{ORD}/geo")
     assert r.status_code == 404 and r.json()["error"]["code"] == "geo_unavailable"
@@ -1230,8 +1230,8 @@ def test_replay_engine_mismatch_has_no_paths(tmp_path, monkeypatch):
     src = next(p for p in glob.glob("data/replay/*.json") if p.endswith(f"{ORD_REPLAY}.json"))
     d = json.load(open(src)); d.pop("engine_version", None)          # => treated as "v2"
     (tmp_path / f"{ORD_REPLAY}.json").write_text(json.dumps(d))
-    from atm import datastore
-    from atm.datastore.files import FilePaths, FileStore
+    from backend import datastore
+    from backend.datastore.files import FilePaths, FileStore
     # replay.load reads get_store().replay(wave_id); monkeypatch restores the previous store after the test
     monkeypatch.setattr(datastore, "_store", FileStore(FilePaths(replay_dir=tmp_path, runs_dir=tmp_path / "runs",
                                                                  decisions_path=tmp_path / "decisions.jsonl")))
@@ -1240,7 +1240,7 @@ def test_replay_engine_mismatch_has_no_paths(tmp_path, monkeypatch):
     assert c.post("/api/trajectories", json={"run_id": r["run_id"]}).status_code == 409
 
 def test_evaluate_suggestion_respects_route_earliest():
-    from atm.wave import edit
+    from backend.wave import edit
     w = build.build_wave(ORD)
     asg = c.get(f"/api/wave/{ORD}").json()["status_quo"]["plan"]["assignments"]
     foc = next(a for a in asg if a["callsign"] == w.focus)
@@ -1258,7 +1258,7 @@ import pytest
 
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the replay guard reads engine_version from the stored body
 def test_replay_guard_reads_engine_version_from_pg(live_db_url):
-    from atm.datastore.pg import PgStore
+    from backend.datastore.pg import PgStore
     wid = "TEST-REPLAY-GUARD"
     st = PgStore(live_db_url); st.open()
     try:
@@ -1282,7 +1282,7 @@ def test_replay_guard_reads_engine_version_from_pg(live_db_url):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/server.py atm/wave/graph.py atm/wave/replay.py atm/wave/edit.py scripts/make_samples.py docs/api-contract.md tests/test_geo_api.py
+git add backend/server.py backend/wave/graph.py backend/wave/replay.py backend/wave/edit.py scripts/make_samples.py docs/api-contract.md tests/test_geo_api.py
 git commit -m "contract: v2.2 part 2 (GET /api/wave/{id}/geo, POST /api/trajectories, result trajectories, engine_version replay guard)"
 ```
 
@@ -1330,7 +1330,7 @@ it("scan steps are 4.8 s back from t", () => expect(scanTimes(10, 3, 4.8 / 60).m
 
 - [ ] **Step 2: Run** `cd frontend && npm install && npm test`. Expected: FAIL (module missing).
 - [ ] **Step 3: Implement** `track.ts`, then the Radar, Strips and client changes.
-- [ ] **Step 4: Run** `cd frontend && npm test && npx tsc --noEmit && npm run build`. Expected: PASS. Then run `npm run dev` with the API (`uvicorn atm.server:app --port 8000`) and open the ORD replay. Check by eye that blips follow the STAR, synthesized segments are dashed, and a held flight shows a racetrack. Take a Playwright screenshot.
+- [ ] **Step 4: Run** `cd frontend && npm test && npx tsc --noEmit && npm run build`. Expected: PASS. Then run `npm run dev` with the API (`uvicorn backend.server:app --port 8000`) and open the ORD replay. Check by eye that blips follow the STAR, synthesized segments are dashed, and a held flight shows a racetrack. Take a Playwright screenshot.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1342,7 +1342,7 @@ git commit -m "feat(ui): radar flies engine trajectories with holds, sparse fix 
 
 **Files:**
 - Create: `scripts/pick_replays.py`
-- Modify: `atm/wave/replay.py` (`record` writes `engine_version`), `data/replay/*.json`, `atm/server.py` (`_replay_summaries` unchanged; verify)
+- Modify: `backend/wave/replay.py` (`record` writes `engine_version`), `data/replay/*.json`, `backend/server.py` (`_replay_summaries` unchanged; verify)
 
 **Interfaces:**
 - Produces: `pick_replays.rank(hub: str, n: int = 20) -> list[tuple[str, float, int]]`. It returns `(wave_id, fcfs_total_hold_min, max_laps)` for flights2015 rows at the hub, sorted by `max_laps` desc then hold desc. CLI: `python3 scripts/pick_replays.py ORD MIA ATL DFW DEN`. It prints the top 3 per hub.
@@ -1354,9 +1354,9 @@ git commit -m "feat(ui): radar flies engine trajectories with holds, sparse fix 
 ```python
 def test_replays_are_current_engine_and_show_laps():
     import json, glob
-    from atm.wave import build, trajectory
-    from atm.wave.edit import plan_from_dicts
-    from atm.wave.version import ENGINE_VERSION
+    from backend.wave import build, trajectory
+    from backend.wave.edit import plan_from_dicts
+    from backend.wave.version import ENGINE_VERSION
     files = sorted(glob.glob("data/replay/*.json")); assert len(files) == 5
     with_lap = 0
     for f in files:
@@ -1370,8 +1370,8 @@ def test_replays_are_current_engine_and_show_laps():
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the stored replays carry the current engine_version
 def test_replays_in_pg_are_current_engine(live_db_url):
     import json, glob
-    from atm.datastore.pg import PgStore
-    from atm.wave.version import ENGINE_VERSION
+    from backend.datastore.pg import PgStore
+    from backend.wave.version import ENGINE_VERSION
     st = PgStore(live_db_url); st.open()
     try:
         for f in sorted(glob.glob("data/replay/*.json")):
@@ -1382,12 +1382,12 @@ def test_replays_in_pg_are_current_engine(live_db_url):
 ```
 
 - [ ] **Step 2: Run** it with `-m "not live_db"`. Expected: FAIL.
-- [ ] **Step 3: Implement** `pick_replays.py`, run it, then record with `PYTHONPATH=. python3 -c "from atm.wave import replay; replay.record([...], mode='decision')"` (keys from `.env` loaded by the app's usual path; never print them). If no keys are available, use `mode='formulas'` and note it in the commit. If a hub has no qualifying wave, report the counts and keep the old one. If the ORD replay id changes, update the default `WAVE_ID` in `scripts/make_samples.py` (Tasks 20/22/28/33 run it without an argument).
+- [ ] **Step 3: Implement** `pick_replays.py`, run it, then record with `PYTHONPATH=. python3 -c "from backend.wave import replay; replay.record([...], mode='decision')"` (keys from `.env` loaded by the app's usual path; never print them). If no keys are available, use `mode='formulas'` and note it in the commit. If a hub has no qualifying wave, report the counts and keep the old one. If the ORD replay id changes, update the default `WAVE_ID` in `scripts/make_samples.py` (Tasks 20/22/28/33 run it without an argument).
 - [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. `PYTHONPATH=. python3 scripts/make_samples.py <new ORD id if changed>`. Then `python3 scripts/db_seed.py replays` (skip when `DATABASE_URL` is unset) so Postgres matches the files, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, seed `atm_test` (`--url-env DATABASE_TEST_URL`) and run `python3 -m pytest tests/test_geo_api.py -q -m live_db`.
 - [ ] **Step 5: Commit** (two commits)
 
 ```bash
-git add scripts/pick_replays.py atm/wave/replay.py data/replay tests/test_geo_api.py scripts/make_samples.py
+git add scripts/pick_replays.py backend/wave/replay.py data/replay tests/test_geo_api.py scripts/make_samples.py
 git commit -m "data: replays re-chosen and re-recorded on engine v3-air (>= 3 of 5 show a holding lap)"
 git add frontend/src/api/samples
 git commit -m "contract: samples regenerated for v3-air"
@@ -1399,7 +1399,7 @@ git commit -m "contract: samples regenerated for v3-air"
 
 **Files:**
 - Create: `eval/archive/engine-v2/benchmark.json`, `eval/archive/engine-v2/BENCHMARK.md` (copies plus `"engine_version": "v2"`)
-- Modify: `atm/wave/benchmark.py` (`summarize`, `markdown`, new functions), `eval/benchmark.json`, `eval/BENCHMARK.md`, `tests/test_benchmark_small.py` (`SUMMARY_KEYS` at lines 3-5 is compared with set equality: add `lap_share_pct` and every other new per-arm summary key)
+- Modify: `backend/wave/benchmark.py` (`summarize`, `markdown`, new functions), `eval/benchmark.json`, `eval/BENCHMARK.md`, `tests/test_benchmark_small.py` (`SUMMARY_KEYS` at lines 3-5 is compared with set equality: add `lap_share_pct` and every other new per-arm summary key)
 
 **Interfaces:**
 - Produces:
@@ -1416,15 +1416,15 @@ git commit -m "contract: samples regenerated for v3-air"
 
 ```python
 def test_engine_history_and_attribution(tmp_path):
-    from atm.wave import benchmark as B
+    from backend.wave import benchmark as B
     prev = {"engine_version": "v2", "baseline": {"delay_min": 10.0, "fuel_kg": 1.0}, "arms": [{"model": "formula", "summary": {"delay_min": 8.0, "fuel_kg": 1.0}}]}
     cur = {"engine_version": "v3-air", "baseline": {"delay_min": 12.0, "fuel_kg": 3.0}, "arms": [{"model": "formula", "summary": {"delay_min": 9.0, "fuel_kg": 2.0}}]}
     a = B.attribution(prev, cur)
     assert a["physics_delta"]["delay_min"] == 2.0 and a["negotiation_delta"]["formula"]["delay_min"] == -3.0
 
 def test_report_has_engine_version_and_lap_share(tmp_path):
-    from atm.wave import benchmark as B
-    from atm.wave.version import ENGINE_VERSION
+    from backend.wave import benchmark as B
+    from backend.wave.version import ENGINE_VERSION
     rep = B.main(["--fixtures", "--n", "3", "--arms", "formula", "--no-ablation", "--outage-n", "0",
                   "--concurrency", "2", "--out", str(tmp_path)])
     assert rep["engine_version"] == ENGINE_VERSION and "lap_share_pct" in rep["baseline"]
@@ -1441,11 +1441,11 @@ def test_frozen_v2_row_is_not_current(live_db_url):
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_benchmark_small.py -q -m "not live_db"`. Expected: FAIL.
 - [ ] **Step 3: Copy** the frozen v2 files first, then implement.
-- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m atm.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`. The run's own `put_benchmark` call writes the v3-air row to Postgres; afterwards `python3 scripts/db_seed.py benchmark` (skip when `DATABASE_URL` is unset) loads the frozen v2 archive row from the files, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, `python3 -m pytest tests/test_benchmark_small.py -q -m live_db` checks it. Expected: PASS.
+- [ ] **Step 4: Run** `python3 -m pytest -q -m "not live_db"`. Expected: PASS. Then run the full benchmark with the README command (Global Constraints): `PYTHONPATH=. python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20`. Expected: `rule_violations_in_agreed_plans == 0` for every arm, and a v3-air row with attribution vs v2 in `eval/BENCHMARK.md`. The run's own `put_benchmark` call writes the v3-air row to Postgres; afterwards `python3 scripts/db_seed.py benchmark` (skip when `DATABASE_URL` is unset) loads the frozen v2 archive row from the files, and, if `ATM_LIVE_DB=1` and `DATABASE_TEST_URL` are set, `python3 -m pytest tests/test_benchmark_small.py -q -m live_db` checks it. Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/benchmark.py eval/archive/engine-v2 eval/benchmark.json eval/BENCHMARK.md tests/test_benchmark_small.py
+git add backend/wave/benchmark.py eval/archive/engine-v2 eval/benchmark.json eval/BENCHMARK.md tests/test_benchmark_small.py
 git commit -m "eval: freeze engine v2 results; engine history and attribution; v3-air benchmark row"
 ```
 
@@ -1457,10 +1457,10 @@ git commit -m "eval: freeze engine v2 results; engine history and attribution; v
 ```python
 import json, math, time
 import pytest
-from atm.wave import build, graph, trajectory
-from atm.wave.edit import plan_from_dicts
-from atm.wave.moves import fcfs_plan
-from atm.wave.utility import evaluate
+from backend.wave import build, graph, trajectory
+from backend.wave.edit import plan_from_dicts
+from backend.wave.moves import fcfs_plan
+from backend.wave.utility import evaluate
 
 WAVES = json.load(open("eval/benchmark.json"))["wave_ids"]          # the 50 benchmark waves
 REPLAYS = sorted(p.stem for p in __import__("pathlib").Path("data/replay").glob("*.json"))
@@ -1517,10 +1517,10 @@ git commit -m "contract: samples regenerated for v3-air (geo, trajectories)"
 
 **Files:**
 - Modify:
-  - `atm/wave/flights2015.py:_flight` (`eta_earliest`, `crew floor` line 320) and `build_from_row` (queue landing = `wheels_on`);
-  - `atm/wave/build.py:_build_flight` (eta, crew line 462) and `_queue`;
-  - `atm/wave/utility.py` (`delay_min = in_block − sched_min`; `TYPICAL_TAXI_MIN` removed from delay);
-  - `atm/wave/version.py` (`"v3-time"`), `docs/api-contract.md` (Conventions: the time base sentence), `README.md`, `tests/test_build.py`, `tests/test_flights2015.py`, `tests/test_trajectory.py` (re-capture `V2_FIXTURE_TOTALS["delay_min"]` only, with a comment citing spec §6.1), `tests/test_version.py` (`"v3-time"`).
+  - `backend/wave/flights2015.py:_flight` (`eta_earliest`, `crew floor` line 320) and `build_from_row` (queue landing = `wheels_on`);
+  - `backend/wave/build.py:_build_flight` (eta, crew line 462) and `_queue`;
+  - `backend/wave/utility.py` (`delay_min = in_block − sched_min`; `TYPICAL_TAXI_MIN` removed from delay);
+  - `backend/wave/version.py` (`"v3-time"`), `docs/api-contract.md` (Conventions: the time base sentence), `README.md`, `tests/test_build.py`, `tests/test_flights2015.py`, `tests/test_trajectory.py` (re-capture `V2_FIXTURE_TOTALS["delay_min"]` only, with a comment citing spec §6.1), `tests/test_version.py` (`"v3-time"`).
 
 **Interfaces:**
 - Produces:
@@ -1536,7 +1536,7 @@ git commit -m "contract: samples regenerated for v3-air (geo, trajectories)"
 
 ```python
 def test_eta_earliest_is_wheels_on_for_real_row():
-    from atm.wave import flights2015 as F, build
+    from backend.wave import flights2015 as F, build
     w = build.build_wave("F2015-270287")
     f = next(x for x in w.flights if x.callsign == w.focus)
     df = F._dest_frame(F._locate(270287)["dest"])          # _locate returns the 14-key index row only
@@ -1559,7 +1559,7 @@ def test_delay_is_in_block_minus_scheduled_gate_time():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/flights2015.py atm/wave/build.py atm/wave/utility.py atm/wave/version.py docs/api-contract.md README.md tests/test_build.py tests/test_flights2015.py tests/test_trajectory.py tests/test_version.py
+git add backend/wave/flights2015.py backend/wave/build.py backend/wave/utility.py backend/wave/version.py docs/api-contract.md README.md tests/test_build.py tests/test_flights2015.py tests/test_trajectory.py tests/test_version.py
 git commit -m "contract: time base fix: BTS scheduled arrival is gate time; earliest landing = wheels-on (engine v3-time)"
 ```
 
@@ -1585,7 +1585,7 @@ git commit -m "contract: samples regenerated for v3-time"
 ### Task 23: Runtime taxi graph, exit choice, ROT, unimpeded routes
 
 **Files:**
-- Create: `atm/wave/surface.py`, `tests/test_surface.py` (the `mini` fixture: `TaxiGraph` from `build_surface` over `tests/data/osm/mini_airport.json` and `tests/data/osm/mini_runways.json`)
+- Create: `backend/wave/surface.py`, `tests/test_surface.py` (the `mini` fixture: `TaxiGraph` from `build_surface` over `tests/data/osm/mini_airport.json` and `tests/data/osm/mini_runways.json`)
 
 **Interfaces:**
 - Consumes: `store.load_surface`, `gates_geo.bind_gates`.
@@ -1633,7 +1633,7 @@ def test_ord_routes_exist_for_all_open_ends_in_osm():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/surface.py tests/test_surface.py
+git add backend/wave/surface.py tests/test_surface.py
 git commit -m "feat(engine): taxi graph, exit choice, runway occupancy and unimpeded routes"
 ```
 
@@ -1641,17 +1641,17 @@ git commit -m "feat(engine): taxi graph, exit choice, runway occupancy and unimp
 
 **Files:**
 - Modify:
-  - `atm/wave/trajectory.py` (`TrajectorySet.ground` without waits);
-  - `atm/wave/utility.py` (`in_block = slot + rot/60 + taxi`; ATC `taxi` term `(taxi − best unimpeded over open runways for its gate)/10`; remove `taxi_min` near/far except in the no-geometry tier);
-  - `atm/wave/rules.py` (`ATC-TAXI-ROUTE`, `LIMITS` taxi row replaced);
-  - `atm/wave/build.py`, `atm/wave/flights2015.py` (gates get `lat/lon/geo_src` via `bind_gates`; provenance `surface` layer);
-  - `atm/wave/moves.py` (`change_runway` and gate-move labels append `taxi {m:.0f} min`; still ≤ 120 chars) and `atm/wave/graph.py:_view` (per-flight `taxi: "{exit} → {stand} {unimpeded:.1f} min"`), spec §6.7;
+  - `backend/wave/trajectory.py` (`TrajectorySet.ground` without waits);
+  - `backend/wave/utility.py` (`in_block = slot + rot/60 + taxi`; ATC `taxi` term `(taxi − best unimpeded over open runways for its gate)/10`; remove `taxi_min` near/far except in the no-geometry tier);
+  - `backend/wave/rules.py` (`ATC-TAXI-ROUTE`, `LIMITS` taxi row replaced);
+  - `backend/wave/build.py`, `backend/wave/flights2015.py` (gates get `lat/lon/geo_src` via `bind_gates`; provenance `surface` layer);
+  - `backend/wave/moves.py` (`change_runway` and gate-move labels append `taxi {m:.0f} min`; still ≤ 120 chars) and `backend/wave/graph.py:_view` (per-flight `taxi: "{exit} → {stand} {unimpeded:.1f} min"`), spec §6.7;
   - crew floors (`flights2015.py` line 320, `build.py` line 462) and `PLT-CREW-DUTY`'s "unavoidable" switch from `taxi_in_ref` (T21) to the minimum over open runways of `ROT + unimpeded routed taxi` to the flight's gate (`PLT-CREW-DUTY` evidence gains `taxi`, that minimum);
-  - `atm/wave/version.py` (`"v3-taxi"`), `tests/test_rules.py`, `tests/test_surface.py`, `tests/test_version.py` (`"v3-taxi"`).
+  - `backend/wave/version.py` (`"v3-taxi"`), `tests/test_rules.py`, `tests/test_surface.py`, `tests/test_version.py` (`"v3-taxi"`).
 
 **Interfaces:**
 - Produces:
-  - `@dataclass GroundTrack(...)` is defined in `atm/wave/surface.py`; `trajectory.py` imports it from there:
+  - `@dataclass GroundTrack(...)` is defined in `backend/wave/surface.py`; `trajectory.py` imports it from there:
     `GroundTrack(callsign, kind: Literal["arrival", "departure"], wave: bool, exit: str | None, stand: str, route_names: list[str], points: list[dict], waits: list[dict], unimpeded_min: float, taxi_min: float, src: str)`.
   - `surface.stand_node_for(wave, gate_id) -> int | None` (the bound stand's node) and `surface.min_unimpeded_taxi(wave, callsign, runway_end) -> float` (ROT + unimpeded taxi to the flight's gate; generic estimate when the end is missing from OSM). Rules and tests use both.
   - `ATC-TAXI-ROUTE` evidence: `runway, exit, gate, stand, route, crossings, unimpeded_min, tier`. Source: `"OpenStreetMap surface (ODbL), routed"`, or `"generic surface (straight line x1.4 at 15 kt)"`, or `"ops rule (no geometry)"`. It fails iff the tier is `real` and no path exists.
@@ -1705,19 +1705,19 @@ def test_gates_have_geo_on_replay_hub():
 ```
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_surface.py tests/test_rules.py -q`. Expected: FAIL.
-- [ ] **Step 3: Implement** the changes. `trajectory.py`, `utility.py` and `rules.py` call `surface.unimpeded` through the module (`from atm.wave import surface`; `surface.unimpeded(...)`), never `from atm.wave.surface import unimpeded`, so the test's monkeypatch takes effect.
+- [ ] **Step 3: Implement** the changes. `trajectory.py`, `utility.py` and `rules.py` call `surface.unimpeded` through the module (`from backend.wave import surface`; `surface.unimpeded(...)`), never `from backend.wave.surface import unimpeded`, so the test's monkeypatch takes effect.
 - [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: PASS. Re-run `tests/test_perf.py`: p95 ≤ 3 ms.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/trajectory.py atm/wave/surface.py atm/wave/utility.py atm/wave/rules.py atm/wave/moves.py atm/wave/graph.py atm/wave/build.py atm/wave/flights2015.py atm/wave/version.py tests/test_rules.py tests/test_surface.py tests/test_version.py
+git add backend/wave/trajectory.py backend/wave/surface.py backend/wave/utility.py backend/wave/rules.py backend/wave/moves.py backend/wave/graph.py backend/wave/build.py backend/wave/flights2015.py backend/wave/version.py tests/test_rules.py tests/test_surface.py tests/test_version.py
 git commit -m "contract: routed taxi-in drives in-block; real ATC-TAXI-ROUTE; gate coordinates (engine v3-taxi)"
 ```
 
 ### Task 25: API: `/geo` surface part, ground tracks
 
 **Files:**
-- Modify: `atm/server.py` (geo `surface` filled from `load_surface` `draw`/`stands`/`holding_positions`), `scripts/make_samples.py`, `tests/test_geo_api.py`
+- Modify: `backend/server.py` (geo `surface` filled from `load_surface` `draw`/`stands`/`holding_positions`), `scripts/make_samples.py`, `tests/test_geo_api.py`
 
 **Interfaces:**
 - Produces: `WaveGeo.surface` per spec §7 (`taxiways`, `runways`, `stands` with `gate`, `holding_positions`, `attribution`). `TrajectorySet.ground` is serialised.
@@ -1739,7 +1739,7 @@ def test_geo_surface_and_ground_tracks():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/server.py scripts/make_samples.py tests/test_geo_api.py
+git add backend/server.py scripts/make_samples.py tests/test_geo_api.py
 git commit -m "contract: WaveGeo.surface and TrajectorySet.ground"
 ```
 
@@ -1786,7 +1786,7 @@ git commit -m "feat(ui): airport surface map on the replay clock; Gantt hold lap
 ### Task 27: Taxi validation, replays, v3-taxi benchmark row
 
 **Files:**
-- Modify: `atm/wave/benchmark.py`, `eval/benchmark.json`, `eval/BENCHMARK.md`, `data/replay/*.json`, `tests/test_benchmark_small.py`
+- Modify: `backend/wave/benchmark.py`, `eval/benchmark.json`, `eval/BENCHMARK.md`, `data/replay/*.json`, `tests/test_benchmark_small.py`
 
 **Interfaces:**
 - Produces: `taxi_validation(waves: list, results: dict[str, dict]) -> dict` with:
@@ -1798,7 +1798,7 @@ git commit -m "feat(ui): airport surface map on the replay clock; Gantt hold lap
 - [ ] **Step 1: Write the failing test**
 
 ```python
-from atm.wave import benchmark as B, build
+from backend.wave import benchmark as B, build
 
 _w_ord = lambda: build.build_wave("F2015-270287")
 
@@ -1813,7 +1813,7 @@ def test_taxi_validation_shape():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/benchmark.py eval/benchmark.json eval/BENCHMARK.md data/replay tests/test_benchmark_small.py
+git add backend/wave/benchmark.py eval/benchmark.json eval/BENCHMARK.md data/replay tests/test_benchmark_small.py
 git commit -m "eval: v3-taxi row with taxi-in validation vs BTS 2015 and coverage tiers; replays re-recorded"
 ```
 
@@ -1837,7 +1837,7 @@ git commit -m "contract: samples regenerated for v3-taxi (geo surface, ground tr
 ### Task 29: Hold-short scheduler and independent verifier
 
 **Files:**
-- Modify: `atm/wave/surface.py`, `tests/test_surface.py`
+- Modify: `backend/wave/surface.py`, `tests/test_surface.py`
 
 `Reservations` is defined here in `surface.py` as `@dataclass Reservations(node_busy: dict[int, list[tuple[float, float, str]]], edge_dir: dict[tuple[int, int], list[tuple[float, float, str]]], runway_events: dict[str, list[tuple[float, str, str]]])` (minutes; `runway_events` per strip label holds `(t, "landing"|"takeoff", callsign)`). Task 30 fills it from fixed traffic.
 
@@ -1882,15 +1882,15 @@ def test_crossing_blocked_beyond_horizon_fails(mini):
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/surface.py tests/test_surface.py
+git add backend/wave/surface.py tests/test_surface.py
 git commit -m "feat(engine): deterministic hold-short taxi scheduler with independent separation verifier"
 ```
 
 ### Task 30: Fixed ground traffic and reservations
 
 **Files:**
-- Create: `atm/wave/ground_traffic.py`, `tests/test_ground_traffic.py`
-- Modify: `atm/wave/build.py`, `atm/wave/flights2015.py` (provenance `ground_traffic`), `atm/wave/rules.py` (`LIMITS` row `"departure runway"`, `assumption`)
+- Create: `backend/wave/ground_traffic.py`, `tests/test_ground_traffic.py`
+- Modify: `backend/wave/build.py`, `backend/wave/flights2015.py` (provenance `ground_traffic`), `backend/wave/rules.py` (`LIMITS` row `"departure runway"`, `assumption`)
 
 **Interfaces:**
 - Consumes: `store.load_movements`, `surface.load_graph`, `surface.unimpeded`, `surface.schedule`, `surface.Reservations`, `moves.fcfs_runways`.
@@ -1921,8 +1921,8 @@ def test_reservations_deterministic_and_headway():
         assert all(b[0] - a[0] >= 0.5 - 1e-9 for a, b in zip(s, s[1:]))   # 30 s
 
 def test_partial_badge_without_movements():
-    from atm.geo import store
-    from atm.wave import flights2015 as F
+    from backend.geo import store
+    from backend.wave import flights2015 as F
     iata = next(r["dest"] for r in F.list_rows(limit=500) if r["dest"] not in store.MOVEMENT_AIRPORTS)
     w = build.build_wave(f"F2015-{F.list_rows(airport=iata, limit=1)[0]['row_id']}")
     pv = next(p for p in w.provenance if p.layer == "ground_traffic")
@@ -1935,7 +1935,7 @@ def test_partial_badge_without_movements():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/ground_traffic.py atm/wave/build.py atm/wave/flights2015.py atm/wave/rules.py tests/test_ground_traffic.py
+git add backend/wave/ground_traffic.py backend/wave/build.py backend/wave/flights2015.py backend/wave/rules.py tests/test_ground_traffic.py
 git commit -m "feat(engine): fixed ground traffic with real 2015 departures and reservation table"
 ```
 
@@ -1943,12 +1943,12 @@ git commit -m "feat(engine): fixed ground traffic with real 2015 departures and 
 
 **Files:**
 - Modify:
-  - `atm/wave/trajectory.py` (wave flights scheduled in exit-time order against a copy of `reservations(wave)` plus the plan's landings as runway events; `conflicts` filled);
-  - `atm/wave/utility.py` (`taxi_wait_min`, `taxi_min = unimpeded + waits`);
-  - `atm/wave/rules.py` (new rule, `LIMITS` rows for headway, crossing gap and horizon);
-  - `atm/wave/moves.py` (labels add `+{wait} hold-short {strip}` when > 0);
-  - `atm/wave/graph.py:_view` (per-flight hold-short clause `"hold short {strip} {wait:.1f} min for {cs}"` when a wait exists, spec §6.7; ≤ 120 chars);
-  - `atm/wave/version.py` (`"v3-traffic"`), `docs/api-contract.md`, `tests/test_rules.py`, `tests/test_version.py` (`"v3-traffic"`). `types.ts` already has `ATC-TAXI-CONFLICT` (Task 9).
+  - `backend/wave/trajectory.py` (wave flights scheduled in exit-time order against a copy of `reservations(wave)` plus the plan's landings as runway events; `conflicts` filled);
+  - `backend/wave/utility.py` (`taxi_wait_min`, `taxi_min = unimpeded + waits`);
+  - `backend/wave/rules.py` (new rule, `LIMITS` rows for headway, crossing gap and horizon);
+  - `backend/wave/moves.py` (labels add `+{wait} hold-short {strip}` when > 0);
+  - `backend/wave/graph.py:_view` (per-flight hold-short clause `"hold short {strip} {wait:.1f} min for {cs}"` when a wait exists, spec §6.7; ≤ 120 chars);
+  - `backend/wave/version.py` (`"v3-traffic"`), `docs/api-contract.md`, `tests/test_rules.py`, `tests/test_version.py` (`"v3-traffic"`). `types.ts` already has `ATC-TAXI-CONFLICT` (Task 9).
 
 **Interfaces:**
 - Produces:
@@ -1971,7 +1971,7 @@ def test_taxi_conflict_rule_passes_with_waits_and_cites_source():
     assert c.passed and c.evidence["waits"] >= 1 and c.source.startswith("FAA JO 7110.65 §3-7-2")
 
 def test_taxi_conflict_fails_when_runway_cannot_be_vacated(monkeypatch):
-    from atm.wave import ground_traffic, surface
+    from backend.wave import ground_traffic, surface
     w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
     a = p.get(w.focus)
     ex = next(t for t in trajectory.build(w, p).ground if t.callsign == w.focus).points[0]   # exit point
@@ -1992,12 +1992,12 @@ def test_all_benchmark_fcfs_ground_tracks_separated():
 ```
 
 - [ ] **Step 2: Run** `python3 -m pytest tests/test_rules.py tests/test_surface.py -q`. Expected: FAIL.
-- [ ] **Step 3: Implement** the changes (14 rules now). `trajectory.py` calls `ground_traffic.reservations` through the module (`from atm.wave import ground_traffic`), so the vacate test's monkeypatch takes effect. Update the `/api/evaluate` docstring "same 14 rules".
+- [ ] **Step 3: Implement** the changes (14 rules now). `trajectory.py` calls `ground_traffic.reservations` through the module (`from backend.wave import ground_traffic`), so the vacate test's monkeypatch takes effect. Update the `/api/evaluate` docstring "same 14 rules".
 - [ ] **Step 4: Run** `python3 -m pytest -q`. Expected: PASS, with perf ≤ 3 ms p95. If over budget, profile and memoise further. Never skip the rule.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/trajectory.py atm/wave/utility.py atm/wave/rules.py atm/wave/moves.py atm/wave/graph.py atm/wave/version.py atm/server.py docs/api-contract.md tests/test_rules.py tests/test_surface.py tests/test_version.py
+git add backend/wave/trajectory.py backend/wave/utility.py backend/wave/rules.py backend/wave/moves.py backend/wave/graph.py backend/wave/version.py backend/server.py docs/api-contract.md tests/test_rules.py tests/test_surface.py tests/test_version.py
 git commit -m "contract: ATC-TAXI-CONFLICT; hold-short waits feed in-block; conflicts in TrajectorySet (engine v3-traffic)"
 ```
 
@@ -2052,7 +2052,7 @@ git commit -m "contract: samples regenerated for v3-traffic"
 ### Task 34: Narration and MCP tool
 
 **Files:**
-- Modify: `atm/wave/narrate.py` (`_template`, `_compact`), `atm/mcp_server.py`, `tests/test_mcp.py`, `tests/test_graph.py`
+- Modify: `backend/wave/narrate.py` (`_template`, `_compact`), `backend/mcp_server.py`, `tests/test_mcp.py`, `tests/test_graph.py`
 
 **Interfaces:**
 - Produces:
@@ -2083,7 +2083,7 @@ def test_template_one_lap_singular():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add atm/wave/narrate.py atm/mcp_server.py tests/test_mcp.py tests/test_graph.py
+git add backend/wave/narrate.py backend/mcp_server.py tests/test_mcp.py tests/test_graph.py
 git commit -m "feat: brief mentions holding laps and hold-shorts; MCP get_trajectory"
 ```
 
@@ -2093,7 +2093,7 @@ git commit -m "feat: brief mentions holding laps and hold-shorts; MCP get_trajec
 - Modify: `README.md` (paths story, data sources with CIFP disclaimer and OSM attribution, cost, taxi validation bias statement), `eval/BENCHMARK.md` (narrative header), `docs/api-contract.md` (final v2.2 status line)
 - Create: `docs/screens/` screenshots (radar holding, surface hold-short)
 
-- [ ] **Step 1:** Write the README section, including the subsection "Data: Postgres (Neon) with file fallback" (`atm.datastore`, `scripts/db_seed.py <dataset>`, `DATABASE_URL` / `DATABASE_URL_POOLED`, the opt-in `live_db` tests). It must contain these exact strings, checked by `tests/test_api.py::test_readme_attributions` (add it): "Procedures: FAA CIFP 2611, not for navigation" and "© OpenStreetMap contributors".
+- [ ] **Step 1:** Write the README section, including the subsection "Data: Postgres (Neon) with file fallback" (`backend.datastore`, `scripts/db_seed.py <dataset>`, `DATABASE_URL` / `DATABASE_URL_POOLED`, the opt-in `live_db` tests). It must contain these exact strings, checked by `tests/test_api.py::test_readme_attributions` (add it): "Procedures: FAA CIFP 2611, not for navigation" and "© OpenStreetMap contributors".
 - [ ] **Step 2:** `python3 -m pytest -q -m "not live_db"`. Expected: PASS.
 - [ ] **Step 3:** `cd frontend && npm test && npx tsc --noEmit && npm run build`, then `PYTHONPATH=. python3 scripts/make_samples.py`. Expected: exit 0 and no sample diff.
 - [ ] **Step 4:** Demo walkthrough of all 5 replays offline (no keys, `replay: true`). Each must show radar paths, at least 3 must show a holding lap, and the surface map must run on the same clock. Docker smoke test.
@@ -2118,7 +2118,7 @@ git commit -m "docs: v3 engine story, sources and attributions; screenshots"
    - No product function bodies are given.
 3. **Type consistency:**
    - `metrics_map`, `trajectory.build`, `earliest`, `fcfs_runways`, `TaxiPath`, `Reservations` and `Scheduled` are used with the signatures of their producing tasks.
-   - `GroundTrack` is defined in T24 (in `atm/wave/surface.py`) and used in T29/T31. `NoPath` is defined in T23. `Reservations` is defined in T29 and used in T30/T31.
+   - `GroundTrack` is defined in T24 (in `backend/wave/surface.py`) and used in T29/T31. `NoPath` is defined in T23. `Reservations` is defined in T29 and used in T30/T31.
    - `ENGINE_VERSION` values follow Global Constraints.
 4. **Review Focus:** five lines, each pinned to a named test in its owning task.
 5. **Proportion:** the plan is about the spec's length, and the code blocks are tests plus schemas.
