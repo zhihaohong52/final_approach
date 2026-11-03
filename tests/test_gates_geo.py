@@ -121,6 +121,7 @@ def test_bindings_agree_with_nearest_stand_query(live_db_url):
     w = build.build_wave("F2015-270287")
     b = bind_gates([(g.id, g.remote) for g in w.gates], store.load_surface("KORD"))
     with psycopg.connect(live_db_url) as c:
+        c.execute("set search_path = public, extensions")   # PostGIS lives in the `extensions` schema on Neon
         for gid, v in list(b.items())[:20]:
             if v["geo_src"] not in ("osm-ref", "osm-near"):
                 continue

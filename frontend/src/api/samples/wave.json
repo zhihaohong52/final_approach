@@ -366,7 +366,8 @@
       "aircraft_type": null,
       "wake": "LARGE",
       "runway": "22R",
-      "slot_min": -43.0
+      "slot_min": -43.0,
+      "origin": null
     }
   ],
   "flights": [
@@ -681,7 +682,10 @@
           "to_min": 50,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B22",
@@ -694,7 +698,10 @@
           "to_min": 27,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B21",
@@ -707,7 +714,10 @@
           "to_min": 70,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B20",
@@ -720,7 +730,10 @@
           "to_min": 72,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B19",
@@ -733,21 +746,30 @@
           "to_min": 21,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B18",
       "size": "narrow",
       "pier": "B",
       "remote": false,
-      "busy": []
+      "busy": [],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B17",
       "size": "narrow",
       "pier": "B",
       "remote": false,
-      "busy": []
+      "busy": [],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B16",
@@ -760,7 +782,10 @@
           "to_min": 22,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B15",
@@ -773,7 +798,10 @@
           "to_min": 65,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "B14",
@@ -786,14 +814,20 @@
           "to_min": 53,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "W1",
       "size": "wide",
       "pier": "W",
       "remote": false,
-      "busy": []
+      "busy": [],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "W2",
@@ -806,14 +840,20 @@
           "to_min": 42,
           "label": "other-flight (simulated)"
         }
-      ]
+      ],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     },
     {
       "id": "RS",
       "size": "wide",
       "pier": "R",
       "remote": true,
-      "busy": []
+      "busy": [],
+      "lat": null,
+      "lon": null,
+      "geo_src": null
     }
   ],
   "provenance": [
@@ -856,6 +896,8 @@
   ],
   "severity": null,
   "focus": "OO5559",
+  "engine_version": "v3-air",
+  "geo_available": true,
   "status_quo": {
     "plan": {
       "id": "e5fb5419c3",
@@ -877,7 +919,19 @@
             "pax_protected": 0,
             "pax_total": 69,
             "overtime_min": 0.0,
-            "next_dep_delay_min": 305.0
+            "next_dep_delay_min": 305.0,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": null,
+            "vector_min": 0.0,
+            "route_min": null,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": null,
+            "taxi_unimpeded_min": null,
+            "taxi_wait_min": 0.0,
+            "taxi_min": null
           }
         },
         {
@@ -896,7 +950,19 @@
             "pax_protected": 0,
             "pax_total": 42,
             "overtime_min": 0.0,
-            "next_dep_delay_min": 40.0
+            "next_dep_delay_min": 40.0,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": null,
+            "vector_min": 0.0,
+            "route_min": null,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": null,
+            "taxi_unimpeded_min": null,
+            "taxi_wait_min": 0.0,
+            "taxi_min": null
           }
         },
         {
@@ -915,7 +981,19 @@
             "pax_protected": 0,
             "pax_total": 40,
             "overtime_min": 0.0,
-            "next_dep_delay_min": 0.0
+            "next_dep_delay_min": 0.0,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": null,
+            "vector_min": 0.0,
+            "route_min": null,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": null,
+            "taxi_unimpeded_min": null,
+            "taxi_wait_min": 0.0,
+            "taxi_min": null
           }
         },
         {
@@ -934,7 +1012,19 @@
             "pax_protected": 0,
             "pax_total": 27,
             "overtime_min": 0.0,
-            "next_dep_delay_min": 12.0
+            "next_dep_delay_min": 12.0,
+            "hold_laps": 0,
+            "hold_fix": null,
+            "hold_level_ft": null,
+            "lap_min": null,
+            "vector_min": 0.0,
+            "route_min": null,
+            "route_extra_min": 0.0,
+            "exit": null,
+            "rot_s": null,
+            "taxi_unimpeded_min": null,
+            "taxi_wait_min": 0.0,
+            "taxi_min": null
           }
         }
       ]
