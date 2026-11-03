@@ -7,6 +7,8 @@ import functools
 import hashlib
 import math
 import random
+import threading
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -53,6 +55,7 @@ def _reset_caches() -> None:
     from backend import scenario
     from backend.wave import flights2015
     _CACHE.clear()
+    _waves_cache_clear()
     _metar_table.cache_clear()
     flights2015._IEM_MEM.clear()
     constraints._load.cache_clear()
@@ -482,13 +485,39 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueAr
 
 # ---------------------------------------------------------------- public API
 
+_WAVES: OrderedDict[str, Wave] = OrderedDict()
+_WAVES_MAX = 32
+_WAVES_LOCK = threading.Lock()
+
+
 def build_wave(wave_id: str) -> Wave:
+    """The wave for `wave_id`, from an LRU of the last 32 builds. A built wave is treated as immutable: callers make
+    variants with dataclasses.replace, never mutate it. A flights2015 wave built without a METAR (IEM unreachable,
+    retried after 120 s) is not cached."""
+    with _WAVES_LOCK:
+        hit = _WAVES.get(wave_id)
+        if hit is not None:
+            _WAVES.move_to_end(wave_id)
+            return hit
     with get_store().session():     # one pooled connection for all the store reads of this build
         constraints._load()         # warm the workbook limits here so rules.check / utility.evaluate never hit the store
         w = _build_wave(wave_id)
         from backend.wave import route   # lazy: keeps this module's import graph unchanged
         route.precompute(w)          # routes (CIFP reads) pinned on the wave: the hot path never hits the store
-        return w
+    if not (wave_id.startswith("F2015-") and w.metar is None):
+        with _WAVES_LOCK:
+            _WAVES[wave_id] = w
+            while len(_WAVES) > _WAVES_MAX:
+                _WAVES.pop(next(iter(_WAVES)), None)
+    return w
+
+
+def _waves_cache_clear() -> None:
+    with _WAVES_LOCK:
+        _WAVES.clear()
+
+
+build_wave.cache_clear = _waves_cache_clear     # type: ignore[attr-defined]
 
 
 def _build_wave(wave_id: str) -> Wave:

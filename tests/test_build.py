@@ -100,3 +100,12 @@ def test_wide_body_gate_exists():
     idx = build._index()
     for wid in idx["wave_id"].head(25):
         assert any(g.size == "wide" and not g.remote for g in build.build_wave(wid).gates)
+
+
+def test_build_wave_is_cached_by_id():
+    wid = _first_id()
+    w = build.build_wave(wid)
+    assert build.build_wave(wid) is w                  # immutable after build: callers use dataclasses.replace
+    build.build_wave.cache_clear()
+    w2 = build.build_wave(wid)
+    assert w2 is not w and w2.to_dict() == w.to_dict()

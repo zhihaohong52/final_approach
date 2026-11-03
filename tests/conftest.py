@@ -16,6 +16,15 @@ def _reset_store():
     datastore.set_store(None)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_waves():
+    """build_wave caches by wave id: tests swap stores and monkeypatch builder internals, so each starts cold."""
+    from backend.wave import build
+    build.build_wave.cache_clear()
+    yield
+    build.build_wave.cache_clear()
+
+
 @pytest.fixture
 def live_db_url(monkeypatch):
     if os.environ.get("ATM_LIVE_DB") != "1":
