@@ -307,7 +307,10 @@ def _sched_iso(date: str, minutes_abs: int) -> str:
 
 def build_from_row(row_id: int) -> Wave:
     with get_store().session():     # one pooled connection for all the store reads of this build
-        return _build_from_row(row_id)
+        w = _build_from_row(row_id)
+        from atm.wave import route   # lazy: keeps this module's import graph unchanged
+        route.precompute(w)          # routes (CIFP reads) pinned on the wave: the hot path never hits the store
+        return w
 
 
 def _build_from_row(row_id: int) -> Wave:

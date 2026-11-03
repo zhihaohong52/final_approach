@@ -487,7 +487,7 @@ def build_wave(wave_id: str) -> Wave:
         constraints._load()         # warm the workbook limits here so rules.check / utility.evaluate never hit the store
         w = _build_wave(wave_id)
         from atm.wave import route   # lazy: keeps this module's import graph unchanged
-        route.routes_for_wave(w)     # precompute the routes (reads CIFP) here: utility.metrics_map never hits the store
+        route.precompute(w)          # routes (CIFP reads) pinned on the wave: the hot path never hits the store
         return w
 
 

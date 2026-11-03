@@ -30,6 +30,7 @@ Nothing here decides legality: the rules read these objects.
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass, field
 
 from atm.wave import holding, route
@@ -112,6 +113,15 @@ class TrajectorySet:
 # --------------------------------------------------------------------------- per-wave helpers
 
 _NOMINAL: dict[str, dict[str, str | None]] = {}
+_LOCK = threading.Lock()   # FIFO eviction of the shared caches (the benchmark negotiates in a thread pool)
+
+
+def _put(cache: dict, k, v) -> None:
+    """Insert into a shared FIFO cache of at most CACHE_MAX entries, thread-safely."""
+    with _LOCK:
+        while len(cache) >= CACHE_MAX:
+            cache.pop(next(iter(cache)), None)
+        cache[k] = v
 
 
 def _nominal(wave: Wave) -> dict[str, str | None]:
@@ -122,9 +132,7 @@ def _nominal(wave: Wave) -> dict[str, str | None]:
         from atm.wave import moves   # lazy: moves -> utility -> trajectory would cycle
         hit = {q.callsign: q.runway for q in wave.queue}
         hit.update(moves.fcfs_runways(wave))
-        while len(_NOMINAL) >= CACHE_MAX:
-            _NOMINAL.pop(next(iter(_NOMINAL)))
-        _NOMINAL[k] = hit
+        _put(_NOMINAL, k, hit)
     return hit
 
 
@@ -326,9 +334,7 @@ def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
             members.setdefault(_stack_key(r.hold), []).append((rwy, cs, r.hold))
             elev = r.elev_ft
         hit = {key: _shared_hold(ms, elev) for key, ms in members.items()}
-        while len(_HOLDS) >= CACHE_MAX:
-            _HOLDS.pop(next(iter(_HOLDS)))
-        _HOLDS[k] = hit
+        _put(_HOLDS, k, hit)
     return hit
 
 
@@ -435,9 +441,7 @@ def build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     if hit is not None:
         return hit
     ts = _build(wave, plan)
-    while len(_CACHE) >= CACHE_MAX:
-        _CACHE.pop(next(iter(_CACHE)))
-    _CACHE[k] = ts
+    _put(_CACHE, k, ts)
     return ts
 
 

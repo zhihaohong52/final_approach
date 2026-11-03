@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import threading
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -688,13 +689,20 @@ def wave_key(wave: Wave) -> str:
 
 
 _CACHE: dict[str, dict[tuple[str, str], Route]] = {}
+_LOCK = threading.Lock()   # FIFO eviction of the shared cache from the benchmark's worker threads
+_PIN = "_routes"           # wave.__dict__ slot: (wave_key, routes) pinned at build time (not a dataclass field)
 
 
 def routes_for_wave(wave: Wave) -> dict[tuple[str, str], Route]:
     """Routes keyed by (callsign, runway end) for every wave and queue flight over every open runway end.
 
-    The returned dict and its Route objects are the shared cache entry: treat them as read-only."""
+    Returns the routes pinned on the wave object at build time (`precompute`) when they belong to its current
+    content key, else the shared cache entry, else builds them (reads CIFP through the store).
+    The returned dict and its Route objects are shared: treat them as read-only."""
     k = wave_key(wave)
+    pin = wave.__dict__.get(_PIN)
+    if pin is not None and pin[0] == k:
+        return pin[1]
     hit = _CACHE.get(k)
     if hit is not None:
         return hit
@@ -706,10 +714,20 @@ def routes_for_wave(wave: Wave) -> dict[tuple[str, str], Route]:
                 r = build_route(wave, cs, rw.id)
                 if r is not None:
                     out[(cs, rw.id)] = r
-    while len(_CACHE) >= CACHE_MAX:
-        _CACHE.pop(next(iter(_CACHE)))
-    _CACHE[k] = out
+    with _LOCK:
+        while len(_CACHE) >= CACHE_MAX:
+            _CACHE.pop(next(iter(_CACHE)), None)
+        _CACHE[k] = out
     return out
 
 
 routes_for_wave.cache_clear = _CACHE.clear
+
+
+def precompute(wave: Wave) -> None:
+    """Build the wave's routes now (the only CIFP store read) and pin them on the wave object, so the hot path
+    (metrics, rules, negotiation) never reads the store, however many waves pass through the shared cache.
+    The pin is keyed on the content key: `dataclasses.replace` gives a fresh object with no pin, and a
+    copy / pickle carries the pin together with the memoised key it belongs to. Called by every wave builder
+    (`build.build_wave`, `flights2015.build_from_row`)."""
+    wave.__dict__[_PIN] = (wave_key(wave), routes_for_wave(wave))

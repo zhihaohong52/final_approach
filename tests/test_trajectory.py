@@ -341,3 +341,42 @@ def test_fcfs_metrics_on_geometry_wave_equal_v2_hold():
         f = w.flight(a.callsign)
         assert m.route_extra_min == 0.0
         assert m.hold_min == round(max(0.0, a.slot_min - f.eta_earliest_min), 1)
+
+
+def test_shorter_route_with_no_hold_burns_no_fuel():
+    """route_extra < 0 and hold 0 (slot at the shorter route's earliest): fuel is floored at 0, never negative."""
+    from atm.wave.utility import metrics_map
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    a = p.get("MQ3327")
+    assert a.runway == "22R"
+    p2 = _reslot(p, a, runway="22L", slot_min=trajectory.earliest(w, a.callsign, "22L"))
+    m = metrics_map(w, p2)[a.callsign]
+    assert m.route_extra_min < -1.0 and m.hold_min == 0 and m.fuel_kg == 0
+
+
+def test_change_runway_to_a_nearer_runway_floors_on_the_new_runway():
+    """Moving a flight off a far runway must floor on the NEW (nearer) runway's earliest, not the old one's."""
+    from atm.wave import moves
+    from atm.wave.model import Move
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    a = p.get("MQ3327")
+    far = trajectory.earliest(w, a.callsign, "09L")
+    p_far = _reslot(p, a, runway="09L", slot_min=far)
+    new = moves.apply(w, p_far, Move("x", "ATC", "change_runway", [a.callsign], {"runway": "22L"}, "x"))
+    slot = new.get(a.callsign).slot_min
+    assert trajectory.earliest(w, a.callsign, "22L") - 1e-9 <= slot < far
+
+
+def test_status_quo_diverts_on_unrounded_hold():
+    """Status quo uses the unrounded hold (as PLT-FUEL-RESERVE does): 1.24 min of hold on 1.2 min of extra fuel diverts."""
+    from dataclasses import replace
+    from atm.wave import baseline
+    w = make_wave()
+    f = w.flight("DL201")
+    slot = fcfs_plan(w).get("DL201").slot_min
+    f2 = replace(f, eta_earliest_min=slot - 1.24, fuel={**f.fuel, "extra_min": 1.2})
+    w2 = replace(w, flights=[f2 if x.callsign == "DL201" else x for x in w.flights])
+    assert fcfs_plan(w2).get("DL201").slot_min == slot          # wake-bound slot, not ETA-bound
+    assert baseline.status_quo(w2).get("DL201").action == "divert"
