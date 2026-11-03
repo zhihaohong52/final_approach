@@ -1,6 +1,7 @@
-import type { Assignment, JointPlan, TrajectorySet, WaveScenario } from "../api/types";
+import type { Assignment, JointPlan, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
+import { entryFix } from "../geo/track";
 import type { Tone } from "./Radar";
 
 // Flight progress strips, as in a tower or approach position: one strip per arrival, racked by where it is at
@@ -23,6 +24,8 @@ interface Props {
   selected: string | null;
   onSelect: (cs: string | null) => void;
   paths?: TrajectorySet | null;    // the engine's trajectories for `plan`, when it has them
+  geo?: WaveGeo | null;            // the procedures: which fix is the entry fix (the radar picks the same one)
+  updating?: boolean;              // trajectories for an edited plan are being recomputed
 }
 
 type Strip = { cs: string; rem: number; inBlock: number | null; tone: Tone; type: string; from: string; rw: string; time: string; gate: string; note: string; who: "you" | "agents" | null; path: string };
@@ -30,7 +33,7 @@ type Strip = { cs: string; rem: number; inBlock: number | null; tone: Tone; type
 const tPlus = (m: number) => `T${m < 0 ? "−" : "+"}${Math.abs(Math.round(m))}`;
 const signedMin = (m: number) => `${m < 0 ? "−" : "+"}${Math.abs(m).toFixed(1)}′`;
 
-/** The strip's path line: "inbound, entry BFORD T+12" before the target appears, "HLD BENKY 2L 120" for a
+/** The strip's path line: "inbound, entry BFORD T+20" (the entry fix and when the flight reaches it) before the target appears, "HLD BENKY 2L 120" for a
  *  flight that holds, and the route time its runway adds over the nominal one ("rte +2.1′") plus any vector
  *  stretch ("vec +1.5′"). Empty when there is nothing to say. */
 type Ground = TrajectorySet["ground"][number];
@@ -46,11 +49,11 @@ export function groundTimes(a: Assignment | undefined, ground?: Ground): { down:
 // a stand named by an OSM element id ("n9463243357") reads as noise on a strip; the gate it is bound to does not
 const standName = (stand: string | undefined, gate: string | undefined) => (stand && !/^[nwr]\d+$/.test(stand) ? stand : gate ?? stand ?? "");
 
-/** The strip's path line: "inbound, entry BFORD T+12" before the target appears, "HLD BENKY 2L 120" for a
+/** The strip's path line: "inbound, entry BFORD T+20" (the entry fix and when the flight reaches it) before the target appears, "HLD BENKY 2L 120" for a
  *  flight that holds, and the route time its runway adds over the nominal one ("rte +2.1′") plus any vector
  *  stretch ("vec +1.5′"). From touchdown on it is the taxi instead: "TXI B10 → C12 9m", and "TXI → C12 9m"
  *  once on blocks. Empty when there is nothing to say. */
-export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][number] | undefined, t: number, ground?: Ground): string {
+export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][number] | undefined, t: number, ground?: Ground, fixBy?: ReadonlyMap<string, { kind: string }>): string {
   const gt = groundTimes(a, ground);
   if (gt && t >= gt.down) {
     const m = a!.metrics;
@@ -62,8 +65,8 @@ export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][nu
   }
   const parts: string[] = [];
   if (air && air.points.length && t < air.appears_min) {
-    const fix = air.points.find((p) => p.fix)?.fix;
-    parts.push(`inbound${fix ? `, entry ${fix}` : ""} ${tPlus(air.appears_min)}`);
+    const entry = entryFix(air, fixBy);
+    parts.push(entry ? `inbound, entry ${entry.fix} ${tPlus(entry.t_min)}` : `inbound ${tPlus(air.appears_min)}`);
   }
   const m = a?.metrics;
   const hold = air?.hold && air.hold.laps >= 1 ? { fix: air.hold.fix, laps: air.hold.laps, level: air.hold.level_ft }
@@ -74,7 +77,8 @@ export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][nu
   return parts.join(" · ");
 }
 
-export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected, onSelect, paths = null }: Props) {
+export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected, onSelect, paths = null, geo = null, updating = false }: Props) {
+  const fixBy = new Map((geo?.procedures.fixes ?? []).map((f) => [f.id, f]));
   const airBy = new Map((paths?.air ?? []).map((x) => [x.callsign, x]));
   const groundBy = new Map((paths?.ground ?? []).filter((g) => g.kind === "arrival").map((x) => [x.callsign, x]));
   const at = (p: JointPlan | null, cs: string): Assignment | undefined => p?.assignments.find((a) => a.callsign === cs);
@@ -93,7 +97,7 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
     const was = !moved ? "" : ref.runway !== a.runway ? `${ref.runway}` : ref.slot_min !== a.slot_min ? hhmm(ref.slot_min ?? 0) : `gate ${ref.gate}`;
     const note = moved ? `was ${was}` : a.metrics.hold_min >= 1 ? `holds ${Math.round(a.metrics.hold_min)} min` : `due ${hhmm(f.sched_min)}`;
     const g = groundBy.get(f.callsign);
-    return { ...base, rem: slot - t, inBlock: groundTimes(a, g)?.inBlock ?? null, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t, g) };
+    return { ...base, rem: slot - t, inBlock: groundTimes(a, g)?.inBlock ?? null, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t, g, geo ? fixBy : undefined) };
   });
   const fixed = wave.queue.filter((q) => q.slot_min - t >= 0 && q.slot_min - t <= SEQ_MIN).sort((p, q) => p.slot_min - q.slot_min);
 
@@ -107,7 +111,7 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
 
   return (
     <section className="strips" aria-label="Flight strips">
-      <div className="strips-head"><h2>Flight strips</h2><span className="meta">{wave.flights.length} in the plan</span></div>
+      <div className="strips-head"><h2>Flight strips</h2><span className="meta">{wave.flights.length} in the plan{updating ? " · updating paths…" : ""}</span></div>
       <div className="strips-body">
         {bays.map(([name, list]) => list.length > 0 && (
           <div className="bay" key={name}>

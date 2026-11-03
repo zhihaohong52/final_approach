@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Assignment, JointPlan, Runway, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
-import { holdLap, levelLabel, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
+import { entryFix, holdLap, levelLabel, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
 
 // An approach-radar picture of the plan at one moment. The scope is centred on the airport reference point,
 // runways are drawn to scale from their end coordinates and range rings are true nautical miles.
@@ -57,6 +57,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     return () => ro.disconnect();
   }, []);
   const wide = W >= 700;
+  const stack = W < 900;                                 // below this the left and right notes would collide on one line: the procedures note goes above
   const H = wide || fill ? Math.max(460, boxH) : Math.round(Math.min(560, Math.max(360, W * 1.05)));
 
   const ends = wave.airport.runways.filter(hasGeo);
@@ -73,7 +74,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   const P = (p: [number, number]): [number, number] => [cx + p[0] * S, cy + p[1] * S];
   // visible extent in NM from the centre; the top band is kept clear for the clock and range controls
   const keyed = window.innerWidth > 760;                 // styles.css shows the colour key and overlays the header above 760px
-  const TOP = keyed ? 64 : 12, BOTTOM = keyed ? 60 : 30;
+  const TOP = keyed ? 64 : 12, BOTTOM = keyed ? (stack ? 76 : 60) : 30;   // stacked notes: the colour key sits above two note lines
   const lim = { l: -(cx - 16) / S, r: (W - cx - 16) / S, t: -(cy - TOP) / S, b: (H - cy - BOTTOM) / S };
 
   // one strip per physical runway (the two ends share coordinates, swapped)
@@ -122,19 +123,33 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   const ts = scanFloor(t, SCAN_MIN);                    // the picture is the last scan, also when scrubbing
   const air: Air[] = fly ? paths!.air.filter((a) => a.points.length > 0) : [];
   if (fly) for (const a of air) usedEnds.add(a.runway);
-  // holds someone in the shown plan flies, with the levels they use
-  const holdsUsed = new Map<string, { levels: Set<number>; n: number }>();
+  // Holds someone in the shown plan flies, with the levels they use. Geo holds may share a fix name, so each
+  // flight is matched to the pattern of that name nearest to where its own hold points lie (name AND position).
+  const holds = fly ? geo!.procedures.holds : [];
+  const centroid = (pts: XY[]): XY => [pts.reduce((m, q) => m + q[0], 0) / pts.length, pts.reduce((m, q) => m + q[1], 0) / pts.length];
+  const holdCentre = holds.map((h) => (h.polygon.length ? centroid(h.polygon.map(([la, lo]) => nm(la, lo))) : null));
+  const holdOf = new Map<string, number>();                      // callsign -> index into geo holds
+  const holdsUsed = new Map<number, { levels: Set<number>; n: number }>();
   for (const a of air) if (a.hold && a.hold.laps >= 1) {
-    const h = holdsUsed.get(a.hold.fix) ?? { levels: new Set<number>(), n: 0 };
-    h.levels.add(a.hold.level_ft); h.n++; holdsUsed.set(a.hold.fix, h);
+    const named = holds.map((h, i) => i).filter((i) => holds[i].fix === a.hold!.fix);
+    const flown = a.points.filter((p) => p.kind === "hold" && p.t_min >= a.hold!.entry_min - 1e-6 && p.t_min <= a.hold!.exit_min + 1e-6).map((p) => nm(p.lat, p.lon));
+    const at = flown.length ? centroid(flown) : null;
+    const dist = (i: number) => (at && holdCentre[i] ? Math.hypot(at[0] - holdCentre[i]![0], at[1] - holdCentre[i]![1]) : 0);
+    const i = named.sort((p, q) => dist(p) - dist(q))[0];
+    if (i == null) continue;
+    holdOf.set(a.callsign, i);
+    const h = holdsUsed.get(i) ?? { levels: new Set<number>(), n: 0 };
+    h.levels.add(a.hold.level_ft); h.n++; holdsUsed.set(i, h);
   }
-  const racetracks = fly ? geo!.procedures.holds.filter((h) => holdsUsed.has(h.fix) && h.polygon.length > 2) : [];
-  const drawnHold = new Set(racetracks.map((h) => h.fix));
+  const racetracks = holds.map((h, i) => ({ h, i })).filter(({ h, i }) => holdsUsed.has(i) && h.polygon.length > 2);
+  const drawnHold = new Set(racetracks.map(({ i }) => i));
+  const usedHoldFixes = new Set([...holdsUsed.keys()].map((i) => holds[i].fix));
+  const drawnHoldFixes = new Set(racetracks.map(({ h }) => h.fix));
   // what is still ahead of each target, split into runs of solid (published) and dashed (synthesized) legs;
   // laps of a hold that has its racetrack drawn are left to the racetrack
   type Run = { cs: string; tone: Tone; dashed: boolean; pts: XY[] };
   const runs: Run[] = [];
-  let anySynth = racetracks.some((h) => h.src === "synth");
+  let anySynth = racetracks.some(({ h }) => h.src === "synth");
   const aheadFixes = new Set<string>();                 // fixes still to be flown by a target on the scope
   if (fly) for (const a of air) {
     const tn = a.wave ? tone(a.callsign) : "fixed";
@@ -145,7 +160,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     for (let i = now.seg + 1; i < a.points.length; i++) {
       const p = a.points[i], xy = nm(p.lat, p.lon);
       if (p.fix) aheadFixes.add(p.fix);
-      const skip = prev.p.kind === "hold" && p.kind === "hold" && drawnHold.has(a.hold?.fix ?? "");
+      const skip = prev.p.kind === "hold" && p.kind === "hold" && drawnHold.has(holdOf.get(a.callsign) ?? -1);
       const dashed = segmentDashed(prev.p, p);
       if (skip) cur = null;
       else {
@@ -165,19 +180,19 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   for (const a of air) {
     const named = a.points.filter((p) => p.fix && fixBy.has(p.fix)).map((p) => p.fix!);
     named.forEach((f) => onPath.add(f));
-    const entry = named.find((f) => fixBy.get(f)!.kind === "entry") ?? named[0];
+    const entry = entryFix(a, fixBy)?.fix;
     if (entry) entries.push(entry);
   }
   const fafs = [...onPath].filter((f) => fixBy.get(f)!.kind === "faf");
   const fixLabels: { id: string; x: number; y: number; hold: boolean }[] = [];
-  for (const id of [...new Set([...holdsUsed.keys(), ...fafs, ...entries])]) {
+  for (const id of [...new Set([...usedHoldFixes, ...fafs, ...entries])]) {
     const f = fixBy.get(id);
     if (!f || fixLabels.length >= MAX_FIX_LABELS) continue;
     const p = nm(f.lat, f.lon);
     if (!inScope(p)) continue;
     const [x, y] = P(p);
     if (fixLabels.some((l) => Math.abs(l.x - x) < 40 && Math.abs(l.y - y) < 12)) continue;
-    fixLabels.push({ id, x, y, hold: drawnHold.has(id) });
+    fixLabels.push({ id, x, y, hold: drawnHoldFixes.has(id) });
   }
   // fix symbols: what the targets on the scope still fly, plus the labelled ones; the rest of the procedure stays off
   const fixSyms = [...onPath].filter((id) => aheadFixes.has(id) || fixLabels.some((l) => l.id === id))
@@ -228,14 +243,14 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   blips.sort((a, b) => (a.tone === "fixed" ? 0 : 1) - (b.tone === "fixed" ? 0 : 1));
 
   // racetracks in screen space, with their "{fix} ×{levels} · {lo}-{hi}k" label above the pattern
-  const holdDraw = racetracks.map((h) => {
+  const holdDraw = racetracks.map(({ h, i }) => {
     const pts = h.polygon.map(([la, lo]) => P(nm(la, lo)));
-    const u = holdsUsed.get(h.fix)!;
+    const u = holdsUsed.get(i)!;
     const lv = [...u.levels].sort((a, b) => a - b);
     const lo = Math.round(lv[0] / 1000), hi = Math.round(lv[lv.length - 1] / 1000);
     const top = pts.reduce((m, p) => (p[1] < m[1] ? p : m), pts[0]);
     const f = fixBy.get(h.fix);
-    return { h, pts, lv, n: u.n, x: (f ? P(nm(f.lat, f.lon)) : top)[0], y: top[1] - 6, text: `${h.fix} ×${lv.length} · ${lo === hi ? lo : `${lo}-${hi}`}k` };
+    return { h, i, pts, lv, n: u.n, x: (f ? P(nm(f.lat, f.lon)) : top)[0], y: top[1] - 6, text: `${h.fix} ×${lv.length} · ${lo === hi ? lo : `${lo}-${hi}`}k` };
   });
 
   // data blocks: try four corners, keep the one that collides least with blocks and labels already placed
@@ -260,13 +275,18 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     return { b, lx, ly, r };
   });
 
+  // what the picture is, for the label: the caption state and a short hold summary
+  const state = noTargets ? "paths not available" : !fly ? "schematic, not the engine's path" : updating ? "updating paths" : "";
+  const nHolding = [...holdsUsed.values()].reduce((n, h) => n + h.n, 0);
+  const holdSummary = !fly ? "" : nHolding ? `${nHolding} holding at ${[...usedHoldFixes].join(", ")}` : "no holds";
+
   const m = wave.metar, calm = !m || !m.wind_kt, dir = m?.wind_dir_deg;
   const wr = dir != null ? ((dir - 90) * Math.PI) / 180 : 0;
   // ring numbers go on the diagonal furthest from every approach in use, so they never sit under traffic
   const approachDirs = [...usedEnds].map((id) => approach(id, 1)?.u).filter(Boolean) as [number, number][];
   const diag = ([[1, -1], [-1, -1], [1, 1], [-1, 1]] as [number, number][]).map(([dx, dy]) => [dx * 0.707, dy * 0.707] as [number, number])
     .sort((p, q) => Math.max(...approachDirs.map((u) => p[0] * u[0] + p[1] * u[1]), -1) - Math.max(...approachDirs.map((u) => q[0] * u[0] + q[1] * u[1]), -1))[0];
-  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1]; const underWind = x > W - 140 && y > H - (wide ? 116 : 158);   // the wind compass box, bottom right
+  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1]; const underWind = x > W - 140 && y > H - (stack ? 158 : 116);   // the wind compass box, bottom right
     return x > 24 && x < W - 24 && y > TOP && y < H - BOTTOM && !underWind; };
 
   return (
@@ -287,7 +307,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
         </ul>
       )}
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" onClick={() => onSelect(null)}
-        aria-label={`${wave.airport.iata} approach picture at ${clock(wave.window_start, t)}: ${blips.length} arrivals inbound`}>
+        aria-label={`${wave.airport.iata} approach picture at ${clock(wave.window_start, t)}: ${blips.length} arrivals inbound${state ? `, ${state}` : ""}${holdSummary ? `, ${holdSummary}` : ""}`}>
         <defs>
           <radialGradient id="scope-bg" cx="50%" cy="50%" r="60%">
             <stop offset="0" stopColor="#10161b" /><stop offset="1" stopColor="#0b0c0e" />
@@ -309,8 +329,8 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
         {fly && (
           <g className="paths">
             {/* holding racetracks in use, at the published (or synthesized) pattern, with the levels stacked there */}
-            {holdDraw.map(({ h, pts, lv, n, x, y, text }) => (
-              <g key={h.fix} className={`racetrack${h.src === "synth" ? " synth" : ""}`}>
+            {holdDraw.map(({ h, i, pts, lv, n, x, y, text }) => (
+              <g key={i} className={`racetrack${h.src === "synth" ? " synth" : ""}`}>
                 <title>{`${h.fix} hold · ${h.turn === "R" ? "right" : "left"} turns · inbound ${String(Math.round(h.inbound_true)).padStart(3, "0")}°T · ${h.leg_min} min legs · ${n} holding at ${lv.map((l) => levelLabel(l)).join(", ")} · ${h.src === "synth" ? "synthesized, not published" : "published (CIFP)"}`}</title>
                 <polygon points={pts.map((p) => p.join(",")).join(" ")} strokeDasharray={h.src === "synth" ? "5 4" : undefined} />
                 <text className="hold-label" x={x} y={y} textAnchor="middle">{text}</text>
@@ -393,7 +413,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
           );
         })}
 
-        <g transform={`translate(${W - 74} ${H - (wide ? 76 : 118)})`}>{/* narrow: lifted clear of the full-width notes below */}
+        <g transform={`translate(${W - 74} ${H - (stack ? 118 : 76)})`}>{/* narrow: lifted clear of the full-width notes below */}
           <circle r={22} fill="none" stroke="#2a2d33" />
           {calm ? <text className="ring" textAnchor="middle" y={4}>calm</text>
             : dir == null ? <text className="ring" textAnchor="middle" y={4}>VRB</text>
@@ -409,7 +429,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
                 <text x={0} y={0} textAnchor="end">dashed = synthesized, not published</text>
               </g>
             )}
-            <text className="scope-note" x={wide ? W - 16 : 14} y={wide ? H - 12 : H - 26} textAnchor={wide ? "end" : "start"}>
+            <text className="scope-note" x={stack ? 14 : W - 16} y={stack ? H - 26 : H - 12} textAnchor={stack ? "start" : "end"}>
               {geo!.procedures.status === "real" ? `Procedures: FAA CIFP ${geo!.procedures.cycle}, not for navigation` : "Procedures: synthesized (no published procedures), not for navigation"}
             </text>
           </>

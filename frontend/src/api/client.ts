@@ -18,9 +18,6 @@ export class ApiError extends Error {
 
 class NotDeployed extends Error {}
 
-/** `EvaluateResponse.trajectories` lands with contract v2.2 part 2 (Task 16); typed here until types.ts has it. */
-export type EvaluateWithPaths = EvaluateResponse & { trajectories?: TrajectorySet };
-
 async function get<T>(path: string, fallback: () => Promise<T>, valid: (x: any) => boolean = () => true): Promise<T> {
   if (offline) return fallback();
   try {
@@ -73,8 +70,8 @@ export const api = {
   },
 
   /** As `evaluate`, optionally with the edited plan's trajectories (`include_trajectories`, contract v2.2 part 2),
-   *  so the timeline's hold laps and taxi segments follow a bar while it is dragged. */
-  async postEvaluate(req: EvaluateRequest, opts: { includeTrajectories?: boolean; signal?: AbortSignal } = {}): Promise<EvaluateWithPaths | null> {
+   *  so the radar, strips and timeline follow an edit without a second request. */
+  async postEvaluate(req: EvaluateRequest, opts: { includeTrajectories?: boolean; signal?: AbortSignal } = {}): Promise<EvaluateResponse | null> {
     if (offline) return null;
     const body = opts.includeTrajectories ? { ...req, include_trajectories: true } : req;
     const r = await fetch("/api/evaluate", { method: "POST", signal: opts.signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -106,7 +103,7 @@ export const api = {
   },
 
   /** The engine's 4D trajectories for a plan (deterministic, model-free). null when offline or the route is
-   *  not deployed. A run recorded on another engine version is rejected with ApiError code "engine_mismatch". */
+   *  not deployed. This {wave_id, assignments} form is never rejected for the engine version (only `{run_id}` is, 409). */
   async postTrajectories(waveId: string, assignments: Assignment[], signal?: AbortSignal): Promise<TrajectorySet | null> {
     if (offline) return null;
     const r = await fetch("/api/trajectories", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ wave_id: waveId, assignments }) });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, endOfLine, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { bearing, endOfLine, entryFix, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -96,4 +96,14 @@ it("the radar's NM plane is the surface map's metre plane / 1852, and keeps the 
     expect(e).toBeCloseTo((lo - lon0) * 60 * Math.cos((lat0 * Math.PI) / 180), 9);
     expect(no).toBeCloseTo((la - lat0) * 60, 9);
   }
+});
+
+describe("entryFix", () => {
+  const air = { points: [{ t_min: 1 }, { t_min: 3, fix: "AAA" }, { t_min: 6, fix: "BBB" }, { t_min: 9, fix: "CCC" }] };
+  const fixes = new Map([["AAA", { kind: "star" }], ["BBB", { kind: "entry" }], ["CCC", { kind: "faf" }]]);
+  it("prefers a fix the procedures mark as an entry fix, with its own time", () => expect(entryFix(air, fixes)).toEqual({ fix: "BBB", t_min: 6 }));
+  it("else the first named fix", () => expect(entryFix(air, new Map([["AAA", { kind: "star" }], ["CCC", { kind: "faf" }]]))).toEqual({ fix: "AAA", t_min: 3 }));
+  it("without procedures it is the first named fix", () => expect(entryFix(air)).toEqual({ fix: "AAA", t_min: 3 }));
+  it("ignores fixes the procedures do not know", () => expect(entryFix(air, new Map([["CCC", { kind: "faf" }]]))).toEqual({ fix: "CCC", t_min: 9 }));
+  it("is null when no point is named", () => { expect(entryFix({ points: [{ t_min: 1 }] }, fixes)).toBeNull(); expect(entryFix({ points: [] })).toBeNull(); });
 });

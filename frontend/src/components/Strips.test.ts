@@ -16,8 +16,14 @@ const air = (over: Partial<TrajectorySet["air"][number]> = {}): TrajectorySet["a
 
 describe("pathLine", () => {
   it("lists the entry fix and time before the target appears", () => {
-    expect(pathLine(a(), air(), 5)).toBe("inbound, entry BFORD T+12");
+    expect(pathLine(a(), air(), 5)).toBe("inbound, entry BFORD T+20");
     expect(pathLine(a(), air(), 13)).toBe("");
+  });
+  it("names the procedures' entry fix, with that fix's own time, as the radar does", () => {
+    const pts = air().points;
+    const two = air({ points: [pts[0], { ...pts[1], fix: "AAA", t_min: 15 }, { ...pts[1], fix: "BFORD" }, pts[2]] });
+    expect(pathLine(a(), two, 5, undefined, new Map([["AAA", { kind: "star" }], ["BFORD", { kind: "entry" }]]))).toBe("inbound, entry BFORD T+20");
+    expect(pathLine(a(), two, 5, undefined, new Map([["AAA", { kind: "star" }], ["BFORD", { kind: "faf" }]]))).toBe("inbound, entry AAA T+15");
   });
   it("shows the hold as fix, laps and level", () => {
     const hold = { fix: "BENKY", laps: 2, level_ft: 12000, entry_min: 20, exit_min: 28, lap_min: 4 };

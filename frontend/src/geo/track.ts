@@ -85,3 +85,12 @@ export function nmProjector(lat0: number, lon0: number): (lat: number, lon: numb
   const p = projector(lat0, lon0);
   return (lat, lon) => { const [e, n] = p(lat, lon); return [e / NM_M, n / NM_M]; };
 }
+
+/** The fix a flight enters the terminal area at: the first of its path's named fixes that the wave's procedures
+ *  mark as an "entry" fix, else the first named fix. `fixBy` is the procedures' fixes by id; when given, only
+ *  fixes it knows count (the radar can only place those). Shared by the radar and the strips so they agree. */
+export function entryFix(air: { points: { t_min: number; fix?: string }[] }, fixBy?: ReadonlyMap<string, { kind: string }>): { fix: string; t_min: number } | null {
+  const named = air.points.filter((p): p is { t_min: number; fix: string } => !!p.fix && (!fixBy || fixBy.has(p.fix)));
+  const p = (fixBy && named.find((q) => fixBy.get(q.fix)!.kind === "entry")) || named[0];
+  return p ? { fix: p.fix, t_min: p.t_min } : null;
+}
