@@ -9,6 +9,10 @@ Definitions (also written to selection.reasons):
 - latency_*         = DecisionMeta.latency_ms of model-answered decisions only (null when there are none).
 - failed waves      = non-consensus + one error decision; outcome means use the waves that succeeded in every arm.
 - brier             = mean (p_accept - y)^2 over model-answered votes (AGENT_TURN body.votes[]), y = formula verdict (utility >= reservation).
+- worse_than_status_quo_pct = % of waves with a feasible status quo whose FINAL plan (consensus or solver fallback)
+  has delay_min > status quo + 0.05 or fuel_kg > status quo + 0.5. Stricter than "agreed plans" (spec §3.4); the
+  consensus-only share is reported next to it (arm field worse_than_sq_consensus_pct).
+- model_calls_per_wave = mean of stats.model_calls (decisions answered by a model).
 - status quo may violate rules: baseline means cover all common waves, feasible_only covers the waves where it is
   feasible, and regressions vs status quo are only reported on those waves.
 """
@@ -41,7 +45,8 @@ TOTAL_KEYS = ("delay_min", "fuel_kg", "pax_protected_pct", "overtime_min")
 PROMPT_BUDGET_CHARS = 32000   # spec §6.7: 8k tokens at chars/4
 PROMPT_MAX: dict[str, int] = {}   # arm tag -> largest state + instructions + options any Decider call (choice, score, noul, noul_batch) received
 HISTORY_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min",
-                "consensus_rate_pct", "rule_violations_in_agreed_plans")
+                "consensus_rate_pct", "rule_violations_in_agreed_plans", "worse_than_status_quo_pct")
+WORSE_DELAY_MIN, WORSE_FUEL_KG = 0.05, 0.5   # fairness.DELAY_EPS_MIN / FUEL_EPS_KG: metric rounding, nothing more
 ATTRIBUTION_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min")
 
 
@@ -150,7 +155,8 @@ def arm_parts(arm: str) -> tuple[str, str]:
     return prov, model
 
 
-def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int, tag: str) -> dict[str, dict]:
+def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int, tag: str,
+            fairness: str | None = None) -> dict[str, dict]:
     from backend.decide import Decider, _reset_breakers, _stringify
     _reset_breakers()
     out: dict[str, dict] = {}
@@ -179,7 +185,7 @@ def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int
     def one(w):
         t0 = time.monotonic()
         try:
-            r = negotiate_wave(w, mode, chain=chain)
+            r = negotiate_wave(w, mode, chain=chain, fairness=fairness)
             out[w.id] = {"result": r}
             log(f"[{tag}] {w.id}: {r['outcome']} rounds={r['rounds']} delay={r['evaluation']['totals']['delay_min']} "
                 f"({time.monotonic() - t0:.1f}s)")
@@ -378,6 +384,20 @@ def coverage(waves: list, n_failed: int = 0) -> dict[str, dict[str, int]]:
     return {k: dict(sorted(c.items(), key=lambda kv: (order.get(kv[0], len(order)), kv[0]))) for k, c in out.items()}
 
 
+def _regressed(delay: float, fuel: float, sq_delay: float, sq_fuel: float) -> bool:
+    return delay > sq_delay + WORSE_DELAY_MIN or fuel > sq_fuel + WORSE_FUEL_KG
+
+
+def worse_than_sq_pct(arm_pw: dict, base_pw: dict, infeasible_ids: list[str]) -> float | None:
+    """% of waves with a feasible status quo whose final plan is worse than it (delay or fuel, beyond rounding).
+    arm_pw / base_pw: wave id -> {delay_min, fuel_kg}. None when no wave qualifies."""
+    ids = [w for w in arm_pw if w in base_pw and w not in set(infeasible_ids)]
+    if not ids:
+        return None
+    return pct(sum(_regressed(arm_pw[w]["delay_min"], arm_pw[w]["fuel_kg"], base_pw[w]["delay_min"], base_pw[w]["fuel_kg"])
+                   for w in ids), len(ids))
+
+
 def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list, common: set[str],
               max_prompt_chars: int = 0) -> tuple[dict, dict]:
     """Returns (contract summary, extras for selection/markdown)."""
@@ -394,6 +414,12 @@ def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list,
              for wid, r in ok if wid in common and wid in formula_runs and "result" in formula_runs[wid]]
     by_id = {w.id: w for w in waves}
     viol = sum(1 for wid, r in ok if not feasible_real(by_id[wid], r))
+    sq_bad = [wid for wid, r in ok if wid in common and not status_quo_feasible(by_id[wid], r)]
+    pw = {wid: r["evaluation"]["totals"] for wid, r in ok if wid in common}
+    bw = {wid: r["baseline"]["evaluation"]["totals"] for wid, r in ok if wid in common}
+    agreed = {wid for wid, r in ok if r["outcome"] == "consensus"}
+    worse_agreed = worse_than_sq_pct({w: v for w, v in pw.items() if w in agreed}, bw, sq_bad)
+    bad_sq = [r for wid, r in ok if wid in sq_bad]
     s = {
         "consensus_rate_pct": pct(sum(r["outcome"] == "consensus" for r in res), N),
         "mean_rounds": mean([r["rounds"] for r in com]),
@@ -413,9 +439,14 @@ def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list,
         "error_rate_pct": pct(errs, len(metas) + len(failed)),
         "cost_usd_per_wave": 0.0,
         "max_prompt_chars": max_prompt_chars,
+        "worse_than_status_quo_pct": worse_than_sq_pct(pw, bw, sq_bad),
+        "model_calls_per_wave": mean([(r.get("stats") or {}).get("model_calls", 0) for r in res]),
     })
     return s, {"n_ok": len(ok), "failed_ids": failed, "p95_all_ms": percentile(all_lat, 0.95) if all_lat else None,
-               "model_decisions": len(model_lat)}
+               "model_decisions": len(model_lat), "worse_than_sq_consensus_pct": worse_agreed,
+               "infeasible_sq_waves": len(bad_sq),
+               "consensus_pct_infeasible_sq": pct(sum(r["outcome"] == "consensus" for r in bad_sq), len(bad_sq))
+               if bad_sq else None}
 
 
 def run_optimiser(waves: list, concurrency: int = 4) -> dict[str, dict]:
@@ -469,10 +500,10 @@ def arm_vs_optimiser(arm_delay: dict[str, float], sq_delay: dict[str, float], sq
             "share_of_optimiser_gain_pct": share, "share_n": len(sub)}
 
 
-def run_ablation(waves: list) -> float | None:
+def run_ablation(waves: list, fairness: str | None = None) -> float | None:
     unsafe = total = 0
     with engine_disabled():
-        runs = run_arm("formula", waves, ["formula"], "formulas", 1, "ablation")
+        runs = run_arm("formula", waves, ["formula"], "formulas", 1, "ablation", fairness=fairness)
     by_id = {w.id: w for w in waves}
     for wid, x in runs.items():
         if "result" not in x:
@@ -554,7 +585,8 @@ def select(arms: list[dict], n_total: int, baseline: dict) -> tuple[dict, dict |
     return {"winner": winner, "rule": rule, "reasons": reasons}, win
 
 
-def run_outage(winner_arm: str | None, waves: list, n: int, concurrency: int) -> tuple[dict, list[str]]:
+def run_outage(winner_arm: str | None, waves: list, n: int, concurrency: int,
+               fairness: str | None = None) -> tuple[dict, list[str]]:
     sub = waves[:n]
     out = {"primary_disabled": DEAD_MODEL.split(":", 1)[1], "waves": len(sub), "resolved": 0, "fallbacks_used": {}}
     if winner_arm is None:
@@ -563,7 +595,8 @@ def run_outage(winner_arm: str | None, waves: list, n: int, concurrency: int) ->
     if not sub:
         return out, []
     by_id = {w.id: w for w in sub}
-    runs = run_arm("outage", sub, [DEAD_MODEL, winner_arm, "formula"], "decision", concurrency, "outage")
+    runs = run_arm("outage", sub, [DEAD_MODEL, winner_arm, "formula"], "decision", concurrency, "outage",
+                   fairness=fairness)
     used: Counter = Counter()
     for wid, x in runs.items():
         if "result" not in x:
@@ -584,18 +617,28 @@ def _row(version: str, arm: str, s: dict, n_ok: int | None, n_feasible: int | No
     return {"engine_version": version, "arm": arm, **{k: s.get(k) for k in HISTORY_KEYS}, "n_feasible": n_feasible}
 
 
+def _archived_worse_pct(rep: dict, model: str) -> float | None:
+    """worse_than_status_quo_pct from an archived report's per_wave tables (None when it has none)."""
+    pw = rep.get("per_wave") or {}
+    if model not in pw or "baseline" not in pw:
+        return None
+    return worse_than_sq_pct(pw[model], pw["baseline"], rep["baseline"].get("infeasible_ids", []))
+
+
 def _rows(rep: dict, version: str) -> list[dict]:
     b = rep["baseline"]
     rows = [_row(version, "baseline", {**b, "consensus_rate_pct": None, "rule_violations_in_agreed_plans": None},
                  None, b.get("n_feasible"))]
     for a in rep["arms"]:
         s = a["summary"]
+        if "worse_than_status_quo_pct" not in s:
+            s = {**s, "worse_than_status_quo_pct": _archived_worse_pct(rep, a["model"])}
         nf = a["n_ok"] - s.get("rule_violations_in_agreed_plans", 0) if "n_ok" in a else None
         rows.append(_row(version, a["model"], s, a.get("n_ok"), nf))
     return rows
 
 
-VERSION_ORDER = ("v2", "v3-air", "v3-time", "v3-taxi", "v3-traffic")
+VERSION_ORDER = ("v2", "v3-air", "v3-time", "v3-taxi", "v3-traffic", "v4-airlines")
 
 
 def _version_rank(v: str) -> int:
@@ -710,10 +753,76 @@ def collect_failures(label: str, runs: dict, waves: list) -> list[dict]:
             out.append({"wave_id": wid, "model": label, "reason": "rule violation in final plan"})
         bd = r["baseline"]["evaluation"]["totals"]["delay_min"]
         nd = r["evaluation"]["totals"]["delay_min"]
-        if status_quo_feasible(by_id[wid], r) and nd > bd:
-            out.append({"wave_id": wid, "model": label,
-                        "reason": f"regression vs status quo: delay {nd} > {bd} min"})
+        if status_quo_feasible(by_id[wid], r):
+            bf = r["baseline"]["evaluation"]["totals"]["fuel_kg"]
+            nf = r["evaluation"]["totals"]["fuel_kg"]
+            if nd > bd + WORSE_DELAY_MIN:
+                out.append({"wave_id": wid, "model": label,
+                            "reason": f"regression vs status quo: delay {nd} > {bd} min"})
+            if nf > bf + WORSE_FUEL_KG:
+                out.append({"wave_id": wid, "model": label,
+                            "reason": f"regression vs status quo: fuel {nf} > {bf} kg"})
     return out
+
+
+def _arm_rows(variant: str, rep: dict, prev: dict, tol: float) -> list[dict]:
+    pc = {a["label"]: a["summary"].get("consensus_rate_pct") for a in prev.get("arms", [])}
+    rows = []
+    for a in rep.get("arms", []):
+        s = a["summary"]
+        p = pc.get(a["label"])
+        rows.append({"variant": variant, "label": a["label"], "consensus_rate_pct": s.get("consensus_rate_pct"),
+                     "prev_consensus_rate_pct": p,
+                     "eligible": p is None or s["consensus_rate_pct"] >= p - tol - 1e-9,
+                     "worse_than_status_quo_pct": s.get("worse_than_status_quo_pct"),
+                     "delay_min": s.get("delay_min"), "fuel_kg": s.get("fuel_kg"),
+                     "model_calls_per_wave": s.get("model_calls_per_wave"), "latency_p95_ms": s.get("latency_p95_ms")})
+    return rows
+
+
+def _avg(xs: list) -> float | None:
+    xs = [x for x in xs if x is not None]
+    return round(statistics.fmean(xs), 2) if xs else None
+
+
+def pick_fairness(firm: dict, relaxing: dict, prev: dict) -> dict:
+    """Which fairness variant ships. firm / relaxing / prev are benchmark reports (v3-traffic for prev). A variant
+    passes iff in every arm its consensus rate is >= that of the same-label prev arm minus one wave (100 / n_waves pp;
+    arms missing in prev are skipped). Among passing variants the lower mean worse_than_status_quo_pct wins
+    (|diff| < 0.05 is a tie, and firm wins ties). If neither passes the higher mean consensus rate wins (tie: firm)
+    and `shortfall` is True. variant is therefore never None; the type allows None for old reports."""
+    n = firm.get("n_waves") or relaxing.get("n_waves") or 50
+    tol = round(100.0 / n, 2)
+    rows = _arm_rows("firm", firm, prev, tol) + _arm_rows("relaxing", relaxing, prev, tol)
+    by = {v: [r for r in rows if r["variant"] == v] for v in ("firm", "relaxing")}
+    ok = {v: all(r["eligible"] for r in by[v]) for v in by}
+    cons = {v: _avg([r["consensus_rate_pct"] for r in by[v]]) for v in by}
+    worse = {v: _avg([r["worse_than_status_quo_pct"] for r in by[v]]) for v in by}
+    rule = (f"A variant passes iff every arm's consensus rate >= the v3-traffic arm's minus one wave ({tol} pp at "
+            f"n = {n}). Among passing variants the lower mean worse-than-status-quo share wins (|diff| < 0.05 is a tie: "
+            "firm). If neither passes, the higher mean consensus rate wins and the shortfall is flagged.")
+    reasons = [f"{v}: " + ("passes" if ok[v] else "fails") + f" the consensus floor; mean consensus {cons[v]}%, "
+               f"mean worse than status quo {worse[v]}%" for v in by]
+    for v in by:
+        for r in by[v]:
+            if not r["eligible"]:
+                reasons.append(f"{v} arm {r['label']}: consensus {r['consensus_rate_pct']}% vs v3-traffic "
+                               f"{r['prev_consensus_rate_pct']}% (more than one wave lower)")
+    shortfall = not any(ok.values())
+    if shortfall:
+        win = "firm" if (cons["firm"] or 0) >= (cons["relaxing"] or 0) else "relaxing"
+        reasons.insert(0, f"Neither variant keeps consensus within one wave of v3-traffic; shipping {win} with the higher "
+                          f"mean consensus ({cons['firm']}% firm vs {cons['relaxing']}% relaxing). Shortfall.")
+    elif all(ok.values()):
+        wf, wr = worse["firm"], worse["relaxing"]
+        win = "relaxing" if wf is not None and wr is not None and wf - wr >= 0.05 else "firm"
+        how = "a lower" if win == "relaxing" else "an equal or lower (within 0.05)"
+        reasons.insert(0, f"Both variants pass; {win} has {how} mean worse-than-status-quo share "
+                          f"(firm {wf}%, relaxing {wr}%).")
+    else:
+        win = next(v for v in by if ok[v])
+        reasons.insert(0, f"Only {win} keeps consensus within one wave of v3-traffic in every arm.")
+    return {"variant": win, "rule": rule, "reasons": reasons, "rows": rows, "shortfall": shortfall}
 
 
 def _f(v) -> str:
@@ -826,6 +935,20 @@ def markdown(rep: dict) -> str:
           for r in rg[:20]] or ["- none"]
     if len(rg) > 20:
         L.append(f"- ... and {len(rg) - 20} more in benchmark.json")
+    fv = rep.get("fairness_variants")
+    if fv:
+        pk = fv["pick"]
+        L += ["", "## Fairness variants", "",
+              f"Same waves and arms under each fairness variant. worse than SQ = % of waves with a feasible status quo "
+              "whose final plan (consensus or fallback) is worse on delay (> 0.05 min) or fuel (> 0.5 kg).", "",
+              "| variant | arm | consensus % | v3-traffic consensus % | worse than SQ % | delay min | fuel kg "
+              "| model calls/wave | p95 ms |", "|" + "---|" * 9]
+        L += ["| " + " | ".join(_f(r.get(k)) for k in ("variant", "label", "consensus_rate_pct", "prev_consensus_rate_pct",
+                                                        "worse_than_status_quo_pct", "delay_min", "fuel_kg",
+                                                        "model_calls_per_wave", "latency_p95_ms")) + " |"
+              for r in pk["rows"]]
+        L += ["", f"**Pick:** {_f(pk['variant'])}" + (" (shortfall)" if pk.get("shortfall") else ""), "",
+              f"Rule: {pk['rule']}", ""] + [f"- {r}" for r in pk["reasons"]]
     tv = rep.get("taxi_validation")
     if tv:
         L += ["", "## Taxi-in validation vs BTS 2015", "",
@@ -869,6 +992,8 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--no-ablation", action="store_true")
     ap.add_argument("--source", choices=("bts", "flights2015"), default="flights2015")
     ap.add_argument("--fixtures", action="store_true")
+    ap.add_argument("--fairness", choices=("firm", "relaxing"), default=None,
+                    help="fairness-floor variant for every arm, the ablation and the outage run (default: ATM_FAIRNESS)")
     ap.add_argument("--out", default=str(ROOT / "eval"))
     a = ap.parse_args(argv)
     from backend.wave import trajectory
@@ -893,7 +1018,7 @@ def _main(a: argparse.Namespace) -> dict:
     for arm in arm_list:
         f = arm == "formula"
         all_runs[arm] = run_arm(arm, waves, ["formula"] if f else [arm, "formula"],
-                                "formulas" if f else "decision", a.concurrency, arm)
+                                "formulas" if f else "decision", a.concurrency, arm, fairness=a.fairness)
     formula_runs = all_runs["formula"]
     common = {w.id for w in waves if all("result" in all_runs[arm].get(w.id, {}) for arm in arm_list)}
 
@@ -930,7 +1055,7 @@ def _main(a: argparse.Namespace) -> dict:
         selection["reasons"].append(f"loaded {len(waves)} of {a.n} requested waves")
     outage_arm = next((x for x in arm_list if best_model and x != "formula" and arm_parts(x)[1] == best_model["model"]),
                       None)
-    outage, notes = run_outage(outage_arm, waves, a.outage_n, a.concurrency)
+    outage, notes = run_outage(outage_arm, waves, a.outage_n, a.concurrency, fairness=a.fairness)
     if outage_arm and selection["winner"] == "formula":
         selection["reasons"].append(f"Outage test ran with the best eligible model arm {best_model['label']} "
                                     "(overall winner is formula).")
@@ -940,11 +1065,12 @@ def _main(a: argparse.Namespace) -> dict:
         "n_waves": len(waves), "n_common": len(common), "seed": a.seed,
         "source": "fixtures" if a.fixtures else a.source, "arms": arms, "baseline": base,
         "optimiser": optimiser,
-        "ablation_no_engine_unsafe_pct": None if a.no_ablation else run_ablation(waves),
+        "ablation_no_engine_unsafe_pct": None if a.no_ablation else run_ablation(waves, fairness=a.fairness),
         "outage_test": outage,
         "selection": selection, "failures": failures, "wave_ids": [w.id for w in waves],
     }
-    report = {"engine_version": ENGINE_VERSION, **report}
+    from backend.wave import fairness as fair
+    report = {"engine_version": ENGINE_VERSION, "fairness": a.fairness or fair.current(), **report}
     report["coverage"] = coverage(waves, n_failed=len(build_fail))
     report["taxi_validation"] = taxi_validation(waves, {w: x["result"] for w, x in formula_runs.items() if "result" in x})
     report["per_wave"] = {model: per_wave_table(all_runs[arm], common)

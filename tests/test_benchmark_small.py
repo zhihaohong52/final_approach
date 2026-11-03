@@ -6,7 +6,7 @@ from backend.wave.benchmark import main
 SUMMARY_KEYS = {"consensus_rate_pct", "mean_rounds", "fallback_rate_pct", "rule_violations_in_agreed_plans",
                 "delay_min", "fuel_kg", "pax_protected_pct", "overtime_min", "agreement_with_formula_pct", "brier",
                 "latency_p50_ms", "latency_p95_ms", "error_rate_pct", "cost_usd_per_wave",
-                "lap_share_pct", "taxi_wait_min", "max_prompt_chars"}
+                "lap_share_pct", "taxi_wait_min", "max_prompt_chars", "worse_than_status_quo_pct", "model_calls_per_wave"}
 
 
 def test_small_benchmark(tmp_path):
@@ -336,3 +336,138 @@ def test_formula_override_reasons_do_not_contradict():
     assert sel["reasons"][0].startswith("Formula selected: the best model arm, jev,")
     assert "best model arm but not the overall winner" in sel["reasons"][1]
     assert not any("best outcome among qualifying arms" in r for r in sel["reasons"])
+
+
+# ---------------------------------------------------------------- A9: worse than status quo, fairness pick
+
+def test_worse_than_sq_pct():
+    base = {"a": {"delay_min": 10.0, "fuel_kg": 100.0}, "b": {"delay_min": 10.0, "fuel_kg": 100.0},
+            "c": {"delay_min": 10.0, "fuel_kg": 100.0}, "d": {"delay_min": 10.0, "fuel_kg": 100.0},
+            "x": {"delay_min": 1.0, "fuel_kg": 1.0}}
+    arm = {"a": {"delay_min": 10.05, "fuel_kg": 100.5},   # inside eps: not worse
+           "b": {"delay_min": 9.0, "fuel_kg": 100.6},     # fuel-only regression
+           "c": {"delay_min": 10.2, "fuel_kg": 90.0},     # delay-only regression
+           "d": {"delay_min": 5.0, "fuel_kg": 50.0},
+           "x": {"delay_min": 99.0, "fuel_kg": 99.0}}     # infeasible status quo: excluded
+    assert B.worse_than_sq_pct(arm, base, ["x"]) == 50.0
+    assert B.worse_than_sq_pct(arm, base, ["a", "b", "c", "d", "x"]) is None
+    assert B.worse_than_sq_pct({}, base, []) is None
+
+
+def _rep(cons, worse, n=50, labels=("m", "formula")):
+    return {"n_waves": n, "arms": [{"label": lb, "summary": {"consensus_rate_pct": c, "worse_than_status_quo_pct": w,
+                                                              "delay_min": 1.0, "fuel_kg": 2.0}}
+                                   for lb, c, w in zip(labels, cons, worse)]}
+
+
+PREV = _rep([98.0, 96.0], [None, None])
+
+
+def test_pick_fairness_rule():
+    # relaxing better and eligible (firm eligible too) -> relaxing; one wave (2 pp) below prev still passes
+    p = B.pick_fairness(_rep([98.0, 96.0], [10.0, 12.0]), _rep([96.0, 94.0], [4.0, 6.0]), PREV)
+    assert p["variant"] == "relaxing" and not p["shortfall"] and p["rows"] and p["reasons"]
+    # tie within 0.05 -> firm
+    p = B.pick_fairness(_rep([98.0, 96.0], [10.0, 10.0]), _rep([98.0, 96.0], [10.02, 10.0]), PREV)
+    assert p["variant"] == "firm"
+    # firm better -> firm
+    p = B.pick_fairness(_rep([98.0, 96.0], [2.0, 2.0]), _rep([98.0, 96.0], [8.0, 8.0]), PREV)
+    assert p["variant"] == "firm"
+    # relaxing better but below prev by more than a wave in an arm -> firm (only eligible)
+    p = B.pick_fairness(_rep([98.0, 96.0], [10.0, 10.0]), _rep([98.0, 93.9], [0.0, 0.0]), PREV)
+    assert p["variant"] == "firm" and not p["shortfall"]
+    # only relaxing eligible -> relaxing, even with a worse score
+    p = B.pick_fairness(_rep([90.0, 96.0], [0.0, 0.0]), _rep([98.0, 96.0], [20.0, 20.0]), PREV)
+    assert p["variant"] == "relaxing"
+    # neither eligible -> higher mean consensus, shortfall flagged with the numbers
+    p = B.pick_fairness(_rep([90.0, 90.0], [0.0, 0.0]), _rep([94.0, 88.0], [9.0, 9.0]), PREV)
+    assert p["variant"] == "relaxing" and p["shortfall"] is True
+    assert any("91.0" in r and "90.0" in r for r in p["reasons"])
+    p = B.pick_fairness(_rep([90.0, 90.0], [0.0, 0.0]), _rep([92.0, 92.0], [0.0, 0.0]), PREV)
+    assert p["variant"] == "relaxing" and p["shortfall"]
+    # neither eligible, equal consensus -> firm
+    p = B.pick_fairness(_rep([90.0, 90.0], [5.0, 5.0]), _rep([90.0, 90.0], [1.0, 1.0]), PREV)
+    assert p["variant"] == "firm" and p["shortfall"]
+    # arms missing in prev are skipped
+    p = B.pick_fairness(_rep([98.0, 96.0, 10.0], [3.0, 3.0, 3.0], labels=("m", "formula", "new")),
+                        _rep([98.0, 96.0, 10.0], [5.0, 5.0, 5.0], labels=("m", "formula", "new")), PREV)
+    assert p["variant"] == "firm" and not p["shortfall"]
+
+
+def test_pick_fairness_one_wave_tolerance_scales_with_n():
+    prev = _rep([98.0], [None], labels=("m",))
+    ok = B.pick_fairness(_rep([97.0], [1.0], n=100, labels=("m",)), _rep([96.9], [0.0], n=100, labels=("m",)), prev)
+    assert ok["variant"] == "firm" and not ok["shortfall"]     # 1 pp is one wave of 100; 1.1 pp is not
+
+
+def test_fixture_benchmark_has_new_keys(tmp_path):
+    rep = main(["--fixtures", "--n", "2", "--fairness", "relaxing", "--out", str(tmp_path), "--no-ablation",
+                "--outage-n", "0"])
+    assert rep["fairness"] == "relaxing"
+    s = rep["arms"][0]["summary"]
+    assert "worse_than_status_quo_pct" in s and "model_calls_per_wave" in s
+    assert s["model_calls_per_wave"] == 0
+
+
+def test_fairness_reaches_ablation_and_outage(monkeypatch):
+    seen = []
+    real = B.negotiate_wave
+    monkeypatch.setattr(B, "negotiate_wave", lambda w, m, chain=None, **kw: (seen.append(kw.get("fairness")),
+                                                                              real(w, m, chain=chain, **kw))[1])
+    waves = B.fixture_waves(1)
+    B.run_ablation(waves, fairness="relaxing")
+    B.run_outage("formula", waves, 1, 1, fairness="relaxing")
+    assert seen and set(seen) == {"relaxing"}
+
+
+def test_collect_failures_flags_fuel_and_delay_regressions(monkeypatch):
+    w = B.fixture_waves(1)[0]
+    r = {"outcome": "consensus", "final_plan": {}, "evaluation": {"totals": {"delay_min": 10.0, "fuel_kg": 101.0}},
+         "baseline": {"evaluation": {"totals": {"delay_min": 10.0, "fuel_kg": 100.0}, "feasible": True}}}
+    monkeypatch.setattr(B, "feasible_real", lambda *a: True)
+    f = B.collect_failures("m", {w.id: {"result": r}}, [w])
+    assert [x["reason"].split(":")[0] for x in f] == ["regression vs status quo"] and "fuel" in f[0]["reason"]
+    r["evaluation"]["totals"] = {"delay_min": 10.04, "fuel_kg": 100.4}
+    assert B.collect_failures("m", {w.id: {"result": r}}, [w]) == []
+
+
+def test_history_row_computes_worse_pct_from_archived_per_wave():
+    rep = {"baseline": {"delay_min": 1, "fuel_kg": 1, "infeasible_ids": ["w3"], "n_feasible": 2},
+           "arms": [{"model": "m", "n_ok": 3, "summary": {"delay_min": 1}}],
+           "per_wave": {"baseline": {"w1": {"delay_min": 5, "fuel_kg": 5}, "w2": {"delay_min": 5, "fuel_kg": 5},
+                                      "w3": {"delay_min": 5, "fuel_kg": 5}},
+                        "m": {"w1": {"delay_min": 6, "fuel_kg": 5}, "w2": {"delay_min": 5, "fuel_kg": 5},
+                              "w3": {"delay_min": 9, "fuel_kg": 5}}}}
+    rows = B._rows(rep, "v3-traffic")
+    assert rows[1]["worse_than_status_quo_pct"] == 50.0 and rows[0]["worse_than_status_quo_pct"] is None
+    del rep["per_wave"]
+    assert B._rows(rep, "v3-traffic")[1]["worse_than_status_quo_pct"] is None
+    assert "v4-airlines" in B.VERSION_ORDER
+
+
+def test_markdown_fairness_variants_section(tmp_path):
+    rep = main(["--fixtures", "--n", "2", "--out", str(tmp_path), "--no-ablation", "--outage-n", "0"])
+    v = lambda: {"arms": [{"label": "formula", "summary": rep["arms"][0]["summary"]}]}   # noqa: E731
+    pick = B.pick_fairness(rep, rep, rep)
+    md = B.markdown({**rep, "fairness_variants": {"firm": v(), "relaxing": v(), "pick": pick}})
+    assert "## Fairness variants" in md and "model calls" in md and pick["reasons"][0] in md
+    assert "## Fairness variants" not in B.markdown(rep)
+
+
+def test_notes_variants_attaches_pick(tmp_path, monkeypatch):
+    import json, sys
+    sys.path.insert(0, str(B.ROOT / "scripts"))
+    import benchmark_notes as N
+    ev = tmp_path / "eval"
+    (ev / "archive" / "engine-v3-traffic").mkdir(parents=True)
+    cur = main(["--fixtures", "--n", "2", "--out", str(tmp_path / "cur"), "--no-ablation", "--outage-n", "0"])
+    for p in (ev / "benchmark.json", ev / "archive" / "engine-v3-traffic" / "benchmark.json",
+              tmp_path / "f.json", tmp_path / "r.json"):
+        p.write_text(json.dumps(cur))
+    monkeypatch.setattr(N, "EVAL", ev)
+    N.main(["--variants", str(tmp_path / "f.json"), str(tmp_path / "r.json")])
+    out = json.loads((ev / "benchmark.json").read_text())
+    fv = out["fairness_variants"]
+    assert set(fv) == {"firm", "relaxing", "pick"} and fv["pick"]["variant"] == "firm"
+    assert set(fv["firm"]) == {"arms"} and set(fv["firm"]["arms"][0]) == {"label", "summary"}
+    assert "## Fairness variants" in (ev / "BENCHMARK.md").read_text()
