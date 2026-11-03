@@ -15,7 +15,9 @@ Pure assembly over the per-wave route cache (`route.routes_for_wave`, read-only)
   * hold per physical fix per wave (`wave_holds`, plan-independent, memoised on the wave key): one hold
     per fix (name + position to 0.001 deg) over ALL the wave's routes (wave and fixed traffic) that hold
     there; geometry from a published (cifp) hold if any route has one, else from the route with the smallest
-    (runway, callsign); base = the highest of those routes' bases. Every flight holding there uses it: its
+    (runway, callsign); base = the highest published-constraint base if any route has one there, else the
+    lowest of the routes' (interpolated or corner-post) bases, an interpolated one floored at 4,000 ft AGL
+    (arrivals are never climbed into a hold; `_shared_hold`). Every flight holding there uses it: its
     `lap_min` (base level) for the laps/vector split, the drawn racetrack, and the stack levels. So a
     flight's lap time never depends on who else holds in the plan.
   * stack (§6.3): only flights with laps >= 1 enter it; levels come from `holding.stack_levels`; its
@@ -36,6 +38,7 @@ from atm.wave.version import ENGINE_VERSION
 
 CACHE_MAX = 4096
 MIN_VECTOR_DRAW_MIN = 1e-6     # below this the stretch is kept in vector_min but not drawn
+INTERP_FLOOR_AGL_FT = 4000.0   # lowest shared base at a fix whose bases are interpolated route altitudes
 RADAR_NM = 150.0               # drawn points stay within this of the airport reference point (spec §12)
 
 
@@ -273,17 +276,29 @@ def _stack_key(h: holding.HoldSpec) -> tuple:
     return (h.fix, round(h.lat, 3), round(h.lon, 3))
 
 
-def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]]) -> holding.HoldSpec:
-    """One fix's hold from the (runway, callsign, HoldSpec) of every route holding there: inbound course,
-    turn and leg from a published (cifp) hold if any has one, else from the route with the smallest
-    (runway, callsign); base = the highest route base, so every level is at or above each route's own base."""
+def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]], elev_ft: float = 0.0) -> holding.HoldSpec:
+    """One fix's hold from the (runway, callsign, HoldSpec) of every route holding there.
+
+    Geometry (inbound course, turn, leg): a published (cifp) hold if any has one, else the route with the
+    smallest (runway, callsign). Base: if any route's base is a published altitude constraint at the fix,
+    the highest constraint base; otherwise the lowest of the routes' bases (arrivals are never climbed into
+    a hold), floored at `elev_ft` + 4,000 ft (rounded up to 100 ft) when any of them is an interpolated
+    route altitude (guards an anomalous low route). Corner posts already sit at their IAF / 6,000 ft AGL
+    base."""
     ms = sorted(members, key=lambda m: (m[0], m[1]))
     ref = next((m[2] for m in ms if m[2].src == "cifp"), ms[0][2])
-    base = max(m[2].base_ft for m in ms)
-    if base == ref.base_ft:
+    cons = [m[2].base_ft for m in ms if m[2].base_src == "constraint"]
+    if cons:
+        base, base_src = max(cons), "constraint"
+    else:
+        base = min(m[2].base_ft for m in ms)
+        base_src = "interp" if any(m[2].base_src == "interp" for m in ms) else "corner"
+        if base_src == "interp":
+            base = max(base, int(math.ceil((elev_ft + INTERP_FLOOR_AGL_FT) / 100.0) * 100))
+    if base == ref.base_ft and base_src == ref.base_src:
         return ref
     return holding.make_hold(ref.fix, ref.lat, ref.lon, ref.inbound_true, ref.turn,
-                             ref.leg_min if ref.src == "cifp" else None, base, ref.src)
+                             ref.leg_min if ref.src == "cifp" else None, base, ref.src, base_src)
 
 
 _HOLDS: dict[str, dict[tuple, holding.HoldSpec]] = {}
@@ -296,9 +311,11 @@ def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
     hit = _HOLDS.get(k)
     if hit is None:
         members: dict[tuple, list] = {}
+        elev = 0.0
         for (cs, rwy), r in route.routes_for_wave(wave).items():
             members.setdefault(_stack_key(r.hold), []).append((rwy, cs, r.hold))
-        hit = {key: _shared_hold(ms) for key, ms in members.items()}
+            elev = r.elev_ft
+        hit = {key: _shared_hold(ms, elev) for key, ms in members.items()}
         while len(_HOLDS) >= CACHE_MAX:
             _HOLDS.pop(next(iter(_HOLDS)))
         _HOLDS[k] = hit

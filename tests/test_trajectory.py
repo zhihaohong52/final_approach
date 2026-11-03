@@ -118,7 +118,20 @@ def test_slot_before_earliest_draws_no_hold_and_lands_at_slot():
     assert all(q["t_min"] >= p_["t_min"] for p_, q in zip(t.points, t.points[1:]))
 
 
-def test_stack_shares_one_hold_per_physical_fix_with_highest_base():
+def _expected_base(routes, key):
+    """Independent statement of the shared-base rule: max of constraint bases, else min of the others,
+    an interpolated one floored at 4,000 ft AGL."""
+    hs = [r for r in routes.values() if trajectory._stack_key(r.hold) == key]
+    cons = [r.hold.base_ft for r in hs if r.hold.base_src == "constraint"]
+    if cons:
+        return max(cons)
+    base = min(r.hold.base_ft for r in hs)
+    if any(r.hold.base_src == "interp" for r in hs):
+        base = max(base, math.ceil((hs[0].elev_ft + 4000) / 100) * 100)
+    return base
+
+
+def test_stack_shares_one_hold_per_physical_fix_with_rule_base():
     from atm.wave import holding
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
@@ -134,8 +147,8 @@ def test_stack_shares_one_hold_per_physical_fix_with_highest_base():
     for t in holders:
         by_fix.setdefault(t.hold_fix, []).append(t)
     for fix, ts_ in by_fix.items():
-        bases = [routes[(t.callsign, t.runway)].hold.base_ft for t in ts_]
-        assert all(t.hold["level_ft"] >= max(bases) for t in ts_)
+        key = trajectory._stack_key(routes[(ts_[0].callsign, ts_[0].runway)].hold)
+        assert all(t.hold["level_ft"] >= _expected_base(routes, key) for t in ts_)
         for x in ts_:   # holders at the fix at the same time are on different levels
             for y in ts_:
                 if x is not y and x.hold["entry_min"] <= y.hold["entry_min"] < x.hold["exit_min"]:
@@ -171,8 +184,7 @@ def test_shared_fix_hold_lap_time_is_plan_independent_and_matches_drawing():
     routes = route.routes_for_wave(w)
     shared = trajectory.hold_for(w, routes[(pair[0].callsign, pair[0].runway)])
     assert pair[0].lap_min == shared.lap_min
-    assert shared.base_ft == max(r.hold.base_ft for r in routes.values()
-                                 if trajectory._stack_key(r.hold) == trajectory._stack_key(shared))
+    assert shared.base_ft == _expected_base(routes, trajectory._stack_key(shared))
     for t in pair:
         crossings = [q["t_min"] for q in t.points if q["kind"] == "hold" and q.get("fix") == t.hold_fix]
         assert len(crossings) == t.laps
@@ -183,3 +195,22 @@ def test_shared_fix_hold_lap_time_is_plan_independent_and_matches_drawing():
     solo = _reslot(p, p.get(a.callsign), runway=a.runway, slot_min=a.slot_min)
     t1 = next(x for x in trajectory.build(w, solo).air if x.callsign == a.callsign)
     assert t1.lap_min == pair[0].lap_min
+
+
+def test_shared_base_constraints_win_else_lowest_interp_floored():
+    from atm.wave import holding as H
+    mk = lambda base, src, bsrc="interp": H.make_hold("FIX", 33.0, -84.0, 90.0, "R", None, base, src, bsrc)
+    mixed = [("08L", "A1", mk(15000, "synth")), ("08R", "B2", mk(11000, "synth", "constraint")),
+             ("26L", "C3", mk(12000, "synth", "constraint")), ("27R", "D4", mk(9000, "synth"))]
+    h = trajectory._shared_hold(mixed, 1000.0)
+    assert h.base_ft == 12000 and h.base_src == "constraint"            # constraints win, highest of them
+    interp = [("08L", "A1", mk(16000, "synth")), ("08R", "B2", mk(10000, "synth"))]
+    h = trajectory._shared_hold(interp, 1000.0)
+    assert h.base_ft == 10000 and h.base_src == "interp"                # never climb an arrival into the hold
+    assert h.lap_min == pytest.approx(H.lap_min(10000))
+    low = [("08L", "A1", mk(3000, "synth")), ("08R", "B2", mk(9000, "synth"))]
+    assert trajectory._shared_hold(low, 1030.0).base_ft == 5100        # 4,000 ft AGL floor, up to 100 ft
+    pub = [("08L", "A1", mk(9000, "synth")), ("08R", "B2", H.make_hold("FIX", 33.0, -84.0, 270.0, "L", 1.5,
+                                                                       14000, "cifp", "interp"))]
+    h = trajectory._shared_hold(pub, 0.0)
+    assert h.src == "cifp" and h.turn == "L" and h.inbound_true == 270.0 and h.base_ft == 9000

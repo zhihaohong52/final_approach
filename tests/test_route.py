@@ -211,3 +211,28 @@ def test_cifp_end_check_accepts_same_centreline_rejects_other_ends():
     rev = route._cifp_end_check({**proc, "runways": {"X": {**proc["runways"]["10C"], "heading_mag": 273.0}}},
                                 "X", w.runway("10C"))
     assert "heading" in rev                                                  # same spot, reversed course
+
+
+def test_hold_fix_on_final_moves_before_the_if():
+    from atm.wave.model import Runway
+    w = make_wave()
+    rw = Runway("27L", 270.0, 9000, le_lat=33.63, le_lon=-84.40, he_lat=33.63, he_lon=-84.43)
+    b = route._Builder(w, w.flights[0].callsign, rw, None)
+    f = b.frame
+    b.pts = [route._P(*f.ll(30.0, 0.0), "entry", "ENTRY", "cifp", 9000.0, "constraint"),
+             route._P(*f.ll(20.0, 0.0), "fix", "ALPHA", "cifp"),
+             route._P(*f.ll(12.0, 0.0), "final", "BRAVO", "cifp", 3000.0, "constraint"),   # the IF
+             route._P(*f.ll(5.0, 0.0), "final", "CHRLI", "cifp", 1600.0, "constraint", faf=True),
+             route._P(*b.thr, "threshold", "RW27L", "cifp", 50.0, "constraint")]
+    b.i_app, b.i_if = 2, 2
+    r = b._finish("STAR1", None, None, "CHRLI", "star+iap")   # STAR's hold fix lies on the final
+    assert r.hold.fix == "ALPHA" and r.hold_index == 1
+    assert r.hold.base_src == "interp" and r.hold.base_ft == round(r.points[1].alt_ft / 1000) * 1000
+    assert any("CHRLI is on the final approach" in n for n in r.notes)
+    r2 = route._Builder(w, w.flights[0].callsign, rw, None)
+    r2.pts, r2.i_app, r2.i_if = [route._P(p.lat, p.lon, p.kind, p.fix, p.src, p.alt, p.alt_src, faf=p.faf)
+                                 for p in b.pts], 2, 2
+    for p in r2.pts[1:2]:
+        p.alt = None
+    r2r = r2._finish("STAR1", None, None, "ENTRY", "star+iap")   # a hold before the IF is kept
+    assert r2r.hold.fix == "ENTRY" and r2r.hold.base_ft == 9000 and r2r.hold.base_src == "constraint"

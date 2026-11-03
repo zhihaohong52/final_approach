@@ -79,6 +79,7 @@ class Route:
     hold_index: int
     tier: Literal["star+iap", "iap", "straight-in"]
     notes: list[str] = field(default_factory=list)   # why a fallback was used (runway mismatch, chorded RF)
+    elev_ft: float = 0.0                              # airport elevation (CIFP), for AGL floors
 
 
 # --------------------------------------------------------------------------- geometry
@@ -599,7 +600,9 @@ class _Builder:
         hp = pts[hi]
         i_app = self.i_app if self.i_app is not None else n - 1
         own = hp.alt if (hp.alt is not None and hp.alt_src == "constraint") else None
+        base_src = "constraint" if own is not None else "interp"
         if own is None and hp.src == "synth" and hp.alt is None:
+            base_src = "corner"
             # corner post: the IAF (approach transition, before the IF) altitude, else 6,000 ft AGL; the post
             # sits at its hold base
             iaf_alt = next((p.alt for p in pts[i_app:i_if] if p.alt is not None and p.alt_src == "constraint"),
@@ -624,13 +627,13 @@ class _Builder:
                      None)
         if coded is not None:
             hold = holding.make_hold(hp.fix, hp.lat, hp.lon, (coded["inbound_mag"] + self.magvar) % 360.0,
-                                     coded.get("turn") or "R", coded.get("leg_min"), base, "cifp")
+                                     coded.get("turn") or "R", coded.get("leg_min"), base, "cifp", base_src)
         else:
             if hi > 0:
                 inb = _bearing(pts[hi - 1].lat, pts[hi - 1].lon, hp.lat, hp.lon)
             else:
                 inb = _bearing(hp.lat, hp.lon, pts[1].lat, pts[1].lon)
-            hold = holding.make_hold(hp.fix or "HOLD", hp.lat, hp.lon, inb, "R", None, base, "synth")
+            hold = holding.make_hold(hp.fix or "HOLD", hp.lat, hp.lon, inb, "R", None, base, "synth", base_src)
 
         # speeds: phase profile, capped by CIFP speed limits, TAS, headwind on final only
         i_faf = next((i for i in range(i_if, n) if pts[i].faf), i_if)
@@ -659,7 +662,8 @@ class _Builder:
                           alt_src=p.alt_src, t_min=t[i]) for i, p in enumerate(pts)]
         return Route(callsign=self.cs, runway=self.rw.id, star=star_id, transition=trans or None,
                      approach=app["id"] if app is not None else None, entry_fix=pts[0].fix or "ENTRY",
-                     points=out, t_route_min=t[-1], hold=hold, hold_index=hi, tier=tier, notes=list(self.notes))
+                     points=out, t_route_min=t[-1], hold=hold, hold_index=hi, tier=tier, notes=list(self.notes),
+                     elev_ft=self.elev)
 
 
 def build_route(wave: Wave, callsign: str, runway_end: str) -> Route | None:

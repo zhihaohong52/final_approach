@@ -57,16 +57,17 @@ class HoldSpec:
     levels_ft: list[int]
     lap_min: float
     src: Literal["cifp", "synth"]
+    base_src: Literal["constraint", "interp", "corner"] = "constraint"   # where base_ft came from
 
 
-def make_hold(fix, lat, lon, inbound_true, turn, leg_min, base_ft, src) -> HoldSpec:
+def make_hold(fix, lat, lon, inbound_true, turn, leg_min, base_ft, src, base_src="constraint") -> HoldSpec:
     """Build a hold; a null leg time (e.g. CIFP HA holds) defaults to the AIM value."""
     leg = leg_min_for(base_ft) if leg_min is None else float(leg_min)
     return HoldSpec(
         fix=fix, lat=lat, lon=lon, inbound_true=inbound_true, turn=turn,
         leg_min=leg, base_ft=int(base_ft),
         levels_ft=[int(base_ft) + k * LEVEL_STEP_FT for k in range(STACK_LEVELS)],
-        lap_min=lap_min(base_ft, leg), src=src,
+        lap_min=lap_min(base_ft, leg), src=src, base_src=base_src,
     )
 
 
