@@ -7,6 +7,8 @@ Authority is enforced here, legality in rules.py:
     (airborne) or a ground delay (not yet airborne) as ATC instructions.
   * PILOT:<cs> changes only its own flight (speed reduction, ground delay, divert, accept); the
     flight is placed at its own earliest wake-legal slot with every other slot fixed.
+  * AIRLINE:<code> changes only its own flights: the PILOT moves for each of them, `swap_own` (two of its flights
+    adjacent on one runway end swap slots), and one `accept` covering all of them.
   * GROUND changes gates only.
 """
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from backend.wave import route, rules, surface, trajectory, wind
+from backend.wave import airlines, route, rules, surface, trajectory, wind
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Move, Wave
 from backend.wave.rules import has_slot, reciprocal, strip_of, strip_sequence, wake_gap_min, weather_factor
 from backend.wave.utility import agent_utility, hold_burn, metrics_map, turnaround_min
@@ -33,6 +35,7 @@ HOLD_JUSTIFYING = ("ATC-", "PLT-")   # a hold is offered only if it cuts violati
 AUTHORITY = {
     "ATC": {"swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold"},
     "PILOT": {"speed_reduction", "ground_delay", "request_divert", "accept"},
+    "AIRLINE": {"speed_reduction", "ground_delay", "request_divert", "accept", "swap_own"},
     "GROUND": {"reassign_gate", "remote_stand", "swap_gates"},
 }
 
@@ -268,10 +271,17 @@ def _move(agent: str, kind: str, callsigns: list[str], params: dict, label: str)
     return Move(f"{agent}:{kind}:{'-'.join(callsigns)}:{_pstr(params)}", agent, kind, callsigns, params, label)
 
 
+def _own_flights(wave: Wave, agent_id: str) -> list[str]:
+    """Callsigns of the airline `AIRLINE:<code>` in the wave (empty if the code has no flight)."""
+    return list(airlines.groups(wave).get(agent_id.split(":", 1)[1], []))
+
+
 def _check_agent(wave: Wave, plan: JointPlan, agent_id: str) -> str:
-    """Return the agent role (ATC|GROUND|PILOT); ValueError for an unknown agent id."""
+    """Return the agent role (ATC|GROUND|PILOT|AIRLINE); ValueError for an unknown agent id."""
     if agent_id in ("ATC", "GROUND"):
         return agent_id
+    if isinstance(agent_id, str) and agent_id.startswith("AIRLINE:") and _own_flights(wave, agent_id):
+        return "AIRLINE"
     if isinstance(agent_id, str) and agent_id.startswith("PILOT:"):
         cs = agent_id.split(":", 1)[1]
         if _flight(wave, cs) is not None and _asg(plan, cs) is not None:
@@ -377,25 +387,42 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                     lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min)"
                 mv.append(replace(m, label=lab))
     else:
-        cs = agent_id.split(":", 1)[1]
-        a = plan.get(cs)
-        f = _flight(wave, cs)
-        if a.action == "land" and a.runway and has_slot(a):
-            if f.airborne:
-                for v in SPEED_REDUCTIONS:
-                    if v != a.speed_reduction_min:
-                        mv.append(_move(agent_id, "speed_reduction", [cs], {"minutes": v},
-                                        f"{cs} absorbs {v:g} min by speed reduction en route"))
-            else:
-                for v in GROUND_DELAYS:
-                    if v != a.ground_delay_min:
-                        mv.append(_move(agent_id, "ground_delay", [cs], {"minutes": v},
-                                        f"{cs} takes {v:g} min ground delay at {f.origin}"))
-        if a.action == "land":
-            alt = (f.fuel or {}).get("alternate") or "alternate"
-            mv.append(_move(agent_id, "request_divert", [cs], {"alternate": str(alt)},
-                            f"{cs} requests diversion to {alt}"))
-        mv.append(_move(agent_id, "accept", [cs], {}, f"{cs} accepts current plan"))
+        own = [agent_id.split(":", 1)[1]] if role == "PILOT" else _own_flights(wave, agent_id)
+        for cs in own:
+            a = plan.get(cs)
+            f = _flight(wave, cs)
+            if a is None or f is None:
+                continue
+            if a.action == "land" and a.runway and has_slot(a):
+                if f.airborne:
+                    for v in SPEED_REDUCTIONS:
+                        if v != a.speed_reduction_min:
+                            mv.append(_move(agent_id, "speed_reduction", [cs], {"minutes": v},
+                                            f"{cs} absorbs {v:g} min by speed reduction en route"))
+                else:
+                    for v in GROUND_DELAYS:
+                        if v != a.ground_delay_min:
+                            mv.append(_move(agent_id, "ground_delay", [cs], {"minutes": v},
+                                            f"{cs} takes {v:g} min ground delay at {f.origin}"))
+            if a.action == "land":
+                alt = (f.fuel or {}).get("alternate") or "alternate"
+                mv.append(_move(agent_id, "request_divert", [cs], {"alternate": str(alt)},
+                                f"{cs} requests diversion to {alt}"))
+        if role == "PILOT":
+            mv.append(_move(agent_id, "accept", own, {}, f"{own[0]} accepts current plan"))
+        else:
+            mine = set(own)
+            seen = set()
+            for a in landing:
+                if not a.runway or strip_of(a.runway) in seen:
+                    continue
+                seen.add(strip_of(a.runway))
+                seq = [x for x in strip_sequence(wave, plan, a.runway) if x[3]]
+                for (_, c1, _, _, e1), (_, c2, _, _, e2) in zip(seq, seq[1:]):
+                    if e1 == e2 and c1 in mine and c2 in mine:
+                        mv.append(_move(agent_id, "swap_own", [c1, c2], {"runway": e1},
+                                        f"Slot swap {c1} ↔ {c2} on {e1} (airline substitution)"))
+            mv.append(_move(agent_id, "accept", own, {}, f"{agent_id} accepts current plan"))
     return mv
 
 
@@ -440,14 +467,23 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
         own = agent.split(":", 1)[1]
         if cs != [own]:
             raise ValueError(f"{agent} may only move its own flight {own}, not {cs}")
+    elif isinstance(agent, str) and agent.startswith("AIRLINE:") and _own_flights(wave, agent):
+        role = "AIRLINE"
+        own = _own_flights(wave, agent)
+        for c in cs:
+            if c not in own:
+                raise ValueError(f"{agent} may only move its own flights {own}, not {c}")
     else:
         raise ValueError(f"unknown agent {agent!r}")
     if k not in AUTHORITY[role]:
         raise ValueError(f"{agent} has no authority for move kind {k!r} (allowed: {sorted(AUTHORITY[role])})")
     if role == "ATC" and k in ("speed_reduction", "ground_delay") and cs and cs[0] == getattr(wave, "focus", None):
         raise ValueError(f"ATC may not set {k} for {cs[0]}: that flight's pilot agent owns it")
-    need = 2 if k in ("swap_order", "swap_gates") else 1
-    if len(cs) != need or len(set(cs)) != need:
+    need = 2 if k in ("swap_order", "swap_gates", "swap_own") else 1
+    if role == "AIRLINE" and k == "accept":
+        if not cs or len(set(cs)) != len(cs):
+            raise ValueError(f"accept needs at least one distinct own callsign, got {cs}")
+    elif len(cs) != need or len(set(cs)) != need:
         raise ValueError(f"{k} needs {need} distinct callsign(s), got {cs}")
     for c in cs:
         if _asg(plan, c) is None or _flight(wave, c) is None:
@@ -458,11 +494,11 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
     for a in asg:
         if a.action != "land":
             raise ValueError(f"{k} not applicable: {a.callsign} is diverted")
-        if k in ("swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold") \
+        if k in ("swap_order", "swap_own", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold") \
                 and (not a.runway or not has_slot(a)):
             raise ValueError(f"{k} not applicable: {a.callsign} has no runway/slot")
-    if k == "swap_order" and asg[0].runway != asg[1].runway:
-        raise ValueError(f"swap_order needs both flights on the same runway: "
+    if k in ("swap_order", "swap_own") and asg[0].runway != asg[1].runway:
+        raise ValueError(f"{k} needs both flights on the same runway: "
                          f"{cs[0]} on {asg[0].runway}, {cs[1]} on {asg[1].runway}")
     if k == "change_runway" and not move.params.get("runway"):
         raise ValueError("change_runway needs params.runway")
@@ -492,7 +528,7 @@ def apply(wave: Wave, plan: JointPlan, move: Move) -> JointPlan:
     new = _copy(plan)
     if k == "accept":
         return new
-    if k == "swap_order":
+    if k in ("swap_order", "swap_own"):
         c1, c2 = cs
         a1, a2 = new.get(c1), new.get(c2)
         seq = [x[1] for x in strip_sequence(wave, new, a1.runway) if x[3]]

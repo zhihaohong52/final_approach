@@ -293,3 +293,62 @@ def test_formula_negotiation_does_not_hold_for_gate_rules(wid):
     fp = JointPlan([Assignment(**{k: v for k, v in a.items() if k in Assignment.__dataclass_fields__})
                     for a in r["final_plan"]["assignments"]], "final")
     assert all(m.hold_laps == 0 for m in metrics_map(w, fp).values())
+
+
+def test_airline_moves_own_flights_only():
+    w = make_wave()
+    p = fcfs_plan(w)
+    ms = legal_moves(w, p, "AIRLINE:DL")
+    assert ms and all(set(m.callsigns) <= {"DL100", "DL201"} for m in ms)
+    with pytest.raises(ValueError, match="own flights"):
+        apply(w, p, _move("AIRLINE:DL", "speed_reduction", ["AA302"], {"minutes": 3.0}, "x"))
+    with pytest.raises(ValueError, match="no authority"):
+        apply(w, p, _move("AIRLINE:DL", "change_runway", ["DL100"], {"runway": "27L"}, "x"))
+
+
+def test_swap_own_adjacent_same_runway():
+    w = make_wave()
+    p = fcfs_plan(w)
+    sw = [m for m in legal_moves(w, p, "AIRLINE:DL") if m.kind == "swap_own"]
+    assert [m.callsigns for m in sw] == [["DL100", "DL201"]]
+    assert sw[0].params == {"runway": p.get("DL100").runway}
+    q = apply(w, p, sw[0])
+    assert q.get("DL201").slot_min < q.get("DL100").slot_min
+    assert any(m.kind == "accept" and m.callsigns == ["DL100", "DL201"] for m in legal_moves(w, p, "AIRLINE:DL"))
+
+
+def test_airline_accept_multi_callsign():
+    w = make_wave()
+    p = fcfs_plan(w)
+    acc = _move("AIRLINE:DL", "accept", ["DL100", "DL201"], {}, "AIRLINE:DL accepts current plan")
+    assert apply(w, p, acc).id == p.id
+    with pytest.raises(ValueError):
+        apply(w, p, _move("AIRLINE:DL", "accept", [], {}, "x"))
+    with pytest.raises(ValueError, match="own flights"):
+        apply(w, p, _move("AIRLINE:DL", "accept", ["DL100", "AA302"], {}, "x"))
+
+
+def test_single_flight_airline_no_swap_own():
+    w = make_wave()
+    p = fcfs_plan(w)
+    ms = legal_moves(w, p, "AIRLINE:AA")
+    assert not any(m.kind == "swap_own" for m in ms)
+    assert any(m.kind == "accept" for m in ms)
+
+
+def test_swap_own_needs_two_same_runway():
+    w = make_wave()
+    p = fcfs_plan(w)
+    with pytest.raises(ValueError):
+        apply(w, p, _move("AIRLINE:DL", "swap_own", ["DL100"], {}, "x"))
+    other = "27L" if p.get("DL100").runway != "27L" else "26R"
+    p2 = p.with_assignment(replace(p.get("DL201"), runway=other))
+    with pytest.raises(ValueError, match="same runway"):
+        apply(w, p2, _move("AIRLINE:DL", "swap_own", ["DL100", "DL201"], {}, "x"))
+
+
+def test_unknown_airline_rejected():
+    w = make_wave()
+    p = fcfs_plan(w)
+    with pytest.raises(ValueError):
+        legal_moves(w, p, "AIRLINE:ZZ")
