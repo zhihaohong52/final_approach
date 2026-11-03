@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { TrajectorySet, WaveGeo } from "../api/types";
-import { icao } from "../callsign";
+import { icao, icaoText } from "../callsign";
 import { activeWait, waitTag, endOfLine, bearing, positionAt, projector, runwayCrossings, secondFloor, type TrackPoint, type Wait } from "../geo/track";
 import type { Tone } from "./Radar";
 
@@ -45,7 +45,12 @@ interface Props {
   focus?: string | null;           // the disrupted flight: the zoomed map centres on it when nothing is selected
   updating?: boolean;
   active?: boolean;                // false while its pane is hidden: it then skips rendering entirely
+  rejected?: RejectedGround | null; // a move the engine just vetoed: its failing ground conflicts, shown briefly
 }
+
+/** The failing ATC-TAXI-CONFLICT entries of the plan a rejected move would have produced (POST /api/trajectories
+ *  with that move), keyed by the stream message that carried the rejection. */
+export interface RejectedGround { seq: number; label: string; conflicts: TrajectorySet["conflicts"] }
 
 /** Everything static about the surface, in metres around the field's centre. Computed once per wave. */
 function prepare(s: Surf) {
@@ -135,23 +140,37 @@ function firstFrom(cs: { t: number }[], t: number): number {
   return lo;
 }
 
-/** Runway-end labels: the designator just beyond the end it is landed from, in metres (the offset is 14 px). */
-function runwayEnds(g: Prepared, S: number) {
-  return g.runways.flatMap((r, i) => {
-    if (r.xy.length < 2) return [];
-    const first = r.xy[0], last = r.xy[r.xy.length - 1];
-    return r.ids.map((id) => {
-      const at = endOfLine(id, first, last) === 0 ? first : last, other = at === first ? last : first;
-      const L = Math.hypot(at[0] - other[0], at[1] - other[1]) || 1;
-      return { key: `${i}-${id}`, id, xy: [at[0] + ((at[0] - other[0]) / L) * 14 / S, at[1] + ((at[1] - other[1]) / L) * 14 / S] as XY };
-    });
-  });
-}
-
 type Box = [number, number, number, number];   // x0, y0, x1, y1 in screen px
 const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
 const MONO_PX = 7.2;               // advance of a 12 px IBM Plex Mono character
 const rwEndBox = (x: number, y: number, id: string): Box => [x - id.length * 3.4 - 2, y - 6, x + id.length * 3.4 + 2, y + 8];
+
+/** Runway-end labels on screen: each designator beyond the end it is landed from, 14 px out along the runway;
+ *  one that would overlap a label already placed (close parallels: 18R/18L) steps further out, 16 px at a time,
+ *  and is dropped after three tries, as is a second label of the same name next to the first (a runway OSM maps
+ *  twice). Labels off the map or under the key (right of keyX, above top) are left out.
+ *  `xy` is the text's centre; shared by the airfield layer and the data-block placement, so they agree. */
+function runwayEnds(g: Prepared, P: (q: XY) => XY, W: number, H: number, top: number, keyX: number) {
+  const out: { key: string; id: string; xy: XY; box: Box }[] = [];
+  g.runways.forEach((r, i) => {
+    if (r.xy.length < 2) return;
+    const first = r.xy[0], last = r.xy[r.xy.length - 1];
+    for (const id of r.ids) {
+      const end = endOfLine(id, first, last) === 0 ? first : last, other = end === first ? last : first;
+      const a = P(end), b = P(other), L = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+      for (const off of [14, 30, 46]) {
+        const xy: XY = [a[0] + ((a[0] - b[0]) / L) * off, a[1] + ((a[1] - b[1]) / L) * off];
+        if (xy[0] < -40 || xy[0] > W + 40 || xy[1] < -40 || xy[1] > H + 40 || (xy[0] + 16 > keyX && xy[1] < top)) break;
+        if (out.some((o) => o.id === id && Math.hypot(o.xy[0] - xy[0], o.xy[1] - xy[1]) < 40)) break;   // OSM maps some runways twice
+        const box = rwEndBox(xy[0], xy[1] + 4, id);
+        if (out.some((o) => overlap(o.box, box) > 0)) continue;
+        out.push({ key: `${i}-${id}`, id, xy, box });
+        break;
+      }
+    }
+  });
+  return out;
+}
 
 /** A data block's place: the first of NE, NW, SE, SW (leader `LEAD` px) that overlaps nothing already placed and
  *  stays on the map; failing that, the one that overlaps least. Returns the leader end, text anchor and box. */
@@ -179,8 +198,8 @@ const Airfield = memo(function Airfield({ g, W, H, S, cx, cy, top, keyX }: { g: 
   const P = screen(W, H, S, cx, cy, top);
   const tw = (m: number, min: number) => Math.max(min, m * S);
   const inView = ([x, y]: XY) => x > -40 && x < W + 40 && y > -40 && y < H + 40;
-  // runway end labels: the designator at the end it is landed from, never under the key (top right, left edge keyX)
-  const ends = runwayEnds(g, S).filter((e) => { const [x, y] = P(e.xy); return inView([x, y]) && !(x + 16 > keyX && y < top); });
+  // runway end labels: the designator at the end it is landed from, never under the key or on another label
+  const ends = runwayEnds(g, P, W, H, top, keyX);
   const r = Math.max(1.5, Math.min(4, 9 * S));
   return (
     <>
@@ -198,7 +217,7 @@ const Airfield = memo(function Airfield({ g, W, H, S, cx, cy, top, keyX }: { g: 
             {(rw.width_m ?? RUNWAY_M) * S >= 5 && <polyline className="cl" points={polyline(P, rw.xy)} />}
           </g>
         ))}
-        {ends.map((e) => { const [x, y] = P(e.xy); return <text key={e.key} className="rw-end" x={x} y={y + 4} textAnchor="middle">{e.id}</text>; })}
+        {ends.map((e) => <text key={e.key} className="rw-end" x={e.xy[0]} y={e.xy[1] + 4} textAnchor="middle">{e.id}</text>)}
       </g>
       <g className="sf-hold">
         {g.holds.map((h) => {
@@ -228,7 +247,7 @@ const Airfield = memo(function Airfield({ g, W, H, S, cx, cy, top, keyX }: { g: 
 /** Hidden behind the radar it does not re-render at all; shown, only the aircraft layer follows the clock. */
 export const Surface = memo(SurfaceMap, (a, b) => a.active === false && b.active === false);
 
-function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false }: Props) {
+function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false, rejected = null }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, H], setSize] = useState([720, 480]);
   const [zoom, setZoom] = useState(1);
@@ -379,7 +398,7 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
 
   // ---------- labels that must not collide: runway ends, the selected and focus flights' stands, data blocks ----------
   const view: Box = [0, top, W, H - BOTTOM];
-  const taken: Box[] = runwayEnds(g, S).flatMap((e) => { const [x, y] = P(e.xy); return x + 16 > keyX && y < top ? [] : [rwEndBox(x, y + 4, e.id)]; });
+  const taken: Box[] = runwayEnds(g, P, W, H, top, keyX).map((e) => e.box);
   // only the selected and focus flights' stands are labelled; the others show their label on hover
   const standLabels = new Map(usedStands.filter(({ x }) => x.callsign === selected || x.callsign === focus).map(({ st, x }) => {
     const [px, py] = P(st.xy), name = st.gate ?? st.id;
@@ -501,6 +520,14 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
           {info.map((c) => <ConflictMark key={hoverKey(c)} c={c} P={P} info onHover={setHover} />)}
           {failing.map((c) => <ConflictMark key={hoverKey(c)} c={c} P={P} info={false} onHover={setHover} />)}
         </g>
+        {/* a vetoed move's ground conflicts flash red and fade, like the timeline's rejection flash (keyed on the
+            message, so each rejection replays it) */}
+        {rejected && rejected.conflicts.length > 0 && (
+          <g key={rejected.seq} className="sf-conflict sf-reject">
+            {rejected.conflicts.map((c) => <ConflictMark key={hoverKey(c)} c={{ ...c, xy: g.pj(c.lat, c.lon) }} P={P} info={false} onHover={() => {}} />)}
+            <text className="sf-reject-note" x={16} y={top - 8}>{`Vetoed: ${icaoText(rejected.label)} · taxi conflict`}</text>
+          </g>
+        )}
         {hover && shownKeys.has(hover.key) && (() => {
           // kept on the map: shortened to its width, then slid left or right to fit
           const max = Math.floor((W - 16) / MONO_PX), text = hover.text.length > max ? `${hover.text.slice(0, max - 1)}…` : hover.text;

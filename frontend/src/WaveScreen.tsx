@@ -8,7 +8,7 @@ import { Log } from "./components/Log";
 import { Checks, Limits, Outcome, PlanTable, Sources, Weather } from "./components/Panels";
 import { Radar, SCAN_MIN, type Tone } from "./components/Radar";
 import { Strips } from "./components/Strips";
-import { Surface } from "./components/Surface";
+import { Surface, type RejectedGround } from "./components/Surface";
 import { agentName, clock, clockSec, dateLabel, signed } from "./format";
 import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
 
@@ -61,6 +61,10 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [messages, setMessages] = useState<NegotiationMessage[]>([]);
   const [table, setTable] = useState<JointPlan | null>(null);
   const [rejection, setRejection] = useState<Rejection | null>(null);
+  // the plan a rejected move was tried on (the table before that turn), and the ground conflicts the engine finds
+  // when it applies the move there: the surface's counterpart of the timeline's red rejection flash
+  const rejectBase = useRef<Assignment[] | null>(null);
+  const [rejectGround, setRejectGround] = useState<RejectedGround | null>(null);
   const [result, setResult] = useState<NegotiationResult | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
   const [view, setView] = useState<View>("after");
@@ -153,6 +157,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
             const r = b.rejected[b.rejected.length - 1];
             if (r) {
               const cs = r.move.callsigns[0];
+              rejectBase.current = tableRef.current?.assignments ?? null;
               setRejection({ seq: m.seq, move: r.move, violations: r.violations, runway: tableRef.current?.assignments.find((a) => a.callsign === cs)?.runway });
             }
             showTable(b.proposal);
@@ -161,6 +166,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
           if (b.type === "OPEN" || b.type === "MOVE" || b.type === "COUNTER") showTable(b.plan);
           if (b.type === "MOVE_REJECTED") {
             const cs = b.move.callsigns[0];
+            rejectBase.current = tableRef.current?.assignments ?? null;
             setRejection({ seq: m.seq, move: b.move, violations: b.violations, runway: tableRef.current?.assignments.find((a) => a.callsign === cs)?.runway });
           }
         } else if (ev.event === "result") {
@@ -322,6 +328,19 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     }, 150);
     return () => { clearTimeout(timer); ctl.abort(); };
   }, [wantFetch, shownKey, wave?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a rejected move: one /api/trajectories request (the engine applies the move to the plan it was tried on) for the
+  // failing ground conflicts it would have caused; the surface shows them briefly, as the timeline flashes the slot
+  const canRejectPaths = !!geo?.surface && !!wave && !noPaths;
+  useEffect(() => {
+    const base = rejectBase.current;
+    if (!rejection || !canRejectPaths || !base) { setRejectGround(null); return; }
+    const ctl = new AbortController();
+    const { seq, move } = rejection;
+    api.postTrajectories(wave!.id, base, ctl.signal, move)
+      .then((set) => setRejectGround(set ? { seq, label: move.label, conflicts: set.conflicts.filter((c) => !c.kind) } : null))
+      .catch((e) => { if ((e as Error).name !== "AbortError") { console.warn("rejection paths: request failed", e); setRejectGround(null); } });
+    return () => ctl.abort();
+  }, [rejection?.seq, canRejectPaths]); // eslint-disable-line react-hooks/exhaustive-deps
   // while a new plan's paths are on their way the previous ones stay up, marked "updating"
   const paths: TrajectorySet | null = !geo || noPaths ? null : embedded ?? (fetchable ? fetched?.set ?? null : null);
   const pathsNote = noPaths ? `recorded on engine ${recordedOn ?? "v2"}; paths not available` : null;
@@ -477,7 +496,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
             {surf && (
               <div className={`pane${shownPanel === "radar" ? " off" : ""}`}>
                 <Surface geo={geo!} traj={pathsNote ? null : paths} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-                  focus={wave.focus} updating={updatingPaths} active={shownPanel !== "radar"} />
+                  focus={wave.focus} updating={updatingPaths} active={shownPanel !== "radar"} rejected={view !== "before" ? rejectGround : null} />
               </div>
             )}
           </div>

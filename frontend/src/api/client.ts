@@ -1,6 +1,6 @@
 import type {
   Assignment, BenchmarkReport, Config, DecisionRequest, EvaluateRequest, EvaluateResponse, FlightsResponse, NegotiateRequest,
-  NegotiationEvent, NegotiationResult, TrajectorySet, WaveGeo, WaveScenario, WaveSummary,
+  Move, NegotiationEvent, NegotiationResult, TrajectoriesRequest, TrajectorySet, WaveGeo, WaveScenario, WaveSummary,
 } from "./types";
 
 // ?mock=1 forces the offline demo (the backend's recorded sample run); otherwise the mock is used only when the API is unreachable.
@@ -103,10 +103,12 @@ export const api = {
   },
 
   /** The engine's 4D trajectories for a plan (deterministic, model-free). null when offline or the route is
-   *  not deployed. This {wave_id, assignments} form is never rejected for the engine version (only `{run_id}` is, 409). */
-  async postTrajectories(waveId: string, assignments: Assignment[], signal?: AbortSignal): Promise<TrajectorySet | null> {
+   *  not deployed. This {wave_id, assignments} form is never rejected for the engine version (only `{run_id}` is, 409).
+   *  With `move`, the paths of the plan the engine makes by applying it (a rejected move's plan). */
+  async postTrajectories(waveId: string, assignments: Assignment[], signal?: AbortSignal, move?: Move): Promise<TrajectorySet | null> {
     if (offline) return null;
-    const r = await fetch("/api/trajectories", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ wave_id: waveId, assignments }) });
+    const body: TrajectoriesRequest = move ? { wave_id: waveId, assignments, move } : { wave_id: waveId, assignments };
+    const r = await fetch("/api/trajectories", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (!(r.headers.get("content-type") ?? "").includes("json")) return null;               // dev server without the API
     if (r.status === 404 && !(await r.clone().json().catch(() => ({})))?.error) return null;   // an older backend without the route
     if (!r.ok) {

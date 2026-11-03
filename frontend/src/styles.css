@@ -477,6 +477,9 @@ tbody tr:hover { background: #18171c; }
 .surface-map .sf-conflict .fail circle { stroke: currentColor; stroke-width: 2; fill: rgba(229, 86, 111, .16); }
 .surface-map .sf-conflict .fail path { stroke: currentColor; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
 .surface-map .sf-conflict .info circle { stroke: var(--queue); stroke-dasharray: 2 2; }
+.surface-map .sf-reject { animation: sf-reject 4s var(--ease) 1 forwards; pointer-events: none; }
+.surface-map .sf-reject-note { font: 600 12px var(--mono); fill: var(--negative); paint-order: stroke; stroke: var(--scope); stroke-width: 3px; }
+@keyframes sf-reject { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .surface-map .sf-hover { font: 12px var(--mono); fill: var(--soft); paint-order: stroke; stroke: var(--scope); stroke-width: 4px; pointer-events: none; }
 .empty-surface { display: grid; place-content: center; gap: 8px; padding: 80px 24px 24px; text-align: center; }
 .empty-surface .surface-attr { font: 11px var(--mono); color: #7d8790; }
@@ -590,7 +593,7 @@ tbody tr:hover { background: #18171c; }
 /* reduced motion: no travel, but every state change still shows (bars jump, the veto outline stays until the next event) */
 @media (prefers-reduced-motion: reduce) {
   .gantt .wave, .btn, tbody tr { transition: none; }
-  .gantt .flash { animation: none; }
+  .gantt .flash, .surface-map .sf-reject { animation: none; }
   .msg { animation: none; }
   .blip .halo, .alert.red::before, .gantt .ghost { animation: none; }
   .btn:active { transform: none; }
