@@ -485,7 +485,10 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueAr
 def build_wave(wave_id: str) -> Wave:
     with get_store().session():     # one pooled connection for all the store reads of this build
         constraints._load()         # warm the workbook limits here so rules.check / utility.evaluate never hit the store
-        return _build_wave(wave_id)
+        w = _build_wave(wave_id)
+        from atm.wave import route   # lazy: keeps this module's import graph unchanged
+        route.routes_for_wave(w)     # precompute the routes (reads CIFP) here: utility.metrics_map never hits the store
+        return w
 
 
 def _build_wave(wave_id: str) -> Wave:

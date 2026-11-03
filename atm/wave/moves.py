@@ -13,10 +13,10 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from atm.wave import rules, wind
+from atm.wave import rules, trajectory, wind
 from atm.wave.model import Assignment, FlightMetrics, JointPlan, Move, Wave
 from atm.wave.rules import has_slot, reciprocal, strip_of, strip_sequence, wake_gap_min, weather_factor
-from atm.wave.utility import agent_utility, metrics, turnaround_min
+from atm.wave.utility import agent_utility, metrics_map, turnaround_min
 
 MAX_MOVES = 12
 SPEED_REDUCTIONS = (3.0, 5.0, 8.0)
@@ -71,8 +71,12 @@ def _earliest_legal(wave: Wave, others: list[tuple[float, str]], wake: str, floo
 
 
 def _min_slot(wave: Wave, a: Assignment) -> float:
-    f = _flight(wave, a.callsign)
-    return f.eta_earliest_min + a.speed_reduction_min + a.ground_delay_min
+    """Earliest touchdown of `a` on its assigned runway (runway-dependent, spec §6.2): `t_entry + SR + GD +
+    T_route(runway)`; ETA + SR + GD on the nominal runway, without geometry, and without a runway."""
+    if not a.runway:
+        f = _flight(wave, a.callsign)
+        return f.eta_earliest_min + a.speed_reduction_min + a.ground_delay_min
+    return trajectory.earliest(wave, a.callsign, a.runway, a.speed_reduction_min, a.ground_delay_min)
 
 
 def _on_strip(plan: JointPlan, runway: str) -> list[Assignment]:
@@ -226,6 +230,7 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 if e1 == e2:
                     mv.append(_move("ATC", "swap_order", [c1, c2], {"runway": e1},
                                     f"Swap landing order {c1} ↔ {c2} on {e1}"))
+        mm = metrics_map(wave, plan)
         for a in landing:
             in_use = _ends_in_use(wave, plan, exclude=a.callsign)
             for rw in open_rw:
@@ -241,7 +246,7 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 # one ATC absorption instruction per holding non-focus flight: the smallest step that
                 # covers its airborne hold (speed control if airborne, ground delay if not)
                 f = _flight(wave, a.callsign)
-                hold = metrics(wave, a).hold_min
+                hold = mm[a.callsign].hold_min
                 if hold > 0:
                     steps = SPEED_REDUCTIONS if f.airborne else GROUND_DELAYS
                     v = next((x for x in steps if x >= hold), steps[-1])
@@ -255,7 +260,7 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                                             f"ATC ground delay: {a.callsign} holds {v:g} min at {f.origin}"))
     elif role == "GROUND":
         gates = {g.id: g for g in wave.gates}
-        mm = {a.callsign: metrics(wave, a) for a in landing}
+        mm = metrics_map(wave, plan)
         turn = turnaround_min(wave)
         for a in landing:
             f = _flight(wave, a.callsign)
@@ -320,8 +325,9 @@ def legal_moves(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
         p2 = apply(wave, plan, m)
         if m.kind != "accept" and p2.id == pid:
             continue
-        nv = sum(1 for c in rules.check(wave, p2) if not c.passed)
-        scored.append(((nv, -agent_utility(wave, p2, agent_id), m.id), m))
+        mm = metrics_map(wave, p2)
+        nv = sum(1 for c in rules.check(wave, p2, mm) if not c.passed)
+        scored.append(((nv, -agent_utility(wave, p2, agent_id, mm), m.id), m))
     scored.sort(key=lambda x: x[0])
     out = [m for _, m in scored[:MAX_MOVES]]
     acc = next((m for _, m in scored if m.kind == "accept"), None)
@@ -395,8 +401,9 @@ def apply(wave: Wave, plan: JointPlan, move: Move) -> JointPlan:
         floors = {c: (lo if c in (c1, c2) else new.get(c).slot_min) for c in seq}
         return _reslot(wave, new, a1.runway, floors, order=seq)
     if k == "change_runway":
-        a = new.get(cs[0])
-        new = new.with_assignment(_fresh(a, runway=p["runway"]))
+        a = _fresh(new.get(cs[0]), runway=p["runway"])
+        new = new.with_assignment(a)
+        # floor on the NEW runway: earliest landing is runway-dependent (route time to that end)
         return _reslot(wave, new, p["runway"], {a.callsign: _min_slot(wave, a)})
     if k == "shift_slot":
         a = new.get(cs[0])

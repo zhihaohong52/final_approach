@@ -11,7 +11,7 @@ from collections import Counter
 
 from atm.wave import wind
 from atm.wave.model import FlightMetrics, JointPlan, RuleCheck, Wave
-from atm.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics, taxi_min, turnaround_min
+from atm.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics_map, taxi_min, turnaround_min
 
 SRC_WB = "challenge2_operational_constraints.xlsx"
 SRC_WAKE = f"{SRC_WB} wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)"
@@ -386,7 +386,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
     """All rules for all flights. Raises ValueError if the plan does not have exactly one
     assignment per wave flight."""
     validate_structure(wave, plan)
-    mm = mm or {a.callsign: metrics(wave, a) for a in plan.assignments}
+    mm = mm or metrics_map(wave, plan)
     rwys = {r.id: r for r in wave.airport.runways}
     gates = {g.id: g for g in wave.gates}
     flights = {f.callsign: f for f in wave.flights}

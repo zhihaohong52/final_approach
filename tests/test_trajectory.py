@@ -232,3 +232,112 @@ def test_no_climb_after_the_hold():
     assert max(after) <= t.hold_level_ft
     assert all(b <= a_ + 1e-9 for a_, b in zip(after, after[1:]))
     assert any(q["alt_src"] == "interp" and q["alt_ft"] == t.hold_level_ft for q in t.points[last_hold + 1:])
+
+
+# --------------------------------------------------------------------------- T13: joint metrics
+
+# v2 totals of the synthetic wave's FCFS plan, captured on the code before T13 (no-geometry tier).
+V2_FIXTURE_TOTALS = {"delay_min": 5.7, "fuel_kg": 68.0, "hold_min": 1.7, "pax_protected_pct": 100.0,
+                     "overtime_min": 0.0, "diversions": 0}
+
+
+def test_metrics_removed_and_map_is_joint():
+    import atm.wave.utility as U
+    assert not hasattr(U, "metrics")
+    from atm.wave import build
+    from atm.wave.moves import fcfs_plan
+    w = build.build_wave("F2015-270287")
+    mm = U.metrics_map(w, fcfs_plan(w))
+    assert all(m.route_min is not None for m in mm.values())
+
+
+def _far_runway(w, cs) -> str:
+    """Open runway end with the largest t_route_min, provided it exceeds the nominal runway's by > 1.0 min.
+    Shared with tests/test_rules.py (T14) and tests/test_geo_api.py (T16)."""
+    from atm.wave import route
+    from atm.wave.moves import fcfs_runways
+    rs = route.routes_for_wave(w)
+    nominal = rs[(cs, fcfs_runways(w)[cs])].t_route_min
+    best = max((r for (c, _), r in rs.items() if c == cs), key=lambda r: r.t_route_min)
+    if best.t_route_min <= nominal + 1.0:
+        pytest.skip("no runway end more than 1 min farther than nominal")
+    return best.runway
+
+
+def test_route_extra_costs_fuel_on_far_runway():
+    from dataclasses import replace
+    from atm.wave import build, route, trajectory
+    from atm.wave.moves import fcfs_plan
+    from atm.wave.utility import metrics_map, hold_burn
+    w = build.build_wave("F2015-270287")
+    p = fcfs_plan(w); a = p.assignments[0]
+    rs = route.routes_for_wave(w)
+    far = rs[(a.callsign, _far_runway(w, a.callsign))]
+    extra = far.t_route_min - rs[(a.callsign, a.runway)].t_route_min
+    m = metrics_map(w, p.with_assignment(replace(a, runway=far.runway,
+                                                  slot_min=trajectory.earliest(w, a.callsign, far.runway))))[a.callsign]
+    assert m.route_extra_min == pytest.approx(extra, abs=1e-6) and m.hold_min == pytest.approx(0, abs=1e-6)
+    assert m.fuel_kg == pytest.approx(extra * hold_burn(w.flight(a.callsign)), abs=0.05)   # fuel_kg is rounded to 0.1
+
+
+def test_no_geometry_tier_matches_v2():
+    # frozen v2 numbers for the synthetic wave (captured before this task)
+    from atm.wave.fixtures import make_wave
+    from atm.wave.moves import fcfs_plan
+    from atm.wave.utility import evaluate
+    ev = evaluate(make_wave(), fcfs_plan(make_wave()))
+    assert ev["totals"] == V2_FIXTURE_TOTALS
+
+
+def test_metrics_hold_identity_and_path_fields_from_track():
+    from atm.wave.utility import metrics_map
+    w = build.build_wave("F2015-69315")
+    p = fcfs_plan(w)
+    a = p.assignments[0]
+    lap = trajectory.hold_for(w, route.routes_for_wave(w)[(a.callsign, a.runway)]).lap_min
+    p2 = _reslot(p, a, slot_min=trajectory.earliest(w, a.callsign, a.runway) + 2 * lap + 0.5 * lap)
+    m = metrics_map(w, p2)[a.callsign]
+    t = next(x for x in trajectory.build(w, p2).air if x.callsign == a.callsign)
+    assert (m.hold_laps, m.hold_fix, m.hold_level_ft) == (2, t.hold_fix, t.hold_level_ft) and m.hold_fix
+    assert (m.lap_min, m.vector_min, m.route_min, m.route_extra_min) == \
+        (t.lap_min, t.vector_min, t.route_min, t.route_extra_min)                 # unrounded, from the track
+    assert m.hold_min == pytest.approx(m.hold_laps * m.lap_min + m.vector_min, abs=0.05)
+
+
+def test_metrics_slot_before_earliest_never_negative():
+    from atm.wave.utility import metrics_map
+    w = build.build_wave("F2015-270287")
+    p = fcfs_plan(w)
+    a = p.assignments[0]
+    m = metrics_map(w, _reslot(p, a, slot_min=a.slot_min - 5.0))[a.callsign]
+    assert m.hold_min == 0 and m.fuel_kg == 0 and m.hold_laps == 0 and m.vector_min == 0
+
+
+def test_change_runway_floor_is_runway_dependent_earliest():
+    from atm.wave import moves
+    from atm.wave.model import Move
+    w = build.build_wave("F2015-270287")
+    p = fcfs_plan(w)
+    for a in p.assignments:
+        try:
+            far = _far_runway(w, a.callsign)
+        except pytest.skip.Exception:
+            continue
+        if far == a.runway:
+            continue
+        new = moves.apply(w, p, Move("x", "ATC", "change_runway", [a.callsign], {"runway": far}, "x"))
+        assert new.get(a.callsign).slot_min >= trajectory.earliest(w, a.callsign, far) - 1e-9
+        return
+    pytest.skip("no flight with a farther runway end")
+
+
+def test_fcfs_metrics_on_geometry_wave_equal_v2_hold():
+    """The FCFS plan flies the nominal runway, so route_extra is 0 and hold equals v2's slot - ETA."""
+    from atm.wave.utility import metrics_map
+    w = build.build_wave("F2015-270287")
+    p = fcfs_plan(w)
+    for a in p.assignments:
+        m = metrics_map(w, p)[a.callsign]
+        f = w.flight(a.callsign)
+        assert m.route_extra_min == 0.0
+        assert m.hold_min == round(max(0.0, a.slot_min - f.eta_earliest_min), 1)

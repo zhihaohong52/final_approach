@@ -51,7 +51,7 @@ from langgraph.graph import END, START, StateGraph
 from atm.decide import DEFAULT_CHAIN, Decider, DecisionResult
 from atm.wave import baseline, fallback, moves, rules, wind
 from atm.wave.model import JointPlan, Move, Wave
-from atm.wave.utility import agent_terms, agent_utility, evaluate, focus_callsign, metrics, negotiators
+from atm.wave.utility import agent_terms, agent_utility, evaluate, focus_callsign, metrics_map, negotiators
 
 MAX_TURNS = 3
 MAX_ROUNDS = MAX_TURNS  # back-compat alias
@@ -82,8 +82,9 @@ def _role(agent: str) -> str:
 
 
 def _plan_dict(wave: Wave, plan: JointPlan) -> dict:
+    mm = metrics_map(wave, plan)
     for a in plan.assignments:
-        a.metrics = metrics(wave, a)
+        a.metrics = mm[a.callsign]
     return plan.to_dict()
 
 
@@ -164,7 +165,7 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
                 "wave": [[a.callsign, wave.flight(a.callsign).wake, a.action, a.runway, a.slot_min]
                          for a in plan.assignments]}
     if role == "GROUND":
-        mm = {a.callsign: metrics(wave, a) for a in plan.assignments}
+        mm = metrics_map(wave, plan)
         return {"gates": [[g.id, g.size, "remote" if g.remote else g.pier,
                            [[b["from_min"], b["to_min"]] for b in g.busy][:4]] for g in wave.gates][:24],
                 "flights": [{"cs": a.callsign, "size": wave.flight(a.callsign).gate_size,
@@ -175,7 +176,7 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
                             for a in plan.assignments]}
     cs = agent.split(":", 1)[1]
     f, a = wave.flight(cs), plan.get(cs)
-    m = metrics(wave, a)
+    m = metrics_map(wave, plan)[cs]
     return {"flight": cs, "type": f.aircraft_type, "airborne": f.airborne, "eta_earliest": f.eta_earliest_min,
             "sched": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
@@ -709,7 +710,7 @@ def revision(wave: Wave, plan: JointPlan, focus: str) -> dict:
     delay_vs_schedule_min = landing slot - scheduled arrival (divert: the metrics delay)."""
     a = plan.get(focus)
     f = wave.flight(focus)
-    m = metrics(wave, a)
+    m = metrics_map(wave, plan)[focus]
     if a.action == "divert":
         alt = (f.fuel or {}).get("alternate")
         return {"callsign": focus, "action": "divert", "alternate": alt, "revised_arrival": None,

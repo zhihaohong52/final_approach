@@ -104,7 +104,8 @@ def taxi_min(wave: Wave, runway: str | None, gate_id: str | None) -> float:
     return TAXI_NEAR_MIN if near else TAXI_FAR_MIN
 
 
-def metrics(wave: Wave, a: Assignment) -> FlightMetrics:
+def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
+    """One flight's metrics given its AirTrack from the plan's TrajectorySet (None when not drawn)."""
     f = wave.flight(a.callsign)
     pax_total = sum(int(c.get("pax", 0)) for c in f.connections)
     burn = hold_burn(f)
@@ -120,8 +121,21 @@ def metrics(wave: Wave, a: Assignment) -> FlightMetrics:
     # a missing / non-finite slot is scored as "at ETA" (PLT-EARLIEST-ETA rejects it separately)
     slot = float(a.slot_min) if isinstance(a.slot_min, (int, float)) and math.isfinite(a.slot_min) \
         else float(f.eta_earliest_min)
-    hold = max(0.0, slot - f.eta_earliest_min - a.speed_reduction_min - a.ground_delay_min)
-    fuel = hold * burn + a.speed_reduction_min * burn * SPEED_REDUCTION_BURN_FRACTION
+    path: dict = {}
+    if track is not None and track.lap_min is not None:
+        # geometry tier (spec §6.2): D = slot - earliest(f, r) is split into laps and vector stretch;
+        # a slot before the earliest landing gives 0 laps and 0 vector (PLT-EARLIEST-ETA reports it)
+        hold = track.laps * track.lap_min + track.vector_min
+        extra = track.route_extra_min
+        path = {"hold_laps": track.laps, "hold_fix": track.hold_fix, "hold_level_ft": track.hold_level_ft,
+                "lap_min": track.lap_min, "vector_min": track.vector_min, "route_min": track.route_min,
+                "route_extra_min": extra}
+    else:
+        # no-geometry tier (no route for this runway / no runway): v2's hold, no route term
+        hold = max(0.0, slot - f.eta_earliest_min - a.speed_reduction_min - a.ground_delay_min)
+        extra = 0.0
+    # route extra may be negative (a shorter route than nominal) but never takes fuel below zero
+    fuel = (hold + max(extra, -hold)) * burn + a.speed_reduction_min * burn * SPEED_REDUCTION_BURN_FRACTION
     gate = _gate(wave, a.gate)
     in_block = slot + taxi_min(wave, a.runway, a.gate)
     pax_ready = in_block + (REMOTE_BUS_MIN if gate is not None and gate.remote else 0.0)
@@ -133,21 +147,33 @@ def metrics(wave: Wave, a: Assignment) -> FlightMetrics:
         delay_min=round(max(0.0, in_block - (f.sched_min + TYPICAL_TAXI_MIN)), 1),
         in_block_min=round(in_block, 1), pax_protected=protected, pax_total=pax_total,
         overtime_min=round(max(0.0, turn_end - f.crew_shift_end_min), 1),
-        next_dep_delay_min=round(max(0.0, turn_end - f.next_departure_min), 1))
+        next_dep_delay_min=round(max(0.0, turn_end - f.next_departure_min), 1), **path)
+
+
+def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
+    """Joint per-flight metrics of `plan` (the only metrics entry point, spec §6.5): every landing is read
+    from the plan's 4D trajectories (`trajectory.build`, memoised on (wave key, plan id)).
+
+    Geometry tier: `hold_min = laps x lap_min + vector_min`, `fuel_kg = (hold_min + max(route_extra_min,
+    -hold_min)) x burn + SR x burn x 0.20`; path fields (`hold_laps`, `hold_fix`, `hold_level_ft`,
+    `lap_min`, `vector_min`, `route_min`, `route_extra_min`) are copied unrounded from the AirTrack.
+    No-geometry tier (no route for the assigned runway): v2's `hold = max(0, slot - ETA - SR - GD)`, no
+    route term, path fields left at their defaults. Taxi path fields stay unset until the surface model
+    feeds them."""
+    from atm.wave import trajectory   # lazy: build / rules / moves import this module (import cycle)
+    tracks = {t.callsign: t for t in trajectory.build(wave, plan).air if t.wave}
+    return {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None)
+            for a in plan.assignments}
 
 
 def _clip(x: float) -> float:
     return min(max(x, 0.0), 1.0)
 
 
-def _metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
-    return {a.callsign: metrics(wave, a) for a in plan.assignments}
-
-
 def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
                 mm: dict[str, FlightMetrics] | None = None) -> dict[str, float]:
     """Weighted penalty terms (each <= 0) of an agent's utility. utility = 1 + sum(terms)."""
-    mm = mm or _metrics_map(wave, plan)
+    mm = mm or metrics_map(wave, plan)
     asg = plan.assignments
     n = max(len(asg), 1)
     if agent_id == "ATC":
@@ -207,7 +233,7 @@ def agent_utility(wave: Wave, plan: JointPlan, agent_id: str,
 
 def evaluate(wave: Wave, plan: JointPlan) -> dict:
     """Contract PlanEvaluation. Fills each Assignment.metrics in place."""
-    from atm.wave import rules  # lazy: rules imports metrics() from here
+    from atm.wave import rules  # lazy: rules imports this module at module level
 
     try:
         rules.validate_structure(wave, plan)
@@ -217,7 +243,7 @@ def evaluate(wave: Wave, plan: JointPlan) -> dict:
                 "utilities": {ag: 0.0 for ag in negotiators(wave)},
                 "totals": {"delay_min": 0.0, "fuel_kg": 0.0, "hold_min": 0.0, "pax_protected_pct": 0.0,
                            "overtime_min": 0.0, "diversions": 0}}
-    mm = _metrics_map(wave, plan)
+    mm = metrics_map(wave, plan)
     for a in plan.assignments:
         a.metrics = mm[a.callsign]
     checks = rules.check(wave, plan, mm)
