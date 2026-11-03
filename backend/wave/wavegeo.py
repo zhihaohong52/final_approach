@@ -1,4 +1,4 @@
-"""Contract `WaveGeo` for one wave: the procedures the engine actually flies there (spec §7), surface null in M1.
+"""Contract `WaveGeo` for one wave: the procedures and the airport surface the engine actually uses (spec §7).
 
 Built from the engine's own objects, never from raw CIFP alone, so the map shows only what the trajectories
 use ("never draw a path the engine did not use"):
@@ -13,12 +13,16 @@ use ("never draw a path the engine did not use"):
     the laps are drawn on (`holding.racetrack`, [lat, lon] pairs).
   * `cycle` / `source` from the procedures document header (read through `store.load_procedures`, i.e. the
     datastore); "" / "synthetic" when the airport has none. `status` is "real" iff some route is `star+iap`.
+  * `surface` (`surface_part`): the OSM drawing layer of the airport (taxiways, runways), every stand (labelled as the
+    ground tracks label them: OSM `ref`, else id) with the wave gate bound to it (`surface._geo`, the same binding the
+    taxi times use), the holding positions (node id, runway strip when known). `status` is the wave's taxi tier
+    (`surface.wave_tier`). null when the airport has no OSM surface.
 Pure assembly over read-only caches; nothing here decides legality.
 """
 from __future__ import annotations
 
 from backend.geo import store
-from backend.wave import holding, route, trajectory
+from backend.wave import holding, route, surface, trajectory
 from backend.wave.model import Wave
 from backend.wave.version import ENGINE_VERSION
 
@@ -114,6 +118,51 @@ def procedures(wave: Wave) -> dict:
             "routes": list(routes.values()), "holds": holds}
 
 
+def surface_part(wave: Wave) -> dict | None:
+    doc = store.load_surface(wave.airport.icao)
+    if doc is None:
+        return None
+    gg = surface._geo(wave)
+    hdr = doc.get("header") or {}
+    draw = doc.get("draw") or {}
+    gate_of: dict[str, tuple[str, str]] = {}      # stand id -> (gate id, geo_src); first gate by id wins
+    for gid, b in sorted(gg.bind.items()):
+        if b.get("geo_src") != "synth" and b.get("stand") not in (None, "synth"):
+            gate_of.setdefault(str(b["stand"]), (gid, b["geo_src"]))
+    # Stand label = what the ground tracks call it (OSM `ref`, else id). A ref shared by several stands labels the
+    # gate-bound one (else the first by id); the others keep their unique OSM id.
+    sts = sorted(doc.get("stands") or [], key=lambda x: str(x["id"]))
+    owner: dict[str, str] = {}
+    for st in sts:
+        lab = str(st.get("ref") or st["id"])
+        if lab not in owner or (str(st["id"]) in gate_of and owner[lab] not in gate_of):
+            owner[lab] = str(st["id"])
+    stands = []
+    for st in sts:
+        sid = str(st["id"])
+        lab = str(st.get("ref") or sid)
+        d = {"id": lab if owner[lab] == sid else sid, "lat": _r(st["lat"]), "lon": _r(st["lon"])}
+        if sid in gate_of:
+            d["gate"], d["geo_src"] = gate_of[sid]
+        else:
+            d["geo_src"] = "osm"
+        stands.append(d)
+    nodes = doc.get("nodes") or []
+    holding_positions = []
+    for h in sorted(doc.get("holding_positions") or [], key=lambda h: (h["node"], h.get("strip") or "")):
+        lat, lon = nodes[int(h["node"])]
+        d = {"id": f"HP{h['node']}", "lat": _r(lat), "lon": _r(lon)}
+        if h.get("strip"):
+            d["runway"] = h["strip"]
+        holding_positions.append(d)
+    ts = str(hdr.get("osm_timestamp") or "")[:10]
+    return {"source": f"OpenStreetMap {ts}".strip(), "status": surface.wave_tier(wave, gg.graph),
+            "attribution": hdr.get("attribution") or "© OpenStreetMap contributors",
+            "taxiways": [{"name": t.get("name"), "kind": t["kind"], "line": t["line"]} for t in draw.get("taxiways") or []],
+            "runways": [{"ids": list(r["ids"]), "line": r["line"], "width_m": r.get("width_m")} for r in draw.get("runways") or []],
+            "stands": stands, "holding_positions": holding_positions}
+
+
 def wave_geo(wave: Wave) -> dict:
-    """Contract `WaveGeo` (surface: null until the surface milestone). Call only when `wave.geo_available()`."""
-    return {"engine_version": ENGINE_VERSION, "procedures": procedures(wave), "surface": None}
+    """Contract `WaveGeo`. Call only when `wave.geo_available()`."""
+    return {"engine_version": ENGINE_VERSION, "procedures": procedures(wave), "surface": surface_part(wave)}

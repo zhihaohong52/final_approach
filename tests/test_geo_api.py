@@ -13,7 +13,7 @@ ORD = "F2015-270287"   # a flights2015 row; builds regardless of which replay fi
 
 def test_geo_procedures_for_ord():
     g = c.get(f"/api/wave/{ORD}/geo").json()
-    assert g["engine_version"] == ENGINE_VERSION and g["procedures"]["cycle"] == "2611" and g["surface"] is None
+    assert g["engine_version"] == ENGINE_VERSION and g["procedures"]["cycle"] == "2611"
     assert all(f["src"] in ("cifp", "synth") for f in g["procedures"]["fixes"])
 
 def test_geo_404_when_unavailable(monkeypatch):
@@ -238,3 +238,31 @@ def test_replays_in_pg_are_current_engine(live_db_url):
             assert (st.replay(wid) or {}).get("engine_version") == ENGINE_VERSION
     finally:
         st.close()
+
+def test_geo_surface_and_ground_tracks():
+    g = c.get(f"/api/wave/{ORD_REPLAY}/geo").json()
+    assert g["surface"]["attribution"] == "© OpenStreetMap contributors" and g["surface"]["stands"]
+    w = c.get(f"/api/wave/{ORD_REPLAY}").json()
+    ts = c.post("/api/trajectories", json={"wave_id": ORD_REPLAY, "assignments": w["status_quo"]["plan"]["assignments"]}).json()
+    assert ts["ground"] and all(t["src"] in ("osm", "synth") for t in ts["ground"])
+
+
+def test_geo_surface_shape_and_ground_stands_are_drawn():
+    g = c.get(f"/api/wave/{ORD_REPLAY}/geo").json()
+    s = g["surface"]
+    assert s["status"] in ("real", "generic") and s["source"].startswith("OpenStreetMap")
+    assert s["taxiways"] and s["runways"] and s["holding_positions"]
+    assert all(t["kind"] in ("taxiway", "taxilane") and len(t["line"]) >= 2 for t in s["taxiways"])
+    assert all({"id", "lat", "lon"} <= set(h) for h in s["holding_positions"])
+    ids = {x["id"] for x in s["stands"]}
+    assert len(ids) == len(s["stands"]) and all("geo_src" in x for x in s["stands"])
+    assert any("gate" in x for x in s["stands"])
+    # every OSM-routed ground track ends at a stand the map draws
+    w = c.get(f"/api/wave/{ORD_REPLAY}").json()
+    ts = c.post("/api/trajectories", json={"wave_id": ORD_REPLAY, "assignments": w["status_quo"]["plan"]["assignments"]}).json()
+    assert all(t["stand"] in ids for t in ts["ground"] if t["src"] == "osm")
+    # a stand's gate agrees with the wave's Gate coordinates
+    gates = {x["id"]: x for x in w["gates"]}
+    for x in s["stands"]:
+        if "gate" in x and gates.get(x["gate"], {}).get("lat") is not None and gates[x["gate"]].get("geo_src") != "synth":
+            assert abs(gates[x["gate"]]["lat"] - x["lat"]) < 1e-5
