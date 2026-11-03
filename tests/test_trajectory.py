@@ -237,7 +237,8 @@ def test_no_climb_after_the_hold():
 # --------------------------------------------------------------------------- T13: joint metrics
 
 # v2 totals of the synthetic wave's FCFS plan, captured on the code before T13 (no-geometry tier).
-V2_FIXTURE_TOTALS = {"delay_min": 5.7, "fuel_kg": 68.0, "hold_min": 1.7, "pax_protected_pct": 100.0,
+V2_FIXTURE_TOTALS = {"delay_min": 29.7,   # §6.1: delay = in-block − scheduled gate time (v3-time)
+                     "fuel_kg": 68.0, "hold_min": 1.7, "pax_protected_pct": 100.0,
                      "overtime_min": 0.0, "diversions": 0}
 
 

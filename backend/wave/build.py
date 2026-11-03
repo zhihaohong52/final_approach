@@ -16,7 +16,7 @@ import pandas as pd
 
 from backend.datastore import files as _files, get_store
 from backend.wave import constraints, icao, wind
-from backend.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
+from backend.wave.utility import GENERIC_TAXI_IN_MIN, TURNAROUND_MIN
 from backend.wave.model import (Airport, Gate, Metar, Provenance, QueueArrival, Runway, Wave,
                             WaveFlight)
 
@@ -391,6 +391,33 @@ def itertools_takewhile_alpha(s: str):
         yield ch
 
 
+@functools.lru_cache(maxsize=512)
+def airport_taxi_median(iata: str) -> float | None:
+    """Median BTS TAXI_IN of the airport's 2015 arrivals (data/challenge2/flights/<IATA>.csv.gz, the
+    challenge's delayed-flight subset), or None when the airport has no rows. Build time only: cached per
+    airport, never called from the hot path (the result is stored on `WaveFlight.taxi_in_ref_min`)."""
+    df = _files._dest_frame(iata.upper())
+    if df is None or "taxi_in" not in df.columns:
+        return None
+    v = df.loc[df["cancelled"] == 0, "taxi_in"].median()
+    return None if pd.isna(v) else float(v)
+
+
+def taxi_in_ref_row(iata: str, r: dict) -> tuple[float, float | None, str]:
+    """(taxi-in reference, value to store on the flight, provenance text) for one arrival row (spec §6.1):
+    the row's real TAXI_IN, else the airport's 2015 median, else the generic 6 min."""
+    real = _num(r.get("taxi_in"))
+    if real is not None:
+        return real, real, f"taxi-in {real:g} min (real TAXI_IN)"
+    med = airport_taxi_median(iata)
+    if med is not None:
+        return med, med, f"taxi-in {med:g} min ({iata} 2015 median TAXI_IN)"
+    return GENERIC_TAXI_IN_MIN, None, f"taxi-in {GENERIC_TAXI_IN_MIN:g} min (generic, no TAXI_IN for {iata})"
+
+
+TIME_BASE_NOTE = "scheduled times are gate times (BTS); landing = wheels-on"
+
+
 def _gate_free(g: Gate, t: float) -> bool:
     return all(not (b["from_min"] <= t <= b["to_min"]) for b in g.busy)
 
@@ -403,9 +430,10 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
     rng = _rng(wave_id, cs)
     tail = r.get("tail") if isinstance(r.get("tail"), str) else None
     ac = _aircraft_table().get(tail) if tail else None
+    taxi_ref, taxi_store, taxi_note = taxi_in_ref_row(iata, r)
     prov = [Provenance("flights", "real", f"BTS On-Time {date[:7]}",
                        "airborne inferred from scheduled departure vs window start; origin/"
-                       "destination time zones ignored (BTS times are local)")]
+                       f"destination time zones ignored (BTS times are local); {TIME_BASE_NOTE}; {taxi_note}")]
     if ac:
         atype, wake, size = ac.get("type_icao") or None, ac.get("wake") or "LARGE", ac.get("gate_size") or "narrow"
         prov.append(Provenance("aircraft", "real", "FAA registry", ac.get("mfr_model")))
@@ -416,10 +444,11 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
     sched_min = float(r["sched_min"])
     late, carr = float(r["late_aircraft_delay"]), float(r["carrier_delay"])
     wx, nas = float(r["weather_delay"]), float(r["nas_delay"])
-    # Earliest feasible arrival: the BTS-attributed delay (late inbound aircraft, carrier,
+    # Earliest feasible landing: the BTS-attributed delay (late inbound aircraft, carrier,
     # weather, NAS) is already baked into when the aircraft can arrive. The negotiation absorbs
-    # the remaining airport-side congestion (holding, sequencing, diversion).
-    eta_earliest = sched_min + late + carr + wx + nas
+    # the remaining airport-side congestion (holding, sequencing, diversion). §6.1: BTS scheduled
+    # arrival is a gate (in-block) time, so touchdown is taxi-in earlier.
+    eta_earliest = sched_min + late + carr + wx + nas - taxi_ref
 
     arr_abs = _hhmm_min(r["sched_arr"])
     dep_hhmm = _num(r.get("sched_dep"))
@@ -445,15 +474,16 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
               "departs_min": sched_min + rng.randint(40, 120)} for _ in range(rng.randint(0, 3))]
     prov += [Provenance("fuel", "simulated", "seeded model", f"seed={wave_id}+{cs}"),
              Provenance("crew", "simulated", "seeded model",
-                        "shift end = earliest turnaround end (ETA incl. late-aircraft/carrier delay "
-                        "+ taxi + turnaround) + 0-90 min margin: the roster already knows the inbound is late"),
+                        "shift end = earliest turnaround end (earliest landing incl. late-aircraft/carrier delay "
+                        "+ taxi-in reference + turnaround) + 0-90 min margin: the roster already knows the inbound "
+                        "is late"),
              Provenance("connections", "simulated", "seeded model")]
     # Crew shift end is anchored to the earliest achievable turnaround end, not the schedule: with
     # multi-hour BTS late-aircraft delays a schedule-anchored shift made ~70% of flights breach
     # GND-CREW-DUTY before any move (no move can land a flight earlier than its ETA). Airlines
     # re-roster / reserve-crew a known-late inbound; the 0-90 min margin keeps holding, far taxi and
     # ground delay able to cause overtime. One randint at the same position keeps later draws stable.
-    crew_end = eta_earliest + TYPICAL_TAXI_MIN + TURNAROUND_MIN + rng.randint(0, 90)
+    crew_end = eta_earliest + taxi_ref + TURNAROUND_MIN + rng.randint(0, 90)   # §6.1 (T24: routed taxi)
     return WaveFlight(
         callsign=cs, carrier=r["carrier"], airline=_airlines().get(r["carrier"], r["carrier"]),
         flight_no=int(r["flight_no"]), tail=tail, aircraft_type=atype, wake=wake, gate_size=size,
@@ -463,10 +493,13 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
                 "carrier": carr, "arr_delay": float(r["arr_delay"])},
         fuel=fuel, connections=conns, scheduled_gate=gate,
         crew_shift_end_min=crew_end,
-        next_departure_min=sched_min + rng.randint(45, 120), provenance=prov, crew_duty_end_min=duty_end)
+        next_departure_min=sched_min + rng.randint(45, 120), provenance=prov, crew_duty_end_min=duty_end,
+        taxi_in_ref_min=taxi_store)
 
 
-def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueArrival]:
+def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> list[QueueArrival]:
+    """Fixed-traffic arrivals (spec §6.1): each lands at its real wheels-on (`wheels_min`, T0-relative) when
+    known, else at its scheduled gate time minus the taxi-in reference."""
     open_rw = [r for r in runways if r.open]
     if not open_rw:
         return []
@@ -478,9 +511,14 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueAr
         out.append(QueueArrival(
             callsign=r["callsign"], aircraft_type=(ac or {}).get("type_icao") or None,
             wake=(ac or {}).get("wake") or "LARGE", runway=best[i % len(best)].id,
-            slot_min=float(r["sched_min"]),
+            slot_min=_queue_slot(iata, r),
             origin=str(r["origin"]) if isinstance(r.get("origin"), str) and r["origin"] else None))
     return out
+
+
+def _queue_slot(iata: str, r: dict) -> float:
+    wheels = _num(r.get("wheels_min"))
+    return wheels if wheels is not None else float(r["sched_min"]) - taxi_in_ref_row(iata, r)[0]
 
 
 # ---------------------------------------------------------------- public API
@@ -565,7 +603,7 @@ def _build_wave(wave_id: str) -> Wave:
     focus = max((f for f in flights if f.disrupted), key=lambda f: f.delays["arr_delay"], default=None)
     from backend.wave import ground_traffic   # 2024 waves: queue arrivals only (movements cover 2015), badged partial
     return ground_traffic.annotate(Wave(id=wave_id, airport=airport, window_start=f"{date}T{hour:02d}:00:00",
-                                        metar=metar, runway_wind=rwinds, queue=_queue(rest, runways, rwinds),
+                                        metar=metar, runway_wind=rwinds, queue=_queue(rest, runways, rwinds, iata),
                                         flights=flights, gates=gates, provenance=prov,
                                         focus=focus.callsign if focus else None),
                                    f"BTS On-Time {month} queue")

@@ -179,6 +179,7 @@ Every change and assumption is returned in `result.limits`. Summary:
 | Gate change notice | At least 20 min; remote stand exempt | workbook |
 | Speed reduction | Capped at 8 min | assumption |
 | Taxi-in time | 6 min near / 10 min far (runway and pier paired by halves), remote stand far plus 10 min bus; no taxiway closures. The data has gate names but no gate positions or taxiway network | assumption |
+| Time base (engine `v3-time`) | BTS scheduled arrival is a gate (in-block) time. Earliest landing = scheduled + attributed BTS delays - taxi-in reference (the row's real `TAXI_IN`, else the airport's 2015 median, else 6 min), which is the real wheels-on for a 2015 row. Delay = in-block - scheduled. Fixed-traffic arrivals land at their real wheels-on. Crew floors and the `PLT-CREW-DUTY` "unavoidable" test use the same taxi-in reference | real data (BTS `WHEELS_ON`, `TAXI_IN`); 6 min fallback is an assumption |
 
 ## 4. Data and provenance
 

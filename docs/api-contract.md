@@ -5,7 +5,7 @@ one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). v2.2 part 2 (3 Nov 2026, additive): `GET /api/wave/{id}/geo` (`WaveGeo`, procedures; `surface: null` until the surface milestone), `POST /api/trajectories` (`{wave_id, assignments}` or `{run_id}`), `EvaluateRequest.include_trajectories?` / `EvaluateResponse.trajectories?`, `NegotiationResult.paths_unavailable?` (replay engine-version guard), and `alt_src?` on `TrajectorySet` air points. Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). v2.2 part 2 (3 Nov 2026, additive): `GET /api/wave/{id}/geo` (`WaveGeo`, procedures; `surface: null` until the surface milestone), `POST /api/trajectories` (`{wave_id, assignments}` or `{run_id}`), `EvaluateRequest.include_trajectories?` / `EvaluateResponse.trajectories?`, `NegotiationResult.paths_unavailable?` (replay engine-version guard), and `alt_src?` on `TrajectorySet` air points. v2.2 time base (engine `v3-time`): scheduled arrival is the BTS gate time (see Conventions), `delay_min` is measured at in-block against it, and `WaveFlight.taxi_in_ref_min?` is added. Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -25,6 +25,11 @@ response per endpoint in `frontend/src/api/samples/*.json`. Until then, build ag
 - Errors: non-2xx status with `{ "error": { "code": string, "message": string } }`.
   `429` adds `retry_after_s`. Rate limit: 10 live negotiations per 10 min per IP.
 - Every real-world fact carries a `Provenance` so the UI can badge real vs simulated.
+- Time base (engine `v3-time`): BTS scheduled arrival times are gate (in-block) times. `sched_min` is
+  the scheduled in-block; `eta_earliest_min` is the earliest touchdown, `sched_min` + attributed BTS
+  delays − the taxi-in reference (the flight's real `TAXI_IN`, else the airport's 2015 median, else 6 min),
+  so for a 2015 row it is the real wheels-on. `delay_min` = in-block − `sched_min`. Fixed-traffic
+  `QueueArrival.slot_min` is the real wheels-on when known, else `sched − taxi-in reference`.
 
 ```ts
 type AgentId = "ATC" | "GROUND" | `PILOT:${string}`;
@@ -195,8 +200,8 @@ interface WaveFlight {
   wake: Wake; gate_size: "narrow" | "wide";
   origin: string;
   sched_arr: string;                   // ISO local
-  sched_min: number;                   // scheduled arrival vs T0
-  eta_earliest_min: number;
+  sched_min: number;                   // scheduled arrival vs T0 (BTS gate / in-block time)
+  eta_earliest_min: number;            // earliest touchdown: sched + attributed delays - taxi-in reference
   airborne: boolean;                   // false => ground delay at origin possible
   disrupted: boolean;
   delays: { weather: number; late_aircraft: number; nas: number; carrier: number; arr_delay: number }; // real BTS minutes
@@ -206,6 +211,7 @@ interface WaveFlight {
   crew_shift_end_min: number;
   next_departure_min: number;
   provenance: Provenance[];
+  taxi_in_ref_min?: number | null;     // v2.2: real TAXI_IN, else airport 2015 median; absent = generic 6 min
 }
 interface Gate {
   id: string; size: "narrow" | "wide"; pier: string; remote: boolean;

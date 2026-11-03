@@ -14,7 +14,7 @@ HOLD_BURN_KG_MIN = {"SUPER": 180.0, "HEAVY": 110.0, "B757": 70.0, "LARGE": 45.0,
 SPEED_REDUCTION_BURN_FRACTION = 0.20   # absorbing delay en route burns ~20% of holding fuel
 TAXI_NEAR_MIN = 6.0
 TAXI_FAR_MIN = 10.0
-TYPICAL_TAXI_MIN = 6.0                 # scheduled in-block = sched_min + typical taxi
+GENERIC_TAXI_IN_MIN = 6.0              # taxi-in reference when neither the row nor the airport has a TAXI_IN
 REMOTE_BUS_MIN = 10.0                  # passengers bussed from the remote stand
 TURNAROUND_MIN = 45.0                  # default only; per airport: turnaround_min(wave) (workbook)
 MIN_CONNECT_MIN = 35.0
@@ -79,6 +79,20 @@ def negotiators(wave: Wave) -> list[str]:
     return ["ATC", f"PILOT:{focus_callsign(wave)}", "GROUND"]
 
 
+def taxi_in_ref(wave: Wave, callsign: str) -> float:
+    """Taxi-in reference of a wave flight (spec §6.1): its real BTS TAXI_IN when known, else the airport's 2015
+    median TAXI_IN, both resolved at build time into `WaveFlight.taxi_in_ref_min`; else GENERIC_TAXI_IN_MIN.
+    BTS scheduled arrival is a gate time, so the earliest landing is `sched + attributed delays - taxi_in_ref`.
+    Never reads the store (hot path)."""
+    return flight_taxi_in_ref(wave.flight(callsign))
+
+
+def flight_taxi_in_ref(f: WaveFlight) -> float:
+    """`taxi_in_ref` of one WaveFlight (the stored reference, else GENERIC_TAXI_IN_MIN)."""
+    v = getattr(f, "taxi_in_ref_min", None)
+    return float(v) if v is not None and math.isfinite(v) else GENERIC_TAXI_IN_MIN
+
+
 def _gate(wave: Wave, gid: str | None):
     if gid is None:
         return None
@@ -112,8 +126,9 @@ def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
     if a.action == "divert":
         alt = max(fuel_info(f)[2] or 0.0, 0.0)
         # a diverting flight still carries the delay it already has (late inbound / carrier):
-        # without the base a 300-min-late flight looked *less* delayed by diverting (alt + 90)
-        base = max(0.0, f.eta_earliest_min - f.sched_min)
+        # without the base a 300-min-late flight looked *less* delayed by diverting (alt + 90).
+        # §6.1: measured at in-block, so the earliest landing plus the taxi-in reference
+        base = max(0.0, f.eta_earliest_min + flight_taxi_in_ref(f) - f.sched_min)
         delay = base + alt + DIVERT_EXTRA_DELAY_MIN
         return FlightMetrics(hold_min=0.0, fuel_kg=round(alt * burn, 1), delay_min=round(delay, 1),
                              in_block_min=None, pax_protected=0, pax_total=pax_total,
@@ -144,7 +159,7 @@ def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
     turn_end = in_block + turnaround_min(wave)
     return FlightMetrics(
         hold_min=round(hold, 1), fuel_kg=round(fuel, 1),
-        delay_min=round(max(0.0, in_block - (f.sched_min + TYPICAL_TAXI_MIN)), 1),
+        delay_min=round(max(0.0, in_block - f.sched_min), 1),   # §6.1: sched_min is the BTS gate (in-block) time
         in_block_min=round(in_block, 1), pax_protected=protected, pax_total=pax_total,
         overtime_min=round(max(0.0, turn_end - f.crew_shift_end_min), 1),
         next_dep_delay_min=round(max(0.0, turn_end - f.next_departure_min), 1), **path)

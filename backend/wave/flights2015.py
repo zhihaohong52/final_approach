@@ -22,7 +22,6 @@ from backend.wave import build as B
 from backend.wave import constraints, wind
 from backend.wave.icao import icao_or_prefix
 from backend.wave.model import (Airport, Gate, Metar, Provenance, Runway, Wave, WaveFlight)
-from backend.wave.utility import TYPICAL_TAXI_MIN
 
 CH2 = B.CH2
 FLIGHTS = CH2 / "flights"
@@ -243,8 +242,10 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     rng = B._rng(PREFIX, str(row_id), cs)
     tail = r["tail"] if isinstance(r.get("tail"), str) else None
     ac = B._aircraft_table().get(tail) if tail else None
+    taxi_ref, taxi_store, taxi_note = B.taxi_in_ref_row(iata, r)
     prov = [Provenance("flights", "real", f"real ({SRC_FLIGHTS})",
-                       "airborne inferred from scheduled departure vs window start; DOT times are local")]
+                       "airborne inferred from scheduled departure vs window start; DOT times are local; "
+                       f"{B.TIME_BASE_NOTE}; {taxi_note}")]
     if ac:
         atype, wake, size = ac.get("type_icao") or None, ac.get("wake") or "LARGE", ac.get("gate_size") or "narrow"
         prov.append(Provenance("aircraft", "real", "FAA registry (current)", ac.get("mfr_model")))
@@ -254,7 +255,8 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
 
     sched_min = float(r["sched_min"])
     late, carr = float(r["late_aircraft_delay"]), float(r["carrier_delay"])
-    eta_earliest = sched_min + late + carr + float(r["weather_delay"]) + float(r["nas_delay"])  # as build.py
+    # as build.py; §6.1: the scheduled arrival is a gate time, so for a real row this is the real wheels-on
+    eta_earliest = sched_min + late + carr + float(r["weather_delay"]) + float(r["nas_delay"]) - taxi_ref
 
     arr_abs = B._hhmm_min(r["sched_arr"])
     dep_abs = B._hhmm_min(r["sched_dep"])
@@ -276,7 +278,7 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     turn = float(lim.min_turnaround_min)
     shift = constraints.RULES["ground_shift_h"] * 60
     elapsed = rng.random() * shift
-    floor = eta_earliest + TYPICAL_TAXI_MIN + turn   # never infeasible by construction (as build.py)
+    floor = eta_earliest + taxi_ref + turn   # never infeasible by construction (as build.py; §6.1, T24: routed taxi)
     crew_end = max(sched_min + shift - elapsed, floor)
     duty_end = dep_min - 60 + constraints.RULES["crew_duty_h"] * 60
     prov += [Provenance("fuel", "simulated", constraints.SOURCE,
@@ -296,7 +298,7 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
                 "carrier": carr, "arr_delay": float(r["arr_delay"])},
         fuel=fuel, connections=conns, scheduled_gate=gate, crew_shift_end_min=crew_end,
         next_departure_min=sched_min + turn + rng.randint(0, 75), provenance=prov,
-        crew_duty_end_min=duty_end)
+        crew_duty_end_min=duty_end, taxi_in_ref_min=taxi_store)
 
 
 # ---------------------------------------------------------------- public API
@@ -336,6 +338,7 @@ def _build_from_row(row_id: int) -> Wave:
     for c in ("carrier", "origin", "tail", "date"):
         pool[c] = pool[c].astype(object)
     pool["sched_min"] = (pool["sched_arr"].map(B._hhmm_min) - hour * 60).astype(float)
+    pool["wheels_min"] = pool["wheels_on"].astype(float) - hour * 60   # §6.1: queue lands at the real wheels-on
     pool["callsign"] = pool["carrier"] + pool["flight_no"].astype(int).astype(str)
     pool["_focus"] = (pool["row_id"] == int(row_id))
     focus_min = float(focus_abs - hour * 60)
@@ -378,5 +381,5 @@ def _build_from_row(row_id: int) -> Wave:
     ]
     from backend.wave import ground_traffic   # appends the ground_traffic provenance (real BTS 2015 movements / partial)
     return ground_traffic.annotate(Wave(id=wid, airport=airport, window_start=f"{date}T{hour:02d}:00:00", metar=metar,
-                                        runway_wind=rwinds, queue=B._queue(rest, runways, rwinds), flights=flights,
+                                        runway_wind=rwinds, queue=B._queue(rest, runways, rwinds, iata), flights=flights,
                                         gates=gates, provenance=prov, focus=focus_cs), ground_traffic.SRC_PARTIAL)

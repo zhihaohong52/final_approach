@@ -121,6 +121,9 @@ class WaveFlight(_Dict):
     next_departure_min: float
     provenance: list[Provenance] = field(default_factory=list)
     crew_duty_end_min: float | None = None   # flight crew 13 h duty end (T0-relative); omitted from JSON when None
+    # taxi-in reference (spec §6.1): real BTS TAXI_IN, else the airport's 2015 median; omitted from JSON when None
+    # (the engine then uses utility.GENERIC_TAXI_IN_MIN)
+    taxi_in_ref_min: float | None = None
 
 
 @dataclass
@@ -154,8 +157,9 @@ class Wave(_Dict):
         if d["focus"] is None:
             del d["focus"]
         for f in d["flights"]:
-            if f.get("crew_duty_end_min") is None:
-                f.pop("crew_duty_end_min", None)
+            for k in ("crew_duty_end_min", "taxi_in_ref_min"):
+                if f.get(k) is None:
+                    f.pop(k, None)
         return d
 
     def flight(self, callsign: str) -> WaveFlight:

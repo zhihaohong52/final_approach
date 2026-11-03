@@ -86,14 +86,16 @@ def test_runway_closed_reason_cites_faa(monkeypatch):
 
 
 def test_crew_shift_not_infeasible_by_construction():
-    """Crew shift end is anchored to the delayed ETA: landing at the earliest ETA with typical taxi
+    """Crew shift end is anchored to the delayed ETA: landing at the earliest ETA with the taxi-in reference
     never breaches GND-CREW-DUTY (regression: ~70% of real flights did before any move)."""
-    from backend.wave.utility import TURNAROUND_MIN, TYPICAL_TAXI_MIN
+    from backend.wave.utility import TURNAROUND_MIN, taxi_in_ref
     idx = build._index()
     for wid in idx["wave_id"].head(25):
-        for f in build.build_wave(wid).flights:
-            assert f.crew_shift_end_min >= f.eta_earliest_min + TYPICAL_TAXI_MIN + TURNAROUND_MIN
-            assert f.crew_shift_end_min <= f.eta_earliest_min + TYPICAL_TAXI_MIN + TURNAROUND_MIN + 90
+        w = build.build_wave(wid)
+        for f in w.flights:   # §6.1: the floor uses taxi_in_ref (airport 2015 median for 2024 rows), not the old +6
+            t = taxi_in_ref(w, f.callsign)
+            assert f.crew_shift_end_min >= f.eta_earliest_min + t + TURNAROUND_MIN
+            assert f.crew_shift_end_min <= f.eta_earliest_min + t + TURNAROUND_MIN + 90
 
 
 def test_wide_body_gate_exists():
@@ -115,3 +117,11 @@ def test_build_wave_cache_key_normalised():
     from backend.wave import build as B
     w = B.build_wave("F2015-270287")
     assert B.build_wave("F2015-0270287") is w
+
+
+def test_delay_is_in_block_minus_scheduled_gate_time():
+    from backend.wave.moves import fcfs_plan
+    from backend.wave.utility import metrics_map
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    m = metrics_map(w, p)[w.focus]
+    assert m.delay_min == pytest.approx(max(0.0, m.in_block_min - w.flight(w.focus).sched_min), abs=0.05)

@@ -307,7 +307,7 @@ def test_divert_delay_includes_existing_delay():
     from backend.wave.model import Assignment, FlightMetrics
     from backend.wave.model import JointPlan
     from backend.wave.moves import fcfs_plan
-    from backend.wave.utility import DIVERT_EXTRA_DELAY_MIN, metrics_map
+    from backend.wave.utility import DIVERT_EXTRA_DELAY_MIN, metrics_map, taxi_in_ref
     from tests.fixtures import make_wave
     w = make_wave()
     f = w.flights[0]
@@ -316,7 +316,9 @@ def test_divert_delay_includes_existing_delay():
     others = [a for a in fcfs_plan(w2).assignments if a.callsign != f.callsign]
     divert = Assignment(f.callsign, "divert", None, None, None, 0.0, 0.0, FlightMetrics())
     m = metrics_map(w2, JointPlan([divert, *others]))[f.callsign]
-    assert m.delay_min == pytest.approx(200 + float(f.fuel["alternate_min"]) + DIVERT_EXTRA_DELAY_MIN)
+    # §6.1: the existing delay is measured at in-block (earliest landing + taxi-in reference vs the gate time)
+    assert m.delay_min == pytest.approx(200 + taxi_in_ref(w2, f.callsign) + float(f.fuel["alternate_min"])
+                                        + DIVERT_EXTRA_DELAY_MIN)
 
 
 def test_limits_entries_present():
