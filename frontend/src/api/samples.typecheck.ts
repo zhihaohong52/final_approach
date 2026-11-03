@@ -9,12 +9,12 @@ import trajectories from "./samples/trajectories.json";
 import result22 from "./samples/result.json";
 
 // JSON imports infer `string` for string unions, and `evidence` objects with `undefined` members.
-// Widen exactly that (and `[lat, lon]` tuples, which JSON infers as number[]); optionality and everything
-// else is kept as declared.
+// Widen exactly that (and tuples such as `[lat, lon]` or `[t_min, lat, lon]`, which JSON infers as plain
+// arrays of their element union); optionality and everything else is kept as declared.
 type Widen<T> = T extends string ? string
-  : T extends [number, number] ? number[]
+  : T extends [unknown, ...unknown[]] ? Widen<T[number]>[]
   : T extends object
-    ? (string extends keyof T ? Record<string, string | number | undefined> : { [K in keyof T]: Widen<T[K]> })
+    ? (string extends keyof T ? Record<string, Widen<T[string & keyof T]> | undefined> : { [K in keyof T]: Widen<T[K]> })
     : T;
 
 const chk = <X,>(_: X): void => {};
