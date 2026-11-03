@@ -35,8 +35,8 @@ Status-quo diversions (mean): 0.0
 
 Rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
 
-- typesafe/jev-1.14 is worse than formula on delay (332.354 > 331.66 min) and not better on pax protected: formula selected.
-- typesafe/jev-1.14 meets all three thresholds (error, p95, consensus) and has the best outcome among qualifying arms.
+- Formula selected: the best model arm, typesafe/jev-1.14, is worse than formula on delay (332.354 > 331.66 min) and not better on pax protected.
+- typesafe/jev-1.14 is the best model arm but not the overall winner: it meets all three thresholds (error, p95, consensus) and has the best outcome among the qualifying model arms.
 - Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.
 - cost_usd_per_wave = 0.0: output tokens free; input cost not measured.
 - fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).

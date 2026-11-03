@@ -591,7 +591,7 @@ All additions are optional fields or new endpoints. v2.1 clients keep working.
    (c) per-rule veto counts for the new rules.
    Only (b) is comparable across engines as "agent quality". Headline claims use (b).
 5. **Taxi validation (no fitting):** for every flights2015 benchmark focus flight on a real surface tier,
-   compare routed `taxi_min` under the FCFS plan with that flight's real BTS `TAXI_IN`. Publish MAE, bias
+   compare routed `total_min` (ROT + taxi, wheels-on to in-block) under the FCFS plan with that flight's real BTS `TAXI_IN`. Publish MAE, bias
    and per-airport medians against the 2015 BTS medians (§4.3), plus the 5 worst cases with a likely
    cause. Expected bias: routed < real, because BTS includes gate waits. That is stated, not corrected.
 6. **Coverage:** the share of waves per tier (procedures, surface, ground traffic) appears in the report and

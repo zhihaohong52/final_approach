@@ -1,3 +1,6 @@
+import pytest
+
+from backend.wave import benchmark as B, build
 from backend.wave.benchmark import main
 
 SUMMARY_KEYS = {"consensus_rate_pct", "mean_rounds", "fallback_rate_pct", "rule_violations_in_agreed_plans",
@@ -237,7 +240,6 @@ def test_archive_order_and_attribution_notes(tmp_path):
     assert a["notes"] and "differ" in a["notes"][0]
 
 
-import pytest
 
 
 @pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the v2 row survives as non-current history
@@ -279,7 +281,6 @@ def test_markdown_definition_change_caveat_under_regressions():
     assert "not flight physics" not in B.markdown(rep)
 
 
-from backend.wave import benchmark as B, build
 
 _w_ord = lambda: build.build_wave("F2015-270287")   # noqa: E731
 
@@ -306,6 +307,8 @@ def test_taxi_validation_values_and_cause():
 
 
 def test_coverage_tiers_and_markdown_sections():
+    # run with ATM_STORE=files: movements2015 is database-only, so ground_traffic is "partial" here; on Postgres the
+    # same wave would count as "real"
     w = _w_ord()
     cov = B.coverage([w], n_failed=1)
     assert set(cov) == {"procedures", "surface", "ground_traffic"}
@@ -321,3 +324,15 @@ def test_coverage_tiers_and_markdown_sections():
     md = B.markdown(rep)
     assert "## Taxi-in validation vs BTS 2015" in md and "| ORD | 1 |" in md and "## Coverage" in md
     assert "surface: real 1, none 1" in md
+
+
+def test_formula_override_reasons_do_not_contradict():
+    def arm(m, d, p="openrouter"):
+        return {"model": m, "provider": p, "label": m, "n_ok": 50, "failed_ids": [], "p95_all_ms": 100.0,
+                "summary": {"delay_min": d, "pax_protected_pct": 30, "brier": 0.1, "latency_p95_ms": 100.0,
+                            "error_rate_pct": 0.0, "consensus_rate_pct": 98.0, "fallback_rate_pct": 0.0}}
+    sel, best = B.select([arm("jev", 332.4), arm("formula", 331.7, "formula")], 50, {"delay_min": 325.6})
+    assert sel["winner"] == "formula" and best["model"] == "jev"
+    assert sel["reasons"][0].startswith("Formula selected: the best model arm, jev,")
+    assert "best model arm but not the overall winner" in sel["reasons"][1]
+    assert not any("best outcome among qualifying arms" in r for r in sel["reasons"])

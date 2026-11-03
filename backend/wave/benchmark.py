@@ -532,7 +532,8 @@ def select(arms: list[dict], n_total: int, baseline: dict) -> tuple[dict, dict |
           and a["summary"]["consensus_rate_pct"] >= CONSENSUS_LIMIT_PCT]
     if ok:
         win = max(ok, key=key)
-        lead = f"{win['label']} meets all three thresholds (error, p95, consensus) and has the best outcome among qualifying arms."
+        lead = (f"{win['label']} is the best model arm: it meets all three thresholds (error, p95, consensus) and has "
+                "the best outcome among the qualifying model arms.")
     else:
         win = max(eligible, key=key)
         lead = ("No arm met error < 2%, p95 < 1000 ms and consensus >= 90%: " + ", ".join(
@@ -544,8 +545,9 @@ def select(arms: list[dict], n_total: int, baseline: dict) -> tuple[dict, dict |
     if formula is not None:
         ws, fs = win["summary"], formula["summary"]
         if ws["delay_min"] > fs["delay_min"] and ws["pax_protected_pct"] <= fs["pax_protected_pct"]:
-            reasons.insert(0, f"{win['label']} is worse than formula on delay ({ws['delay_min']} > {fs['delay_min']} min) "
-                              "and not better on pax protected: formula selected.")
+            reasons.insert(0, f"Formula selected: the best model arm, {win['label']}, is worse than formula on delay "
+                              f"({ws['delay_min']} > {fs['delay_min']} min) and not better on pax protected.")
+            reasons[1] = reasons[1].replace("is the best model arm:", "is the best model arm but not the overall winner:")
             winner = "formula"
         reasons.append(f"Mean delay: {win['label']} {ws['delay_min']} min vs formula {fs['delay_min']} min "
                        f"vs status quo {baseline['delay_min']} min.")
