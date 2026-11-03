@@ -75,27 +75,27 @@ def test_firm_zero_fuel_floor():
     # but firm has no slack, so the candidate breaches at allowed == 0 + 0 + 0.5
     w = make_wave()
     p = fcfs_plan(w)
-    out = breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 1.0))
+    out = breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 1.0), source="status_quo")
     assert out == [{"callsign": "DL201", "metric": "fuel_kg", "floor": 0.0, "value": 1.0, "allowed": 0.5,
                     "floor_source": "status_quo"}]
     # the eps absorbs metric rounding only: 0.4 kg over is not a breach
-    assert breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 0.4)) == []
+    assert breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 0.4), source="status_quo") == []
 
 
 def test_firm_delay_floor_and_label():
     w = make_wave()
     p = fcfs_plan(w)
     out = breaches(w, p, "DL", p, "firm", 2, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.1, 0.0),
-                   floor_source="best_seen")
+                   source="best_seen")
     assert out == [{"callsign": "DL201", "metric": "delay_min", "floor": 10.0, "value": 10.1,
                     "allowed": pytest.approx(10.05), "floor_source": "best_seen"}]
-    assert breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.05, 0.0)) == []
+    assert breaches(w, p, "DL", p, "firm", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.05, 0.0), source="status_quo") == []
     with pytest.raises(ValueError):
-        breaches(w, p, "DL", p, "firm", 1, floor_source="original")
+        breaches(w, p, "DL", p, "firm", 1, source="original")
     with pytest.raises(ValueError):
-        breaches(w, p, "DL", p, "lenient", 1)
+        breaches(w, p, "DL", p, "lenient", 1, source="status_quo")
     with pytest.raises(ValueError):
-        breaches(w, p, "ZZ", p, "firm", 1)
+        breaches(w, p, "ZZ", p, "firm", 1, source="status_quo")
 
 
 def test_relaxing_admits_fuel_from_turn_1():
@@ -104,10 +104,10 @@ def test_relaxing_admits_fuel_from_turn_1():
     w = make_wave()
     p = fcfs_plan(w)
     # the same 1 kg that breaches under firm is inside the turn-1 allowance (0.10 x 1200 + 0.5 kg)
-    assert breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 1.0)) == []
+    assert breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(10.0, 1.0), source="status_quo") == []
     # delay: turn 1 allows floor + 0.10 x 60 + 0.05 min; 6.1 min over breaches, 6.0 does not
-    assert breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(16.0, 0.0)) == []
-    out = breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(16.1, 0.0))
+    assert breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(16.0, 0.0), source="status_quo") == []
+    out = breaches(w, p, "DL", p, "relaxing", 1, mm_floor=_mm(10.0, 0.0), mm_plan=_mm(16.1, 0.0), source="status_quo")
     assert [(b["callsign"], b["metric"]) for b in out] == [("DL201", "delay_min")]
     assert out[0]["allowed"] == pytest.approx(16.05)
 
@@ -115,8 +115,8 @@ def test_relaxing_admits_fuel_from_turn_1():
 def test_breaches_real_metrics():
     w = make_wave()
     p = fcfs_plan(w)
-    assert breaches(w, p, "DL", p, "firm", 1) == []          # a plan never breaches its own floor
-    assert breaches(w, p, "DL", None, "firm", 1) == []       # no floor yet: nothing to breach (F5)
+    assert breaches(w, p, "DL", p, "firm", 1, source="status_quo") == []          # a plan never breaches its own floor
+    assert breaches(w, p, "DL", None, "firm", 1, source="status_quo") == []       # no floor yet: nothing to breach (F5)
 
 
 def test_floor_source():
@@ -130,7 +130,6 @@ def test_floor_source():
 def test_current(monkeypatch, caplog):
     assert VARIANTS == ("firm", "relaxing") and FAIRNESS_DEFAULT == "firm"
     monkeypatch.delenv("ATM_FAIRNESS", raising=False)
-    monkeypatch.setattr(fairness, "_override", None)
     monkeypatch.setattr(fairness, "_warned", set())
     assert current() == "firm"
     monkeypatch.setenv("ATM_FAIRNESS", "relaxing")
@@ -140,10 +139,41 @@ def test_current(monkeypatch, caplog):
         assert current() == FAIRNESS_DEFAULT
         assert current() == FAIRNESS_DEFAULT      # warned once per bad value, not on every call
     assert len([r for r in caplog.records if "ATM_FAIRNESS" in r.getMessage()]) == 1
-    fairness.set_override("relaxing")
-    monkeypatch.setenv("ATM_FAIRNESS", "firm")
-    assert current() == "relaxing"
-    fairness.set_override(None)
+    monkeypatch.setenv("ATM_FAIRNESS", "")
     assert current() == "firm"
+    assert not hasattr(fairness, "set_override") and not hasattr(fairness, "_override")   # per-call only (I-1)
+
+
+def test_source_is_required_keyword():
+    w = make_wave()
+    p = fcfs_plan(w)
+    with pytest.raises(TypeError):
+        breaches(w, p, "DL", p, "firm", 1)
+
+
+def test_slack_turn_range():
+    for rnd in (0, 4, -1):
+        with pytest.raises(ValueError):
+            slack("relaxing", rnd)
+        with pytest.raises(ValueError):
+            slack("firm", rnd)
+    w = make_wave()
+    p = fcfs_plan(w)
     with pytest.raises(ValueError):
-        fairness.set_override("bogus")
+        breaches(w, p, "DL", p, "relaxing", 0, source="status_quo")
+
+
+def test_fuel_budget_shared():
+    w = make_wave()
+    assert utility.fuel_budget(w.flight("DL201")) == pytest.approx(1200.0)   # 30 min x 2400 kg/h
+    assert utility.fuel_budget(w.flight("DL100")) == pytest.approx(3250.0)   # 30 min x 6500 kg/h
+
+
+def test_focus_callsign_skipped_at_unit_weight(monkeypatch):
+    w = make_wave()
+    p = fcfs_plan(w)
+    mm = metrics_map(w, p)
+    def boom(_):
+        raise AssertionError("focus_callsign called with FOCUS_WEIGHT == 1.0")
+    monkeypatch.setattr(utility, "focus_callsign", boom)
+    agent_terms(w, p, "AIRLINE:DL", mm)

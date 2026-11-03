@@ -230,6 +230,26 @@ def _taxi_extra(wave: Wave, a: Assignment, m: FlightMetrics | None = None) -> fl
     return max(0.0, taxi - min(alts, default=tx.taxi_min)) / TAXI_ROUTED_CAP_MIN
 
 
+def fuel_budget(f: WaveFlight) -> float:
+    """The PILOT fuel budget (kg): max(extra_min, 1) x hold_burn. Shared by the PILOT and AIRLINE fuel terms
+    and the fairness floor's fuel cap."""
+    return max(fuel_info(f)[0], 1.0) * hold_burn(f)
+
+
+def _flight_penalties(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics], cs: str,
+                      next_departure: bool = False) -> dict[str, float]:
+    """One flight's unweighted penalties in [0, 1] (the PILOT formulas): fuel, delay, connections, divert,
+    plus next_departure when asked (AIRLINE)."""
+    a, f, m = plan.get(cs), wave.flight(cs), mm[cs]
+    out = {"fuel": DIVERT_FUEL_TERM if a.action == "divert" else _clip(m.fuel_kg / fuel_budget(f)),
+           "delay": _clip(m.delay_min / DELAY_CAP_MIN),
+           "connections": _clip(1 - m.pax_protected / m.pax_total) if m.pax_total else 0.0,
+           "divert": 1.0 if a.action == "divert" else 0.0}
+    if next_departure:
+        out["next_departure"] = _clip(m.next_dep_delay_min / NEXT_DEP_CAP_MIN)
+    return out
+
+
 def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
                 mm: dict[str, FlightMetrics] | None = None) -> dict[str, float]:
     """Weighted penalty terms (each <= 0) of an agent's utility. utility = 1 + sum(terms)."""
@@ -273,38 +293,18 @@ def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
         own = airlines.groups(wave).get(code)
         if not own:
             raise ValueError(f"unknown agent {agent_id!r}")
-        focus = focus_callsign(wave)
+        focus = focus_callsign(wave) if FOCUS_WEIGHT != 1.0 else None
         acc = dict.fromkeys(W_AIRLINE, 0.0)
         wsum = 0.0
         for cs in own:
-            a, f, m = plan.get(cs), wave.flight(cs), mm[cs]
             wt = FOCUS_WEIGHT if cs == focus else 1.0
-            if a.action == "divert":
-                fuel_pen = DIVERT_FUEL_TERM
-            else:
-                fuel_pen = _clip(m.fuel_kg / (max(fuel_info(f)[0], 1.0) * hold_burn(f)))
-            acc["fuel"] += wt * fuel_pen
-            acc["delay"] += wt * _clip(m.delay_min / DELAY_CAP_MIN)
-            acc["connections"] += wt * (_clip(1 - m.pax_protected / m.pax_total) if m.pax_total else 0.0)
-            acc["next_departure"] += wt * _clip(m.next_dep_delay_min / NEXT_DEP_CAP_MIN)
-            acc["divert"] += wt * (1.0 if a.action == "divert" else 0.0)
+            for k, v in _flight_penalties(wave, plan, mm, cs, next_departure=True).items():
+                acc[k] += wt * v
             wsum += wt
         return {k: -W_AIRLINE[k] * acc[k] / wsum for k in W_AIRLINE}
     if agent_id.startswith("PILOT:"):
         cs = agent_id.split(":", 1)[1]
-        a = plan.get(cs)
-        f = wave.flight(cs)
-        m = mm[cs]
-        if a.action == "divert":
-            fuel_pen = DIVERT_FUEL_TERM
-        else:
-            budget = max(fuel_info(f)[0], 1.0) * hold_burn(f)
-            fuel_pen = _clip(m.fuel_kg / budget)
-        conn = 1 - m.pax_protected / m.pax_total if m.pax_total else 0.0
-        return {"fuel": -W_PILOT["fuel"] * fuel_pen,
-                "delay": -W_PILOT["delay"] * _clip(m.delay_min / DELAY_CAP_MIN),
-                "connections": -W_PILOT["connections"] * _clip(conn),
-                "divert": -W_PILOT["divert"] * (1.0 if a.action == "divert" else 0.0)}
+        return {k: -W_PILOT[k] * v for k, v in _flight_penalties(wave, plan, mm, cs).items()}
     raise ValueError(f"unknown agent {agent_id!r}")
 
 
