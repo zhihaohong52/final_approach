@@ -10,10 +10,14 @@ Pure assembly over the per-wave route cache (`route.routes_for_wave`, read-only)
     before the final. A slot before the earliest landing (D < 0, which PLT-EARLIEST-ETA rejects) is drawn
     with no laps and no stretch, the route simply timed to land at the slot: the hold identity
     `laps x lap_min + vector_min = D` holds only for D >= 0.
-  * stack (§6.3): only flights with laps >= 1 enter it; levels come from `holding.stack_levels` per hold
-    fix (grouped by fix name), and its violations (more than 5 levels, an exit that is not bottom-first)
-    are reported in `TrajectorySet.stack_violations`, never raised. Hold points are drawn at the level the
-    flight is assigned on entry (the step-down as lower levels empty is not drawn).
+  * a slot at exactly `earliest + k x lap_min` (the `hold` move) gives k laps and no stretch (D / lap_min
+    is snapped by 1e-9 before the floor).
+  * stack (§6.3): only flights with laps >= 1 enter it; one stack per physical fix (name + position to
+    0.001 deg) with one shared hold (`_shared_hold`: published geometry if any holder has it, base = the
+    highest holder base). Levels come from `holding.stack_levels`; its violations (more than 5 levels, an
+    exit that is not bottom-first) are reported in `TrajectorySet.stack_violations`, never raised. Laps are
+    drawn on the shared racetrack at the level assigned on entry (the step-down is not drawn), each timed
+    with the flight's own `lap_min` (its route hold at its own base), which the laps/vector split uses.
   * fixed traffic (queue arrivals): `wave=False`, zero laps, the nominal route timed to land at its slot.
 Nothing here decides legality: the rules read these objects.
 """
@@ -36,9 +40,10 @@ class AirTrack:
     """One flight's airborne path for a plan.
 
     `points` are dicts {t_min, lat, lon, alt_ft, kind, fix?, src, alt_src}. `lap_min` is the lap time of
-    the hold at its base level (`HoldSpec.lap_min`), used for every level of the stack; it is set whenever
+    the flight's route hold at its base level (`HoldSpec.lap_min`), used for every level of the stack; it is set whenever
     the flight has a route (even with zero laps) and None in the no-geometry tier, where `points` is empty.
-    `hold` (contract shape) and `hold_fix` / `hold_level_ft` are set only when laps >= 1.
+    `hold` (contract shape) and `hold_fix` / `hold_level_ft` are set only when laps >= 1 and the stack gave
+    the flight a level (otherwise a note says why).
     `route_extra_min = T_route(runway) - T_route(nominal)` (0 for fixed traffic and without geometry).
     `src_tier` is the route tier ("star+iap" | "iap" | "straight-in") or "none" without geometry.
     Drawn points stay within 150 NM of the airport reference point: a route entering from farther out is
@@ -61,6 +66,7 @@ class AirTrack:
     src_tier: str
     entry_fix: str | None = None        # published entry fix (route start), kept when the drawn track is clipped
     entry_fix_min: float | None = None  # time at the entry fix (not serialised)
+    notes: list[str] = field(default_factory=list)   # drawing caveats (clip, stack), not serialised
 
     def to_dict(self) -> dict:
         """Contract `TrajectorySet.air[]` entry (`fix` and `hold` omitted when None; `alt_src` is internal)."""
@@ -97,10 +103,10 @@ class TrajectorySet:
 
 # --------------------------------------------------------------------------- per-wave helpers
 
-_NOMINAL: dict[str, dict[str, str]] = {}
+_NOMINAL: dict[str, dict[str, str | None]] = {}
 
 
-def _nominal(wave: Wave) -> dict[str, str]:
+def _nominal(wave: Wave) -> dict[str, str | None]:
     """callsign -> nominal runway: the FCFS runway for wave flights, the queue runway for fixed traffic."""
     k = route.wave_key(wave)
     hit = _NOMINAL.get(k)
@@ -119,13 +125,19 @@ def _t_route(wave: Wave, callsign: str, runway: str | None) -> float | None:
     return r.t_route_min if r is not None else None
 
 
-def entry_time(wave: Wave, callsign: str) -> float | None:
-    """`eta_earliest_min - T_route(nominal)`; None without geometry for the nominal runway."""
+def _wave_flight(wave: Wave, callsign: str):
     f = next((x for x in wave.flights if x.callsign == callsign), None)
+    if f is None:
+        raise ValueError(f"{callsign} is not a wave flight of {wave.id}")
+    return f
+
+
+def entry_time(wave: Wave, callsign: str) -> float | None:
+    """`eta_earliest_min - T_route(nominal)`; None without geometry for the nominal runway.
+    Raises ValueError when `callsign` is not a wave flight (queue traffic has no earliest time)."""
+    f = _wave_flight(wave, callsign)
     tn = _t_route(wave, callsign, _nominal(wave).get(callsign))
-    if f is None or tn is None:
-        return None
-    return f.eta_earliest_min - tn
+    return None if tn is None else f.eta_earliest_min - tn
 
 
 def _route_extra(wave: Wave, callsign: str, runway: str | None) -> float:
@@ -136,8 +148,9 @@ def _route_extra(wave: Wave, callsign: str, runway: str | None) -> float:
 
 def earliest(wave: Wave, callsign: str, runway: str, sr: float = 0.0, gd: float = 0.0) -> float:
     """Earliest touchdown on `runway`: `t_entry + sr + gd + T_route(runway)`; `eta_earliest_min + sr + gd`
-    on the nominal runway and in the no-geometry tier."""
-    f = wave.flight(callsign)
+    on the nominal runway and in the no-geometry tier. Raises ValueError when `callsign` is not a wave
+    flight (like `entry_time`)."""
+    f = _wave_flight(wave, callsign)
     return f.eta_earliest_min + sr + gd + _route_extra(wave, callsign, runway)
 
 
@@ -175,20 +188,31 @@ def _lap_cached(hold: holding.HoldSpec) -> list[tuple[float, float, float]]:
     return hit
 
 
-def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float,
-              vector_min: float) -> tuple[list[dict], float | None]:
-    """Points of route `r` with `laps` laps at the hold fix and `vector_min` of stretch before the final,
-    timed so the threshold is crossed at `slot`; and the hold entry time (None without laps). Hold points
-    are drawn at the hold's base level; the caller sets the stack level."""
+def _i_final(r: route.Route) -> int:
+    """Index of the first final-approach point (the vector stretch is inserted before it)."""
+    return next((i for i, p in enumerate(r.points) if p.kind in ("final", "threshold") and i > 0),
+                len(r.points) - 1)
+
+
+def _hold_entry(r: route.Route, slot: float, laps: int, lap_min: float, vector_min: float) -> float:
+    """Time the flight reaches its hold fix (as drawn by `_assemble`)."""
+    appears = slot - (r.t_route_min + laps * lap_min + vector_min)
+    return appears + r.points[r.hold_index].t_min + (vector_min if r.hold_index >= _i_final(r) else 0.0)
+
+
+def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float, vector_min: float,
+              draw: holding.HoldSpec, level_ft: float) -> list[dict]:
+    """Points of route `r` with `laps` laps (each `lap_min`) at the hold fix and `vector_min` of stretch
+    before the final, timed so the threshold is crossed at `slot`. Laps fly the racetrack of `draw` (the
+    stack's shared hold) at `level_ft`."""
     pts = r.points
     n = len(pts)
     hold_min = laps * lap_min
     appears = slot - (r.t_route_min + hold_min + vector_min)
     hi = r.hold_index
-    i_fin = next((i for i, p in enumerate(pts) if p.kind in ("final", "threshold") and i > 0), n - 1)
+    i_fin = _i_final(r)
     draw_vec = vector_min > MIN_VECTOR_DRAW_MIN
     out: list[dict] = []
-    t_in = None
     for i, p in enumerate(pts):
         off = (hold_min if i > hi else 0.0) + (vector_min if i >= i_fin else 0.0)
         if i == i_fin and draw_vec:
@@ -202,25 +226,25 @@ def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float
         t = slot if i == n - 1 else appears + p.t_min + off
         out.append(_pt(t, p.lat, p.lon, p.alt_ft, p.kind, p.fix, p.src, p.alt_src))
         if i == hi and laps > 0:
-            t_in = t
-            lap = _lap_cached(r.hold)
-            alt = float(r.hold.base_ft)
             for k in range(laps):
-                for lat, lon, frac in lap:
-                    fix = r.hold.fix if frac >= 1.0 else None
-                    out.append(_pt(t_in + (k + frac) * lap_min, lat, lon, alt, "hold", fix, r.hold.src,
+                for lat, lon, frac in _lap_cached(draw):
+                    fix = draw.fix if frac >= 1.0 else None
+                    out.append(_pt(t + (k + frac) * lap_min, lat, lon, float(level_ft), "hold", fix, draw.src,
                                    "constraint"))
-    return out, t_in
+    return out
 
 
-def _clip(wave: Wave, pts: list[dict]) -> list[dict]:
+def _clip(wave: Wave, pts: list[dict]) -> tuple[list[dict], str | None]:
     """Drop the leading points beyond RADAR_NM of the airport reference point and start the track with one
     interpolated `entry` point (`synth`, no fix) on the boundary; t_min, alt_ft and lat/lon are interpolated
-    along the segment (bisection on the segment fraction)."""
+    along the segment (bisection on the segment fraction). Returns (points, note); when no point is within
+    RADAR_NM the points are returned unclipped with a note."""
     a = wave.airport
     k = next((i for i, p in enumerate(pts) if route._nm(p["lat"], p["lon"], a.lat, a.lon) <= RADAR_NM), None)
-    if k is None or k == 0:
-        return pts
+    if k is None:
+        return pts, f"no point within {RADAR_NM:.0f} NM of the airport reference point; track not clipped"
+    if k == 0:
+        return pts, None
     p, q = pts[k - 1], pts[k]
 
     def at(f):
@@ -235,12 +259,30 @@ def _clip(wave: Wave, pts: list[dict]) -> list[dict]:
         else:
             hi = mid
     b = at(hi)
-    return [_pt(b["t_min"], b["lat"], b["lon"], b["alt_ft"], "entry", None, "synth", "interp"), *pts[k:]]
+    return [_pt(b["t_min"], b["lat"], b["lon"], b["alt_ft"], "entry", None, "synth", "interp"), *pts[k:]], None
+
+
+def _stack_key(h: holding.HoldSpec) -> tuple:
+    """One stack per physical fix: name plus position rounded to 0.001 deg (~0.06 NM); straight-in holds are
+    all named "HOLD" and corner posts "CPnnn" while sitting at different places."""
+    return (h.fix, round(h.lat, 3), round(h.lon, 3))
+
+
+def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]]) -> holding.HoldSpec:
+    """The stack's hold from its holders' (runway, callsign, HoldSpec): inbound course, turn and leg from a
+    published (cifp) hold if any holder has one, else from the holder with the smallest (runway, callsign);
+    base = the highest holder base, so every level is at or above each holder's own base."""
+    ms = sorted(members, key=lambda m: (m[0], m[1]))
+    ref = next((m[2] for m in ms if m[2].src == "cifp"), ms[0][2])
+    base = max(m[2].base_ft for m in ms)
+    if base == ref.base_ft:
+        return ref
+    return holding.make_hold(ref.fix, ref.lat, ref.lon, ref.inbound_true, ref.turn,
+                             ref.leg_min if ref.src == "cifp" else None, base, ref.src)
 
 
 def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     routes = route.routes_for_wave(wave)
-    nominal = _nominal(wave)
     rows = []   # (callsign, is_wave, runway, slot, route or None, laps, lap_min, vector, extra)
     for a in plan.assignments:
         if a.action != "land" or not a.runway or a.slot_min is None or not math.isfinite(a.slot_min):
@@ -254,10 +296,9 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
             rows.append((a.callsign, True, a.runway, slot, None, 0, None, max(D, 0.0), 0.0))
             continue
         lap = r.hold.lap_min
-        laps = int(math.floor(D / lap)) if D > 0 else 0
-        vec = D - laps * lap if D > 0 else 0.0
-        if not 0.0 <= vec < lap:   # floating point at an exact multiple of the lap
-            vec = min(max(vec, 0.0), lap)
+        # snap: a slot at exactly earliest + k laps (the hold move) gives k laps, not k-1 plus a full lap
+        laps = int(math.floor(D / lap + 1e-9)) if D > 0 else 0
+        vec = max(D - laps * lap, 0.0) if D > 0 else 0.0
         rows.append((a.callsign, True, a.runway, slot, r, laps, lap, vec,
                      _route_extra(wave, a.callsign, a.runway)))
     for q in wave.queue:
@@ -265,25 +306,25 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
         rows.append((q.callsign, False, q.runway, float(q.slot_min), r, 0,
                      r.hold.lap_min if r is not None else None, 0.0, 0.0))
 
-    tracks = []   # (row, points, hold entry time)
-    for row in rows:
-        cs, is_wave, rwy, slot, r, laps, lap, vec, extra = row
-        if r is None:
-            tracks.append((row, [], None))
-        else:
-            tracks.append((row, *_assemble(wave, r, slot, laps, lap, vec)))
-
-    # stack per hold fix: only flights with laps >= 1
-    groups: dict[str, list] = {}
-    for (cs, _, _, _, r, laps, lap, _, _), _, t_in in tracks:
+    # stack per physical hold fix: only flights with laps >= 1
+    groups: dict[tuple, list] = {}
+    for cs, _, rwy, slot, r, laps, lap, vec, _ in rows:
         if r is not None and laps >= 1:
-            groups.setdefault(r.hold.fix, []).append((cs, t_in, t_in + laps * lap, r.hold))
+            t_in = _hold_entry(r, slot, laps, lap, vec)
+            groups.setdefault(_stack_key(r.hold), []).append((cs, t_in, t_in + laps * lap, rwy, r.hold))
+    names: dict[str, int] = {}
+    for key in groups:
+        names[key[0]] = names.get(key[0], 0) + 1
+    shared: dict[tuple, holding.HoldSpec] = {}
     levels: dict[str, int] = {}
+    entry: dict[str, float] = {}
     violations: dict[str, list[str]] = {}
-    for fix, hs in groups.items():
+    for key, hs in groups.items():
+        fix = key[0] if names[key[0]] == 1 else f"{key[0]}@{key[1]:.3f},{key[2]:.3f}"
+        spec = shared[key] = _shared_hold([(h[3], h[0], h[4]) for h in hs])
         hs.sort(key=lambda h: (h[1], h[0]))
         seen, holders, bad = set(), [], []
-        for cs, t_in, t_out, _ in hs:
+        for cs, t_in, t_out, _, _ in hs:
             if cs in seen:
                 bad.append(f"{cs} listed twice at {fix}; second entry ignored")
                 continue
@@ -292,30 +333,39 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
                 continue
             seen.add(cs)
             holders.append((cs, t_in, t_out))
-        base = min((h[3] for h in hs), key=lambda h: h.base_ft)
-        lv, sbad = holding.stack_levels(holders, base)
+            entry[cs] = t_in
+        lv, sbad = holding.stack_levels(holders, spec)
         levels.update(lv)
         bad += sbad
         if bad:
             violations[fix] = bad
 
     air: list[AirTrack] = []
-    for (cs, is_wave, rwy, slot, r, laps, lap, vec, extra), pts, t_in in tracks:
+    for cs, is_wave, rwy, slot, r, laps, lap, vec, extra in rows:
         if r is None:
             air.append(AirTrack(cs, is_wave, rwy, slot, [], None, 0.0, 0.0, 0, vec, None, None, None, "none"))
             continue
+        notes: list[str] = []
+        draw = shared.get(_stack_key(r.hold), r.hold) if laps >= 1 else r.hold
         level = levels.get(cs) if laps >= 1 else None
         hold = None
         if laps >= 1:
-            for p in pts:
-                if p["kind"] == "hold" and level is not None:
-                    p["alt_ft"] = float(level)
-            hold = {"fix": r.hold.fix, "laps": laps, "level_ft": level, "entry_min": t_in,
-                    "exit_min": t_in + laps * lap, "lap_min": lap}
+            if level is None:
+                notes.append(f"{cs}: {laps} laps at {draw.fix} but no stack level assigned; hold not reported")
+            else:
+                hold = {"fix": draw.fix, "laps": laps, "level_ft": level, "entry_min": entry[cs],
+                        "exit_min": entry[cs] + laps * lap, "lap_min": lap}
+        pts = _assemble(wave, r, slot, laps, lap, vec, draw, level if level is not None else draw.base_ft)
         fix_min = pts[0]["t_min"]
-        pts = _clip(wave, pts)
+        pts, note = _clip(wave, pts)
+        if note:
+            notes.append(note)
+        a = wave.airport
+        if route._nm(r.hold.lat, r.hold.lon, a.lat, a.lon) > RADAR_NM:
+            notes.append(f"hold fix {r.hold.fix} is beyond {RADAR_NM:.0f} NM of the airport reference point")
         air.append(AirTrack(cs, is_wave, rwy, pts[0]["t_min"], pts, hold, r.t_route_min, extra, laps, vec, lap,
-                            r.hold.fix if laps >= 1 else None, level, r.tier, r.entry_fix, fix_min))
+                            draw.fix if hold is not None else None, level if hold is not None else None,
+                            r.tier, r.entry_fix, fix_min, notes))
     return TrajectorySet(plan.id, ENGINE_VERSION, air, stack_violations=violations)
 
 

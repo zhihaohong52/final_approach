@@ -1,10 +1,13 @@
 import math
+from pathlib import Path
+
 import pytest
 from atm.wave import build, route, trajectory
 from atm.wave.moves import fcfs_plan, fcfs_runways
 from atm.wave.fixtures import make_wave
 
 ORD = "F2015-270287"
+REPLAYS = sorted((Path(__file__).resolve().parents[1] / "data" / "replay").glob("*.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -51,10 +54,11 @@ def test_vector_only_flight_not_in_stack():
     assert t.laps == 0 and t.vector_min > 0 and t.hold_level_ft is None
 
 def test_points_within_150nm_and_replay_plans_invariant():
-    import glob, json
+    import json
     from atm.wave.edit import plan_from_dicts
-    for f in sorted(glob.glob("data/replay/*.json")):
-        d = json.load(open(f)); w = build.build_wave(d["result"]["wave_id"])
+    assert REPLAYS
+    for f in REPLAYS:
+        d = json.loads(f.read_text()); w = build.build_wave(d["result"]["wave_id"])
         for p in (fcfs_plan(w), plan_from_dicts(d["result"]["final_plan"]["assignments"])):
             for t in trajectory.build(w, p).air:
                 assert all(_nm_from_arp(w, q) <= 150 for q in t.points)     # helper: great-circle NM to the airport reference point
@@ -64,6 +68,9 @@ def test_queue_traffic_drawn_with_zero_laps():
     w = build.build_wave("F2015-75")   # DFW, 13 queue arrivals
     ts = trajectory.build(w, fcfs_plan(w))
     assert sum(not x.wave for x in ts.air) == len(w.queue) and all(x.laps == 0 for x in ts.air if not x.wave)
+    slots = {q.callsign: q.slot_min for q in w.queue}
+    drawn = [x for x in ts.air if not x.wave and x.points]
+    assert drawn and all(x.points[-1]["t_min"] == pytest.approx(slots[x.callsign], abs=1e-6) for x in drawn)
 
 def test_earliest_no_geometry_tier_is_v2():
     w = make_wave()
@@ -84,3 +91,64 @@ def test_far_entry_clipped_at_150nm_with_full_route_timing():
         assert t.entry_fix_min == pytest.approx(trajectory.entry_time(w, t.callsign), abs=1e-6)
         assert t.points[-1]["t_min"] == pytest.approx(p.get(t.callsign).slot_min, abs=1e-6)
         assert all(_nm_from_arp(w, q) <= 150 for q in t.points)
+
+
+def _reslot(p, a, **kw):
+    return p.with_assignment(type(a)(**{**a.__dict__, **kw}))
+
+
+def test_exact_lap_multiple_gives_whole_laps():
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w); a = p.assignments[0]
+    e = trajectory.earliest(w, a.callsign, a.runway)
+    lap = next(x for x in trajectory.build(w, p).air if x.callsign == a.callsign).lap_min
+    for k in (1, 2, 3, 4):
+        t = next(x for x in trajectory.build(w, _reslot(p, a, slot_min=e + k * lap)).air if x.callsign == a.callsign)
+        assert t.laps == k and t.vector_min == pytest.approx(0.0, abs=1e-6)
+        assert t.hold is not None and t.hold["laps"] == k and isinstance(t.hold["level_ft"], int)
+
+
+def test_slot_before_earliest_draws_no_hold_and_lands_at_slot():
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w); a = p.assignments[0]
+    slot = trajectory.earliest(w, a.callsign, a.runway) - 5.0
+    t = next(x for x in trajectory.build(w, _reslot(p, a, slot_min=slot)).air if x.callsign == a.callsign)
+    assert t.laps == 0 and t.vector_min == 0 and t.hold is None
+    assert t.points[-1]["t_min"] == pytest.approx(slot, abs=1e-6)
+    assert all(q["t_min"] >= p_["t_min"] for p_, q in zip(t.points, t.points[1:]))
+
+
+def test_stack_shares_one_hold_per_physical_fix_with_highest_base():
+    from atm.wave import holding
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    pl = p
+    for i, a in enumerate(p.assignments):   # everyone to one runway, holding together
+        rw = p.assignments[0].runway
+        pl = _reslot(pl, a, runway=rw, slot_min=trajectory.earliest(w, a.callsign, rw) + 30 + i * 0.1)
+    ts = trajectory.build(w, pl)
+    routes = route.routes_for_wave(w)
+    holders = [t for t in ts.air if t.wave and t.laps >= 1]
+    assert holders
+    by_fix = {}
+    for t in holders:
+        by_fix.setdefault(t.hold_fix, []).append(t)
+    for fix, ts_ in by_fix.items():
+        bases = [routes[(t.callsign, t.runway)].hold.base_ft for t in ts_]
+        assert all(t.hold["level_ft"] >= max(bases) for t in ts_)
+        for x in ts_:   # holders at the fix at the same time are on different levels
+            for y in ts_:
+                if x is not y and x.hold["entry_min"] <= y.hold["entry_min"] < x.hold["exit_min"]:
+                    assert x.hold["level_ft"] != y.hold["level_ft"]
+        polys = {tuple((round(q["lat"], 6), round(q["lon"], 6)) for q in t.points if q["kind"] == "hold")[:24]
+                 for t in ts_}
+        assert len(polys) == 1   # one shared racetrack (first lap) per stack
+    assert all(isinstance(t.to_dict().get("hold", {}).get("level_ft", 0), int) for t in ts.air)
+
+
+def test_unknown_callsign_raises():
+    w = build.build_wave(ORD)
+    with pytest.raises(ValueError):
+        trajectory.earliest(w, "NOPE1", "22R")
+    with pytest.raises(ValueError):
+        trajectory.entry_time(w, "NOPE1")

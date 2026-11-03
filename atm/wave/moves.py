@@ -156,13 +156,13 @@ def _fcfs_order(wave: Wave):
     return sorted(wave.flights, key=lambda f: (f.eta_earliest_min, f.callsign))
 
 
-def fcfs_runways(wave: Wave) -> dict[str, str]:
+def fcfs_runways(wave: Wave) -> dict[str, str | None]:
     """FCFS runway choice per wave flight (callsign -> runway end; None when the airport has no
     runways): by earliest ETA, the best-ranked open runway given the ends already in use."""
     in_use: dict[str, int] = {}
     for q in wave.queue:
         in_use[q.runway] = in_use.get(q.runway, 0) + 1
-    out: dict[str, str] = {}
+    out: dict[str, str | None] = {}
     for f in _fcfs_order(wave):
         ranked = _wind_rank(wave, f.aircraft_type, in_use)
         rw = ranked[0] if ranked else (wave.airport.runways[0].id if wave.airport.runways else None)

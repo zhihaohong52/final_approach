@@ -590,18 +590,35 @@ class _Builder:
         for a, b in zip(pts, pts[1:]):
             cum.append(cum[-1] + _nm(a.lat, a.lon, b.lat, b.lon))
 
-        # hold: fix, base level, geometry
+        # hold fix: the chosen fix must lie before the IF; otherwise the last named route fix before it
+        i_if = self.i_if if self.i_if is not None else n - 1
         hi = next((i for i, p in enumerate(pts) if p.fix == hold_fix), 0) if hold_fix else 0
+        if hi >= i_if:
+            hi = next((i for i in range(i_if - 1, -1, -1) if pts[i].fix is not None), 0)
+            self.notes.append(f"hold fix {hold_fix} is on the final approach; holding at {pts[hi].fix} instead")
         hp = pts[hi]
         i_app = self.i_app if self.i_app is not None else n - 1
-        if hp.alt is not None and hp.alt_src == "constraint":
-            base = hp.alt
-        else:
-            iaf_alt = next((p.alt for p in pts[i_app:] if p.alt is not None and p.alt_src == "constraint"
-                            and p.kind != "threshold"), None)
-            base = iaf_alt if iaf_alt is not None else round(self.elev + HOLD_AGL_FT, -2)
-            if hp.src == "synth" and hp.alt is None:   # the corner post sits at its hold base
-                hp.alt = base
+        own = hp.alt if (hp.alt is not None and hp.alt_src == "constraint") else None
+        if own is None and hp.src == "synth" and hp.alt is None:
+            # corner post: the IAF (approach transition, before the IF) altitude, else 6,000 ft AGL; the post
+            # sits at its hold base
+            iaf_alt = next((p.alt for p in pts[i_app:i_if] if p.alt is not None and p.alt_src == "constraint"),
+                           None)
+            hp.alt = own = iaf_alt if iaf_alt is not None else round(self.elev + HOLD_AGL_FT, -2)
+
+        # altitudes: constraints, unconstrained entry on a 3 deg profile (capped), linear in between
+        if pts[0].alt is None:
+            k = next(i for i in range(n) if pts[i].alt is not None)
+            pts[0].alt = max(pts[k].alt, min(ENTRY_PROFILE_CAP_FT, self.elev + DESCENT_FT_PER_NM * cum[-1]))
+        known = [i for i in range(n) if pts[i].alt is not None]
+        for a, b in zip(known, known[1:]):
+            for i in range(a + 1, b):
+                w = (cum[i] - cum[a]) / (cum[b] - cum[a]) if cum[b] > cum[a] else 0.0
+                pts[i].alt = pts[a].alt + w * (pts[b].alt - pts[a].alt)
+
+        # hold base: the fix's constraint (or the corner post's level above), else the route's interpolated
+        # altitude at the fix rounded to the nearest 1,000 ft (a published fix without a coded altitude)
+        base = own if own is not None else float(round(hp.alt / 1000.0) * 1000)
         coded = next((h for h in (self.proc or {}).get("holds") or []
                       if h.get("fix") == hp.fix and h.get("kind") in ("HF", "HM") and h.get("inbound_mag") is not None),
                      None)
@@ -615,18 +632,7 @@ class _Builder:
                 inb = _bearing(hp.lat, hp.lon, pts[1].lat, pts[1].lon)
             hold = holding.make_hold(hp.fix or "HOLD", hp.lat, hp.lon, inb, "R", None, base, "synth")
 
-        # altitudes: constraints, unconstrained entry on a 3 deg profile (capped), linear in between
-        if pts[0].alt is None:
-            k = next(i for i in range(n) if pts[i].alt is not None)
-            pts[0].alt = max(pts[k].alt, min(ENTRY_PROFILE_CAP_FT, self.elev + DESCENT_FT_PER_NM * cum[-1]))
-        known = [i for i in range(n) if pts[i].alt is not None]
-        for a, b in zip(known, known[1:]):
-            for i in range(a + 1, b):
-                w = (cum[i] - cum[a]) / (cum[b] - cum[a]) if cum[b] > cum[a] else 0.0
-                pts[i].alt = pts[a].alt + w * (pts[b].alt - pts[a].alt)
-
         # speeds: phase profile, capped by CIFP speed limits, TAS, headwind on final only
-        i_if = self.i_if if self.i_if is not None else n - 1
         i_faf = next((i for i in range(i_if, n) if pts[i].faf), i_if)
         rwind = next((x for x in self.wave.runway_wind if x.runway == self.rw.id), None)
         hw = (rwind.headwind_kt - rwind.tailwind_kt) if rwind is not None else 0.0
