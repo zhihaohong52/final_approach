@@ -252,7 +252,7 @@ def test_shift_and_change_runway_labels_mention_path():
 
 def test_hold_label_counts_wake_push_as_vector(monkeypatch):
     # a slot pushed past earliest + n laps by wake separation: the label states the applied minutes
-    from atm.wave import build, moves, trajectory
+    from backend.wave import build, moves, trajectory
     w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
     real = moves._earliest_legal
     monkeypatch.setattr(moves, "_earliest_legal", lambda wv, o, wk, fl: real(wv, o, wk, fl + 1.3))
@@ -267,7 +267,7 @@ def _own_violations(w, plan):
 
 
 def test_hold_offered_only_when_it_reduces_atc_or_pilot_violations():
-    from atm.wave import build
+    from backend.wave import build
     for wid in ("F2015-69315", "F2015-58926"):
         w = build.build_wave(wid); p = fcfs_plan(w)
         base = len(_own_violations(w, p))
@@ -278,9 +278,9 @@ def test_hold_offered_only_when_it_reduces_atc_or_pilot_violations():
 @pytest.mark.parametrize("wid", ["F2015-69315", "F2015-58926"])
 def test_formula_negotiation_does_not_hold_for_gate_rules(wid):
     # GND-GATE-FREE is Ground's to fix (gate moves); ATC must not buy it with airborne holding
-    from atm.wave import build, graph
-    from atm.wave.model import Assignment, JointPlan
-    from atm.wave.utility import metrics_map
+    from backend.wave import build, graph
+    from backend.wave.model import Assignment, JointPlan
+    from backend.wave.utility import metrics_map
     w = build.build_wave(wid)
     r = graph.negotiate_wave(w, "formulas")
     held = [x["move"] for e in r["log"] if e["type"] == "AGENT_TURN"

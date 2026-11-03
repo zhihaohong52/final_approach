@@ -326,8 +326,8 @@ def test_views_show_each_flights_path():
 
 
 def test_view_path_without_geometry_and_when_diverted():
-    from atm.wave import moves
-    from atm.wave.utility import negotiators
+    from backend.wave import moves
+    from backend.wave.utility import negotiators
     w = make_wave(); p = moves.fcfs_plan(w)    # fixture wave: no procedures
     v = graph._view(w, p, "ATC")
     assert all(v["path"][a.callsign] == f"no route geometry for {a.runway}" for a in p.assignments)
