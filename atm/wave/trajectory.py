@@ -12,12 +12,16 @@ Pure assembly over the per-wave route cache (`route.routes_for_wave`, read-only)
     `laps x lap_min + vector_min = D` holds only for D >= 0.
   * a slot at exactly `earliest + k x lap_min` (the `hold` move) gives k laps and no stretch (D / lap_min
     is snapped by 1e-9 before the floor).
-  * stack (§6.3): only flights with laps >= 1 enter it; one stack per physical fix (name + position to
-    0.001 deg) with one shared hold (`_shared_hold`: published geometry if any holder has it, base = the
-    highest holder base). Levels come from `holding.stack_levels`; its violations (more than 5 levels, an
-    exit that is not bottom-first) are reported in `TrajectorySet.stack_violations`, never raised. Laps are
-    drawn on the shared racetrack at the level assigned on entry (the step-down is not drawn), each timed
-    with the flight's own `lap_min` (its route hold at its own base), which the laps/vector split uses.
+  * hold per physical fix per wave (`wave_holds`, plan-independent, memoised on the wave key): one hold
+    per fix (name + position to 0.001 deg) over ALL the wave's routes (wave and fixed traffic) that hold
+    there; geometry from a published (cifp) hold if any route has one, else from the route with the smallest
+    (runway, callsign); base = the highest of those routes' bases. Every flight holding there uses it: its
+    `lap_min` (base level) for the laps/vector split, the drawn racetrack, and the stack levels. So a
+    flight's lap time never depends on who else holds in the plan.
+  * stack (§6.3): only flights with laps >= 1 enter it; levels come from `holding.stack_levels`; its
+    violations (more than 5 levels, an exit that is not bottom-first) are reported in
+    `TrajectorySet.stack_violations`, never raised. Laps are drawn at the level assigned on entry (the
+    step-down is not drawn).
   * fixed traffic (queue arrivals): `wave=False`, zero laps, the nominal route timed to land at its slot.
 Nothing here decides legality: the rules read these objects.
 """
@@ -40,7 +44,8 @@ class AirTrack:
     """One flight's airborne path for a plan.
 
     `points` are dicts {t_min, lat, lon, alt_ft, kind, fix?, src, alt_src}. `lap_min` is the lap time of
-    the flight's route hold at its base level (`HoldSpec.lap_min`), used for every level of the stack; it is set whenever
+    the wave's shared hold at the flight's hold fix (`wave_holds`), at its base level (`HoldSpec.lap_min`),
+    used for every level of the stack; it is set whenever
     the flight has a route (even with zero laps) and None in the no-geometry tier, where `points` is empty.
     `hold` (contract shape) and `hold_fix` / `hold_level_ft` are set only when laps >= 1 and the stack gave
     the flight a level (otherwise a note says why).
@@ -269,9 +274,9 @@ def _stack_key(h: holding.HoldSpec) -> tuple:
 
 
 def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]]) -> holding.HoldSpec:
-    """The stack's hold from its holders' (runway, callsign, HoldSpec): inbound course, turn and leg from a
-    published (cifp) hold if any holder has one, else from the holder with the smallest (runway, callsign);
-    base = the highest holder base, so every level is at or above each holder's own base."""
+    """One fix's hold from the (runway, callsign, HoldSpec) of every route holding there: inbound course,
+    turn and leg from a published (cifp) hold if any has one, else from the route with the smallest
+    (runway, callsign); base = the highest route base, so every level is at or above each route's own base."""
     ms = sorted(members, key=lambda m: (m[0], m[1]))
     ref = next((m[2] for m in ms if m[2].src == "cifp"), ms[0][2])
     base = max(m[2].base_ft for m in ms)
@@ -279,6 +284,30 @@ def _shared_hold(members: list[tuple[str, str, holding.HoldSpec]]) -> holding.Ho
         return ref
     return holding.make_hold(ref.fix, ref.lat, ref.lon, ref.inbound_true, ref.turn,
                              ref.leg_min if ref.src == "cifp" else None, base, ref.src)
+
+
+_HOLDS: dict[str, dict[tuple, holding.HoldSpec]] = {}
+
+
+def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
+    """Physical hold fix key (`_stack_key`) -> the wave's shared hold there (see the module docstring).
+    Plan-independent; memoised on the wave key. Treat as read-only."""
+    k = route.wave_key(wave)
+    hit = _HOLDS.get(k)
+    if hit is None:
+        members: dict[tuple, list] = {}
+        for (cs, rwy), r in route.routes_for_wave(wave).items():
+            members.setdefault(_stack_key(r.hold), []).append((rwy, cs, r.hold))
+        hit = {key: _shared_hold(ms) for key, ms in members.items()}
+        while len(_HOLDS) >= CACHE_MAX:
+            _HOLDS.pop(next(iter(_HOLDS)))
+        _HOLDS[k] = hit
+    return hit
+
+
+def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
+    """The wave's shared hold at route `r`'s hold fix."""
+    return wave_holds(wave)[_stack_key(r.hold)]
 
 
 def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
@@ -295,7 +324,7 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
         if r is None:
             rows.append((a.callsign, True, a.runway, slot, None, 0, None, max(D, 0.0), 0.0))
             continue
-        lap = r.hold.lap_min
+        lap = hold_for(wave, r).lap_min
         # snap: a slot at exactly earliest + k laps (the hold move) gives k laps, not k-1 plus a full lap
         laps = int(math.floor(D / lap + 1e-9)) if D > 0 else 0
         vec = max(D - laps * lap, 0.0) if D > 0 else 0.0
@@ -304,27 +333,26 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     for q in wave.queue:
         r = routes.get((q.callsign, q.runway))
         rows.append((q.callsign, False, q.runway, float(q.slot_min), r, 0,
-                     r.hold.lap_min if r is not None else None, 0.0, 0.0))
+                     hold_for(wave, r).lap_min if r is not None else None, 0.0, 0.0))
 
     # stack per physical hold fix: only flights with laps >= 1
     groups: dict[tuple, list] = {}
     for cs, _, rwy, slot, r, laps, lap, vec, _ in rows:
         if r is not None and laps >= 1:
             t_in = _hold_entry(r, slot, laps, lap, vec)
-            groups.setdefault(_stack_key(r.hold), []).append((cs, t_in, t_in + laps * lap, rwy, r.hold))
+            groups.setdefault(_stack_key(r.hold), []).append((cs, t_in, t_in + laps * lap))
     names: dict[str, int] = {}
     for key in groups:
         names[key[0]] = names.get(key[0], 0) + 1
-    shared: dict[tuple, holding.HoldSpec] = {}
     levels: dict[str, int] = {}
     entry: dict[str, float] = {}
     violations: dict[str, list[str]] = {}
     for key, hs in groups.items():
         fix = key[0] if names[key[0]] == 1 else f"{key[0]}@{key[1]:.3f},{key[2]:.3f}"
-        spec = shared[key] = _shared_hold([(h[3], h[0], h[4]) for h in hs])
+        spec = wave_holds(wave)[key]
         hs.sort(key=lambda h: (h[1], h[0]))
         seen, holders, bad = set(), [], []
-        for cs, t_in, t_out, _, _ in hs:
+        for cs, t_in, t_out in hs:
             if cs in seen:
                 bad.append(f"{cs} listed twice at {fix}; second entry ignored")
                 continue
@@ -346,7 +374,7 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
             air.append(AirTrack(cs, is_wave, rwy, slot, [], None, 0.0, 0.0, 0, vec, None, None, None, "none"))
             continue
         notes: list[str] = []
-        draw = shared.get(_stack_key(r.hold), r.hold) if laps >= 1 else r.hold
+        draw = hold_for(wave, r)
         level = levels.get(cs) if laps >= 1 else None
         hold = None
         if laps >= 1:
@@ -390,6 +418,7 @@ def _clear() -> None:
     _CACHE.clear()
     _NOMINAL.clear()
     _LAPS.clear()
+    _HOLDS.clear()
 
 
 build.cache_clear = _clear

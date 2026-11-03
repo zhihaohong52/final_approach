@@ -152,3 +152,34 @@ def test_unknown_callsign_raises():
         trajectory.earliest(w, "NOPE1", "22R")
     with pytest.raises(ValueError):
         trajectory.entry_time(w, "NOPE1")
+
+
+def test_shared_fix_hold_lap_time_is_plan_independent_and_matches_drawing():
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    pl = p
+    for i, a in enumerate(p.assignments):
+        rw = p.assignments[0].runway
+        pl = _reslot(pl, a, runway=rw, slot_min=trajectory.earliest(w, a.callsign, rw) + 30 + i * 0.1)
+    ts = trajectory.build(w, pl)
+    by_fix = {}
+    for t in ts.air:
+        if t.laps >= 1:
+            by_fix.setdefault(t.hold_fix, []).append(t)
+    pair = next(v for v in by_fix.values() if len(v) >= 2)
+    assert len({t.lap_min for t in pair}) == 1
+    routes = route.routes_for_wave(w)
+    shared = trajectory.hold_for(w, routes[(pair[0].callsign, pair[0].runway)])
+    assert pair[0].lap_min == shared.lap_min
+    assert shared.base_ft == max(r.hold.base_ft for r in routes.values()
+                                 if trajectory._stack_key(r.hold) == trajectory._stack_key(shared))
+    for t in pair:
+        crossings = [q["t_min"] for q in t.points if q["kind"] == "hold" and q.get("fix") == t.hold_fix]
+        assert len(crossings) == t.laps
+        laps_t = [b - a for a, b in zip([t.hold["entry_min"], *crossings], crossings)]
+        assert all(x == pytest.approx(t.lap_min, abs=1e-9) for x in laps_t)
+    # a flight's lap time does not depend on who else holds: hold one flight alone
+    a = pl.get(pair[0].callsign)
+    solo = _reslot(p, p.get(a.callsign), runway=a.runway, slot_min=a.slot_min)
+    t1 = next(x for x in trajectory.build(w, solo).air if x.callsign == a.callsign)
+    assert t1.lap_min == pair[0].lap_min
