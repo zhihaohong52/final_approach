@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Assignment, JointPlan, Runway, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
-import { entryFix, holdLap, levelLabel, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
+import { entryFix, holdLap, levelLabel, matchHold, nmProjector, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
 
 // An approach-radar picture of the plan at one moment. The scope is centred on the airport reference point,
 // runways are drawn to scale from their end coordinates and range rings are true nautical miles.
@@ -126,24 +126,21 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   // Holds someone in the shown plan flies, with the levels they use. Geo holds may share a fix name, so each
   // flight is matched to the pattern of that name nearest to where its own hold points lie (name AND position).
   const holds = fly ? geo!.procedures.holds : [];
-  const centroid = (pts: XY[]): XY => [pts.reduce((m, q) => m + q[0], 0) / pts.length, pts.reduce((m, q) => m + q[1], 0) / pts.length];
-  const holdCentre = holds.map((h) => (h.polygon.length ? centroid(h.polygon.map(([la, lo]) => nm(la, lo))) : null));
-  const holdOf = new Map<string, number>();                      // callsign -> index into geo holds
-  const holdsUsed = new Map<number, { levels: Set<number>; n: number }>();
+  const holdOf = new Map<string, number>();                      // callsign -> index into geo holds (when one matches)
+  const holdsUsed = new Map<number, { levels: Set<number>; n: number }>();   // by geo hold: the racetrack's levels
+  const usedHoldFixes = new Set<string>();                       // every fix a flight holds at, matched or not
+  let nHolding = 0;
   for (const a of air) if (a.hold && a.hold.laps >= 1) {
-    const named = holds.map((h, i) => i).filter((i) => holds[i].fix === a.hold!.fix);
-    const flown = a.points.filter((p) => p.kind === "hold" && p.t_min >= a.hold!.entry_min - 1e-6 && p.t_min <= a.hold!.exit_min + 1e-6).map((p) => nm(p.lat, p.lon));
-    const at = flown.length ? centroid(flown) : null;
-    const dist = (i: number) => (at && holdCentre[i] ? Math.hypot(at[0] - holdCentre[i]![0], at[1] - holdCentre[i]![1]) : 0);
-    const i = named.sort((p, q) => dist(p) - dist(q))[0];
-    if (i == null) continue;
+    nHolding++; usedHoldFixes.add(a.hold.fix);
+    const fx = geo!.procedures.fixes.find((f) => f.id === a.hold!.fix);
+    const i = matchHold(holds, a.hold, a.points, fx);
+    if (i == null) continue;                                     // counted and labelled, but no racetrack to draw
     holdOf.set(a.callsign, i);
     const h = holdsUsed.get(i) ?? { levels: new Set<number>(), n: 0 };
     h.levels.add(a.hold.level_ft); h.n++; holdsUsed.set(i, h);
   }
   const racetracks = holds.map((h, i) => ({ h, i })).filter(({ h, i }) => holdsUsed.has(i) && h.polygon.length > 2);
   const drawnHold = new Set(racetracks.map(({ i }) => i));
-  const usedHoldFixes = new Set([...holdsUsed.keys()].map((i) => holds[i].fix));
   const drawnHoldFixes = new Set(racetracks.map(({ h }) => h.fix));
   // what is still ahead of each target, split into runs of solid (published) and dashed (synthesized) legs;
   // laps of a hold that has its racetrack drawn are left to the racetrack
@@ -277,7 +274,6 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
 
   // what the picture is, for the label: the caption state and a short hold summary
   const state = noTargets ? "paths not available" : !fly ? "schematic, not the engine's path" : updating ? "updating paths" : "";
-  const nHolding = [...holdsUsed.values()].reduce((n, h) => n + h.n, 0);
   const holdSummary = !fly ? "" : nHolding ? `${nHolding} holding at ${[...usedHoldFixes].join(", ")}` : "no holds";
 
   const m = wave.metar, calm = !m || !m.wind_kt, dir = m?.wind_dir_deg;

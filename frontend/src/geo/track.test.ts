@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, endOfLine, entryFix, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { bearing, endOfLine, entryFix, matchHold, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -106,4 +106,24 @@ describe("entryFix", () => {
   it("without procedures it is the first named fix", () => expect(entryFix(air)).toEqual({ fix: "AAA", t_min: 3 }));
   it("ignores fixes the procedures do not know", () => expect(entryFix(air, new Map([["CCC", { kind: "faf" }]]))).toEqual({ fix: "CCC", t_min: 9 }));
   it("is null when no point is named", () => { expect(entryFix({ points: [{ t_min: 1 }] }, fixes)).toBeNull(); expect(entryFix({ points: [] })).toBeNull(); });
+});
+
+describe("matchHold", () => {
+  const sq = (lat: number, lon: number): [number, number][] => [[lat - .01, lon - .01], [lat - .01, lon + .01], [lat + .01, lon + .01], [lat + .01, lon - .01]];
+  const holds = [{ fix: "AAA", polygon: sq(41, -88) }, { fix: "BBB", polygon: sq(41, -87) }, { fix: "AAA", polygon: sq(42, -88) }];
+  const h = { fix: "AAA", entry_min: 10, exit_min: 20 };
+  const pt = (t_min: number, lat: number, lon: number, kind = "hold") => ({ t_min, lat, lon, kind });
+  it("picks, among holds of the same name, the one the flight flew in", () => {
+    expect(matchHold(holds, h, [pt(5, 0, 0, "fix"), pt(12, 42.005, -88), pt(15, 41.995, -88)])).toBe(2);
+    expect(matchHold(holds, h, [pt(12, 41.005, -88)])).toBe(0);
+  });
+  it("only counts hold points between entry and exit", () => expect(matchHold(holds, h, [pt(2, 42, -88), pt(12, 41, -88), pt(15, 41, -88)])).toBe(0));
+  it("without hold points uses the fix position, else the first of that name", () => {
+    expect(matchHold(holds, h, [pt(1, 0, 0, "fix")], { lat: 42, lon: -88 })).toBe(2);
+    expect(matchHold(holds, h, [])).toBe(0);
+  });
+  it("is no match farther than 5 NM, or for an unknown name", () => {
+    expect(matchHold(holds, h, [pt(12, 41.5, -88)])).toBeNull();
+    expect(matchHold(holds, { ...h, fix: "ZZZ" }, [pt(12, 41, -88)])).toBeNull();
+  });
 });

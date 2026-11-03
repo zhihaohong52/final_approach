@@ -94,3 +94,32 @@ export function entryFix(air: { points: { t_min: number; fix?: string }[] }, fix
   const p = (fixBy && named.find((q) => fixBy.get(q.fix)!.kind === "entry")) || named[0];
   return p ? { fix: p.fix, t_min: p.t_min } : null;
 }
+
+export const HOLD_MATCH_NM = 5;
+
+/** Which of the procedures' holds a flight's hold is flown in. Geo holds may share a fix name, so among those
+ *  named `hold.fix` the nearest to the flight's own hold points (entry..exit) wins; with no hold points, the
+ *  nearest to the fix's position (`fixAt`), else the first of that name. A pattern farther than `maxNm` from
+ *  where the flight flew is no match (null), as is no hold of that name. Returns an index into `holds`. */
+export function matchHold(
+  holds: { fix: string; polygon: [number, number][] }[],
+  hold: { fix: string; entry_min: number; exit_min: number },
+  points: { t_min: number; lat: number; lon: number; kind: string }[],
+  fixAt?: { lat: number; lon: number } | null,
+  maxNm = HOLD_MATCH_NM,
+): number | null {
+  const named = holds.map((h, i) => i).filter((i) => holds[i].fix === hold.fix);
+  if (!named.length) return null;
+  const flown = points.filter((p) => p.kind === "hold" && p.t_min >= hold.entry_min - 1e-6 && p.t_min <= hold.exit_min + 1e-6);
+  const where = flown.length ? { lat: flown.reduce((m, p) => m + p.lat, 0) / flown.length, lon: flown.reduce((m, p) => m + p.lon, 0) / flown.length } : fixAt ?? null;
+  if (!where) return named[0];
+  const to = nmProjector(where.lat, where.lon);
+  const dist = (i: number): number => {
+    const poly = holds[i].polygon;
+    if (!poly.length) return Infinity;
+    const c = poly.map(([la, lo]) => to(la, lo));
+    return Math.hypot(c.reduce((m, q) => m + q[0], 0) / c.length, c.reduce((m, q) => m + q[1], 0) / c.length);
+  };
+  const best = named.map((i) => ({ i, d: dist(i) })).sort((p, q) => p.d - q.d || p.i - q.i)[0];
+  return best.d <= maxNm ? best.i : null;
+}

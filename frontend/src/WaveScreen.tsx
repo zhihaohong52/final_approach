@@ -97,12 +97,13 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [dragAt, setDragAt] = useState<{ cs: string; patch: Patch } | null>(null);
   const [preview, setPreview] = useState<DragPreview | null>(null);
   const [previewErr, setPreviewErr] = useState(false);
+  const lastPreview = useRef<{ key: string; resp: EvaluateResponse } | null>(null);   // the latest drag re-check, reused when the drop is that plan
   const abort = useRef<AbortController | null>(null);
   const tableRef = useRef<JointPlan | null>(null);
   const showTable = (p: JointPlan | null) => { tableRef.current = p; setTable(p); };
   useEffect(() => () => abort.current?.abort(), []);
 
-  const resetEdits = () => { setEdits({}); setUndo([]); setChecked(null); setCheckErr(null); setSeen(new Set()); };
+  const resetEdits = () => { lastPreview.current = null; setEdits({}); setUndo([]); setChecked(null); setCheckErr(null); setSeen(new Set()); };
   const loadSeq = useRef(0);
   const loadWave = useCallback(async (id: string) => {
     const seq = ++loadSeq.current;          // a newer load wins; an older one that resolves late is dropped
@@ -210,11 +211,16 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     if (!result || !wave || !nEdits) { setChecked(null); setChecking(false); setCheckErr(null); return; }
     const ctl = new AbortController();
     const plan = applyEdits(result.final_plan, edits, null);
+    const sent = planKey(plan);
+    const pre = lastPreview.current;
+    if (pre && pre.key === sent) {            // a drop onto the position the drag last checked: that response is this check
+      setChecked(pre.resp); if (pre.resp.trajectories) setFetched({ key: sent, set: pre.resp.trajectories }); setChecking(false); setCheckErr(null);
+      return;
+    }
     setChecking(true); setCheckErr(null);
     const timer = setTimeout(() => {
       // the same response carries the edited plan's paths (include_trajectories); they are kept under the key of the
       // plan that was sent, so they are used only while that is the plan on screen
-      const sent = planKey(plan);
       api.postEvaluate({ wave_id: wave.id, assignments: plan.assignments }, { includeTrajectories: true, signal: ctl.signal })
         .then((r) => { setChecked(r); if (r?.trajectories) setFetched({ key: sent, set: r.trajectories }); setChecking(false); if (!r) setCheckErr("offline"); })
         .catch((e) => { if ((e as Error).name !== "AbortError") { setCheckErr((e as Error).message); setChecking(false); } });
@@ -277,7 +283,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     const plan = applyEdits(result.final_plan, { ...edits, [cs]: { ...edits[cs], ...patch } }, null);
     const timer = setTimeout(() => {
       api.postEvaluate({ wave_id: wave.id, assignments: plan.assignments }, { includeTrajectories: true, signal: ctl.signal })
-        .then((r) => { setPreviewErr(false); if (r) setPreview({ cs, patch, metrics: r.plan.assignments.find((a) => a.callsign === cs)?.metrics ?? null, set: r.trajectories ?? null }); })
+        .then((r) => { setPreviewErr(false); if (r) lastPreview.current = { key: planKey(plan), resp: r }; if (r) setPreview({ cs, patch, metrics: r.plan.assignments.find((a) => a.callsign === cs)?.metrics ?? null, set: r.trajectories ?? null }); })
         .catch((e) => {
           if ((e as Error).name === "AbortError") return;      // a newer drag position replaced this request
           console.warn("drag preview: re-check failed", e);   // the bar keeps its local preview, marked as such
@@ -293,7 +299,8 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   // /api/trajectories. A run recorded on another engine has no paths (`paths_unavailable`; for results saved
   // before that flag, the engine versions are compared), and the radar says so instead of drawing any.
   const recordedOn = result ? result.engine_version ?? "v2" : null;
-  const noPaths = !!result && !result.trajectories && (result.paths_unavailable ?? recordedOn !== (wave?.engine_version ?? "v2"));
+  // (an edited plan is not the recorded one: its paths come from the current engine, via /api/evaluate)
+  const noPaths = !!result && !result.trajectories && !(nEdits > 0 && view !== "before") && (result.paths_unavailable ?? recordedOn !== (wave?.engine_version ?? "v2"));
   const embedded = result?.trajectories ? (view === "before" ? result.trajectories.baseline : !nEdits ? result.trajectories.final : undefined) : undefined;
   const shownKey = planKey(shown);
   const shownRef = useRef(shown); shownRef.current = shown;
