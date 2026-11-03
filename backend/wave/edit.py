@@ -30,9 +30,25 @@ def slot_bounds(wave: Wave) -> tuple[float, float]:
     return min(ts) - SLOT_MARGIN_BEFORE_MIN, max(ts) + SLOT_MARGIN_AFTER_MIN
 
 
+def _finite(k: str, cs: str, v: object) -> float:
+    """`v` as a finite float, else ValueError (the message never echoes `v`). A bool is not a number; a JSON
+    integer too large for a float (float() raises OverflowError, e.g. 10**400) and NaN / inf are rejected."""
+    if isinstance(v, bool):
+        raise ValueError(f"{k} of {cs} must be a number")
+    try:
+        x = float(v)
+    except (ValueError, TypeError, OverflowError):
+        raise ValueError(f"{k} of {cs} must be a finite number") from None
+    if not math.isfinite(x):
+        raise ValueError(f"{k} of {cs} must be finite")
+    return x
+
+
 def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
     """Contract Assignment dicts (metrics ignored) -> JointPlan. Raises ValueError on a malformed row: a
-    missing callsign, a bad action, a non-number or non-finite (NaN / inf) number. With `wave`, also on
+    missing callsign or one longer than MOVE_CALLSIGN_MAX, a bad action, a runway or gate that is not a string of
+    at most MOVE_STR_MAX characters, a non-number or non-finite (NaN / inf, or a JSON integer too large for a
+    float) number; messages never echo a number, runway or gate. With `wave`, also on
     an input the engine cannot use: more rows than wave flights, a duplicate or unknown callsign (not a wave
     flight), an unknown runway, a slot outside `slot_bounds(wave)`, a speed reduction or ground delay
     outside [0, 240] min."""
@@ -41,26 +57,26 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
     bounds = slot_bounds(wave) if wave is not None else None
     out, seen = [], set()
     for r in rows:
-        if not isinstance(r, dict) or not isinstance(r.get("callsign"), str):
-            raise ValueError("each assignment needs a callsign")
+        if not isinstance(r, dict) or not isinstance(r.get("callsign"), str) or not r["callsign"] \
+                or len(r["callsign"]) > MOVE_CALLSIGN_MAX:
+            raise ValueError(f"each assignment needs a callsign of at most {MOVE_CALLSIGN_MAX} characters")
         cs = r["callsign"]
         kw = {k: r[k] for k in _FIELDS if k in r and r[k] is not None}
         if kw.get("action", "land") not in ("land", "divert"):
             raise ValueError(f"bad action for {cs}")
+        for k in ("runway", "gate"):
+            if k in kw and (not isinstance(kw[k], str) or len(kw[k]) > MOVE_STR_MAX):
+                raise ValueError(f"{k} of {cs} must be a string of at most {MOVE_STR_MAX} characters")
         for k in ("slot_min", "speed_reduction_min", "ground_delay_min"):
             if k in kw:
-                if isinstance(kw[k], bool):
-                    raise ValueError(f"{k} of {cs} must be a number")
-                kw[k] = float(kw[k])
-                if not math.isfinite(kw[k]):
-                    raise ValueError(f"{k} of {cs} must be finite")
+                kw[k] = _finite(k, cs, kw[k])
         if wave is not None:
             if cs in seen:
                 raise ValueError(f"duplicate assignment for {cs}")
             if not any(f.callsign == cs for f in wave.flights):
                 raise ValueError(f"{cs} is not a flight of wave {wave.id}")
             if "runway" in kw and not any(rw.id == kw["runway"] for rw in wave.airport.runways):
-                raise ValueError(f"unknown runway {kw['runway']!r} for {cs}")
+                raise ValueError(f"unknown runway for {cs}")
             lo, hi = bounds
             if "slot_min" in kw and not lo <= kw["slot_min"] <= hi:
                 raise ValueError(f"slot_min of {cs} must lie in [{lo:g}, {hi:g}] min")

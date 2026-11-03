@@ -8,21 +8,23 @@ the bodies read the datastore (Postgres in production), which would stall every 
 from __future__ import annotations
 
 import asyncio
-import dataclasses
-
 from mcp.server.fastmcp import FastMCP
 
-from backend.wave import build, graph, moves, trajectory, utility
-from backend.wave.model import Assignment, JointPlan
+from backend.wave import build, edit, graph, moves, trajectory, utility
+from backend.wave.model import JointPlan
 
 mcp = FastMCP("disruption-negotiator", stateless_http=True)
 
 
-def _plan_from_dict(d: dict) -> JointPlan:
-    """Rebuild a JointPlan from its contract dict; metrics are recomputed by the engine, so they are dropped."""
-    fields = {f.name for f in dataclasses.fields(Assignment)} - {"metrics"}
-    assignments = [Assignment(**{k: v for k, v in a.items() if k in fields}) for a in d.get("assignments", [])]
-    return JointPlan(assignments, d.get("label") or "")
+def _plan_from_dict(d: dict, wave) -> JointPlan:
+    """Rebuild a JointPlan from its contract dict for `wave`; metrics are recomputed by the engine, so they are
+    dropped. Bounded exactly like the HTTP API (`edit.plan_from_dicts(rows, wave)`): a malformed or out-of-range
+    row raises ValueError, which the client sees as a tool error."""
+    rows = d.get("assignments", []) if isinstance(d, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("plan.assignments must be a list")
+    label = d.get("label")
+    return JointPlan(edit.plan_from_dicts(rows, wave).assignments, label[:200] if isinstance(label, str) else "")
 
 
 @mcp.tool()
@@ -53,7 +55,7 @@ async def legal_moves(wave_id: str, agent_id: str, plan: dict | None = None) -> 
     infeasible moves are returned ranked lower so the engine's rejection is visible."""
     def run() -> list[dict]:
         w = build.build_wave(wave_id)
-        p = _plan_from_dict(plan) if plan is not None else moves.fcfs_plan(w)
+        p = _plan_from_dict(plan, w) if plan is not None else moves.fcfs_plan(w)
         return [m.to_dict() for m in moves.legal_moves(w, p, agent_id)]
     return await asyncio.to_thread(run)
 
@@ -62,15 +64,20 @@ async def legal_moves(wave_id: str, agent_id: str, plan: dict | None = None) -> 
 async def check_plan(wave_id: str, plan: dict) -> dict:
     """Evaluate a joint plan for a wave and return its PlanEvaluation (feasibility, violations, utilities).
     Read-only. Legality is decided only by the deterministic rule engine, never by the caller or a model."""
-    return await asyncio.to_thread(lambda: utility.evaluate(build.build_wave(wave_id), _plan_from_dict(plan)))
+    def run() -> dict:
+        w = build.build_wave(wave_id)
+        return utility.evaluate(w, _plan_from_dict(plan, w))
+    return await asyncio.to_thread(run)
 
 
 @mcp.tool()
 async def get_trajectory(wave_id: str, assignments: list[dict]) -> dict:
     """Return the 4D trajectories (airborne tracks with holding laps and stack levels, ground segments, conflicts)
     of a plan's assignments for a wave. Read-only. Legality is decided only by the deterministic rule engine."""
-    return await asyncio.to_thread(
-        lambda: trajectory.build(build.build_wave(wave_id), _plan_from_dict({"assignments": assignments})).to_dict())
+    def run() -> dict:
+        w = build.build_wave(wave_id)
+        return trajectory.build(w, _plan_from_dict({"assignments": assignments}, w)).to_dict()
+    return await asyncio.to_thread(run)
 
 
 @mcp.tool()

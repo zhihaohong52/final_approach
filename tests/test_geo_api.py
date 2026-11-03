@@ -149,6 +149,23 @@ def test_unbounded_or_unknown_input_is_422(patch):
         assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (path, patch, r.text[:200])
 
 
+@pytest.mark.parametrize("patch", [
+    {"slot_min": 10 ** 400}, {"slot_min": -(10 ** 400)}, {"speed_reduction_min": 10 ** 400},
+    {"ground_delay_min": 10 ** 400}, {"ground_delay_min": -(10 ** 310)}, {"slot_min": 10 ** 20},
+    {"callsign": "Q" * 10_000}, {"callsign": "AAL1", "slot_min": 2 ** 1100},
+])
+def test_huge_json_ints_or_long_callsigns_are_422_without_echo(patch):
+    """A JSON integer too large for a float (float() raises OverflowError) or a 10 KB callsign: 422, never a 500,
+    and the error never echoes the input."""
+    for path, extra in (("/api/trajectories", {}), ("/api/evaluate", {}), ("/api/evaluate", {"include_trajectories": True})):
+        asg = _sq()
+        asg[0] = {**asg[0], **patch}
+        r = c.post(path, content=json.dumps({"wave_id": ORD, "assignments": asg, **extra}),
+                   headers={"Content-Type": "application/json"})
+        assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", (path, patch, r.text[:200])
+        assert len(r.text) < 400 and "QQQQ" not in r.text and "0000000000" not in r.text, r.text[:200]
+
+
 def test_duplicate_or_too_many_assignments_is_422():
     asg = _sq()
     assert c.post("/api/trajectories", json={"wave_id": ORD, "assignments": asg + [asg[0]]}).status_code == 422
