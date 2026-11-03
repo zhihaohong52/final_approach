@@ -51,9 +51,20 @@ from backend.wave.version import ENGINE_VERSION
 
 # Memory bounds (Render: 512 MB per process). One cached TrajectorySet is about 125-170 KB on the replay waves, so
 # PLAN_CACHE_MAX = 256 holds at most ~43 MB. The cache is FIFO and shared by every thread; ATM_PLAN_CACHE overrides
-# it, and the offline benchmark raises it to 256 per worker thread (its threads interleave waves: 256 shared entries
-# would double its rebuilds, 256 per worker matches the old 4096 at concurrency 16).
-PLAN_CACHE_MAX = int(os.environ.get("ATM_PLAN_CACHE") or 256)
+# it, and the offline benchmark raises it to 256 x its concurrency for the run, still one shared FIFO (its threads
+# interleave waves: 256 shared entries would double its rebuilds; 256 x 16 matches the old 4096).
+
+
+def _cache_cap(raw: str | None, default: int = 256) -> int:
+    """ATM_PLAN_CACHE as a positive int; a missing, non-numeric or < 1 value falls back to the default."""
+    try:
+        n = int(raw) if raw else default
+    except ValueError:
+        return default
+    return n if n >= 1 else default
+
+
+PLAN_CACHE_MAX = _cache_cap(os.environ.get("ATM_PLAN_CACHE"))
 PLAN_CACHE_PER_WORKER = 256
 WAVE_CACHE_MAX = 64            # per-wave caches (_NOMINAL, _HOLDS; small): more than the benchmark's 50 waves
 LAPS_CACHE_MAX = 512           # racetrack lap polylines, one per physical hold (a few per wave)

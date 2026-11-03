@@ -46,3 +46,13 @@ def test_benchmark_restores_the_plan_cache_bound():
     benchmark.main(["--fixtures", "--n", "1", "--arms", "formula", "--concurrency", "3", "--no-ablation",
                     "--outage-n", "0", "--out", str(__import__("tempfile").mkdtemp())])
     assert trajectory.PLAN_CACHE_MAX == before
+
+
+def test_plan_cache_env_value_is_clamped():
+    from backend.wave import trajectory
+    assert trajectory._cache_cap(None) == 256
+    assert trajectory._cache_cap("") == 256
+    assert trajectory._cache_cap("0") == 256
+    assert trajectory._cache_cap("-5") == 256
+    assert trajectory._cache_cap("lots") == 256
+    assert trajectory._cache_cap("512") == 512

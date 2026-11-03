@@ -872,7 +872,7 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--out", default=str(ROOT / "eval"))
     a = ap.parse_args(argv)
     from backend.wave import trajectory
-    # worker threads interleave waves, so the shared plan cache gets 256 entries per worker for this run (the
+    # worker threads interleave waves, so the shared plan cache gets 256 x concurrency entries for this run (the
     # server keeps the 256-entry default; see trajectory.PLAN_CACHE_MAX); restored afterwards (tests call main)
     prev = trajectory.PLAN_CACHE_MAX
     trajectory.PLAN_CACHE_MAX = max(prev, trajectory.PLAN_CACHE_PER_WORKER * max(1, a.concurrency))
