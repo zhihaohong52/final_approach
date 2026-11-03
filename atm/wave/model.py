@@ -6,6 +6,8 @@ import hashlib
 from dataclasses import asdict, dataclass, field, replace
 from typing import Literal
 
+from atm.wave.version import ENGINE_VERSION
+
 Wake = Literal["SUPER", "HEAVY", "B757", "LARGE", "SMALL"]
 GateSize = Literal["narrow", "wide"]
 
@@ -18,6 +20,7 @@ class _Dict:
 @dataclass
 class Provenance(_Dict):
     layer: str            # flights|queue|runways|weather|aircraft|gates|fuel|crew|connections|gate_occupancy
+                          # v2.2 adds: procedures|surface|ground_traffic
     status: str           # real|simulated|generic
     source: str
     detail: str | None = None
@@ -69,6 +72,7 @@ class QueueArrival(_Dict):
     wake: Wake
     runway: str
     slot_min: float
+    origin: str | None = None
 
 
 @dataclass
@@ -78,6 +82,9 @@ class Gate(_Dict):
     pier: str
     remote: bool = False
     busy: list[dict] = field(default_factory=list)   # {from_min, to_min, label}
+    lat: float | None = None
+    lon: float | None = None
+    geo_src: str | None = None   # osm-ref|osm-near|osm-gate|osm-generic|synth
 
 
 @dataclass
@@ -131,8 +138,19 @@ class Wave(_Dict):
     severity: dict | None = None
     focus: str | None = None   # callsign of the disruption row's flight (omitted from JSON when None)
 
+    def geo_available(self) -> bool:
+        """True iff the airport is not at (0, 0) and every open runway end has both end coordinates.
+        Procedures are optional (an airport without them still gets synthetic routes)."""
+        a = self.airport
+        if a.lat == 0 and a.lon == 0:
+            return False
+        return all(None not in (r.le_lat, r.le_lon, r.he_lat, r.he_lon)
+                   for r in a.runways if r.open)
+
     def to_dict(self) -> dict:
         d = asdict(self)
+        d["engine_version"] = ENGINE_VERSION
+        d["geo_available"] = self.geo_available()
         if d["focus"] is None:
             del d["focus"]
         for f in d["flights"]:
@@ -160,6 +178,19 @@ class FlightMetrics(_Dict):
     pax_total: int = 0
     overtime_min: float = 0.0
     next_dep_delay_min: float = 0.0
+    # v2.2 path fields (stored unrounded)
+    hold_laps: int = 0
+    hold_fix: str | None = None
+    hold_level_ft: int | None = None
+    lap_min: float | None = None
+    vector_min: float = 0.0
+    route_min: float | None = None
+    route_extra_min: float = 0.0
+    exit: str | None = None
+    rot_s: float | None = None
+    taxi_unimpeded_min: float | None = None
+    taxi_wait_min: float = 0.0
+    taxi_min: float | None = None
 
 
 @dataclass

@@ -10,3 +10,14 @@ def test_plan_id_stable_and_roundtrip():
     d = make_wave().to_dict()
     assert {"id", "airport", "window_start", "metar", "runway_wind", "queue", "flights", "gates", "provenance"} <= d.keys()
     assert JointPlan([a]).to_dict()["id"] == JointPlan([a]).id
+
+
+def test_v22_fields_defaulted_and_serialised():
+    from atm.wave.model import FlightMetrics, Gate
+    from atm.wave.fixtures import make_wave
+    m = FlightMetrics()
+    assert m.hold_laps == 0 and m.taxi_min is None and "route_extra_min" in m.to_dict()
+    assert Gate("A1", "narrow", "A").to_dict()["geo_src"] is None
+    d = make_wave().to_dict()
+    from atm.wave.version import ENGINE_VERSION
+    assert d["engine_version"] == ENGINE_VERSION and d["geo_available"] is False

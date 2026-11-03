@@ -4,7 +4,8 @@ export type AgentId = "ATC" | "GROUND" | `PILOT:${string}`;
 export type Sender = AgentId | "ENGINE" | "DECIDER";
 
 export interface Provenance {
-  layer: "flights" | "queue" | "runways" | "weather" | "aircraft" | "gates" | "fuel" | "crew" | "connections" | "gate_occupancy";
+  layer: "flights" | "queue" | "runways" | "weather" | "aircraft" | "gates" | "fuel" | "crew" | "connections" | "gate_occupancy"
+    | "procedures" | "surface" | "ground_traffic";   // v2.2: last three
   status: "real" | "simulated" | "generic";   // generic = template used because real data missing
   source: string;                            // e.g. "BTS On-Time 2024-07", "METAR KATL 151651Z", "FAA Registry"
   detail?: string | null;
@@ -76,6 +77,8 @@ export interface WaveScenario {
   severity?: Triage | null;                 // filled once a negotiation has triaged it
   focus: string | null;                // v2.0: callsign of the disruption flight (its pilot is the PILOT agent)
   provenance: Provenance[];            // per layer for the whole wave
+  engine_version?: string;             // v2.2
+  geo_available?: boolean;             // v2.2: runway ends have coordinates and the airport is placed
   status_quo?: { plan: JointPlan; evaluation: PlanEvaluation };  // v2.1: first come, first served and its rule check, shown before negotiating
 }
 
@@ -110,6 +113,7 @@ export interface RunwayWind {
 export interface QueueArrival {
   callsign: string; aircraft_type: string | null; wake: Wake;
   runway: string; slot_min: number;
+  origin?: string | null;               // v2.2
 }
 export type Wake = "SUPER" | "HEAVY" | "B757" | "LARGE" | "SMALL";
 
@@ -135,6 +139,8 @@ export interface WaveFlight {
 export interface Gate {
   id: string; size: "narrow" | "wide"; pier: string; remote: boolean;
   busy: { from_min: number; to_min: number; label: string }[];   // occupancy by non-wave aircraft
+  lat?: number | null; lon?: number | null;   // v2.2
+  geo_src?: "osm-ref" | "osm-near" | "osm-gate" | "osm-generic" | "synth" | null;
 }
 
 export interface JointPlan {
@@ -154,6 +160,11 @@ export interface Assignment {
 export interface FlightMetrics {
   hold_min: number; fuel_kg: number; delay_min: number; in_block_min: number | null;
   pax_protected: number; pax_total: number; overtime_min: number; next_dep_delay_min: number;
+  // v2.2 path fields (all optional for v2.1 payloads)
+  hold_laps?: number; hold_fix?: string | null; hold_level_ft?: number | null; lap_min?: number | null;
+  vector_min?: number; route_min?: number | null; route_extra_min?: number;
+  exit?: string | null; rot_s?: number | null;
+  taxi_unimpeded_min?: number | null; taxi_wait_min?: number; taxi_min?: number | null;
 }
 export interface RuleCheck {
   rule: RuleId;
@@ -168,7 +179,8 @@ export type RuleId = "ATC-RWY-OPEN" | "ATC-WAKE-SEP" | "ATC-TAXI-ROUTE" | "ATC-W
   | "ATC-RWY-CAPACITY"                 // v2.0: landings per physical runway in the rolling 60 min <= workbook cap
   | "PLT-EARLIEST-ETA" | "PLT-FUEL-RESERVE" | "GND-GATE-SIZE" | "GND-GATE-FREE" | "GND-CREW-DUTY"
   | "GND-GATE-NOTICE"                  // v2.0: gate change only if arrival >= T+20 (remote stand exempt)
-  | "PLT-CREW-DUTY";                   // in-block (or alternate arrival) within the flight crew's duty end
+  | "PLT-CREW-DUTY"
+  | "ATC-HOLD-STACK" | "ATC-TAXI-CONFLICT";   // v2.2                   // in-block (or alternate arrival) within the flight crew's duty end
 
 export interface PlanEvaluation {
   plan_id: string;
@@ -189,7 +201,8 @@ export interface Move {
   agent: AgentId;
   kind: "swap_order" | "change_runway" | "shift_slot"                         // ATC
       | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // PILOT (own flight); ATC: speed/ground delay of non-focus flights
-      | "reassign_gate" | "remote_stand" | "swap_gates";                     // GROUND
+      | "reassign_gate" | "remote_stand" | "swap_gates"
+      | "hold";                                                                  // v2.2                     // GROUND
   callsigns: string[];
   params: Record<string, string | number>;   // { runway: "09R" } | { minutes: 6 } | { gate: "B4" }
   label: string;                       // "Swap landing order DL1234 ↔ AA88"
@@ -292,6 +305,8 @@ export interface NegotiationResult {
   model_errors: string[];
   stats: { model_calls: number; fallbacks: number; elapsed_ms: number };
   log?: NegotiationMessage[];          // included when stream=false and in GET /api/runs/{id}
+  engine_version?: string;             // v2.2
+  trajectories?: { final: TrajectorySet; baseline: TrajectorySet };   // v2.2
 }
 
 export interface Revision {
@@ -347,6 +362,34 @@ export interface BenchmarkReport {
   outage_test: { primary_disabled: string; waves: number; resolved: number; fallbacks_used: Record<string, number> };
   selection: { winner: string; rule: string; reasons: string[] };
   failures: { wave_id: string; model: string; reason: string }[];   // clickable: open the wave
+  engine_version?: string;             // v2.2
+  coverage?: Record<string, number>;   // v2.2: tier counts
+  taxi_validation?: Record<string, unknown>;   // v2.2: filled by the taxi validation step
 }
 
 export interface Triage { score: number; levels: string[]; probabilities: number[]; confidence?: number }
+
+// v2.2 (additive)
+export interface WaveGeo {
+  engine_version: string;
+  procedures: { cycle: string; source: string; status: "real" | "generic";
+    fixes: { id: string; lat: number; lon: number; kind: "entry" | "star" | "iaf" | "if" | "faf" | "hold" | "corner"; src: "cifp" | "synth" }[];
+    routes: { runway: string; star?: string; transition?: string; approach?: string; fixes: string[] }[];
+    holds: { fix: string; inbound_true: number; turn: "R" | "L"; leg_min: number; base_ft: number; levels_ft: number[]; lap_min: number; src: "cifp" | "synth"; polygon: [number, number][] }[] };
+  surface: { source: string; status: "real" | "generic"; attribution: string;
+    taxiways: { name: string | null; kind: "taxiway" | "taxilane"; line: [number, number][] }[];
+    runways: { ids: string[]; line: [number, number][]; width_m: number | null }[];
+    stands: { id: string; gate?: string; lat: number; lon: number; geo_src: string }[];
+    holding_positions: { id: string; lat: number; lon: number; runway?: string }[] } | null;
+}
+export interface TrajectorySet {
+  plan_id: string; engine_version: string;
+  air: { callsign: string; wave: boolean; runway: string; appears_min: number;
+    points: { t_min: number; lat: number; lon: number; alt_ft: number; kind: "entry" | "fix" | "hold" | "vector" | "final" | "threshold"; fix?: string; src: "cifp" | "synth" }[];
+    hold?: { fix: string; laps: number; level_ft: number; entry_min: number; exit_min: number; lap_min: number } }[];
+  ground: { callsign: string; kind: "arrival" | "departure"; wave: boolean; exit?: string; stand: string; route_names: string[];
+    points: { t_min: number; lat: number; lon: number; node?: string }[];
+    waits: { lat: number; lon: number; from_min: number; to_min: number; reason: string }[];
+    unimpeded_min: number; taxi_min: number; src: "osm" | "synth" }[];
+  conflicts: { rule: RuleId; callsign: string; at_min: number; lat: number; lon: number; detail: string }[];   // failing checks, mapped
+}

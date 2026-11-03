@@ -1,0 +1,323 @@
+{
+  "generated_at": "2026-11-02T09:08:32+00:00",
+  "n_waves": 50,
+  "n_common": 50,
+  "seed": 7,
+  "source": "flights2015",
+  "arms": [
+    {
+      "model": "typesafe/jev-1.14",
+      "provider": "openrouter",
+      "label": "typesafe/jev-1.14",
+      "summary": {
+        "consensus_rate_pct": 98.0,
+        "mean_rounds": 1.32,
+        "fallback_rate_pct": 2.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 351.192,
+        "fuel_kg": 107.84,
+        "pax_protected_pct": 25.798,
+        "overtime_min": 1.2,
+        "agreement_with_formula_pct": 66.0,
+        "brier": 0.0063,
+        "latency_p50_ms": 446.0,
+        "latency_p95_ms": 598.0,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0
+      },
+      "delay_min_vs_feasible_status_quo": 336.794,
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 598.0,
+      "model_decisions": 401,
+      "delay_min_ci95": [
+        304.811,
+        397.573
+      ],
+      "gap_to_optimiser": 1.566,
+      "share_of_optimiser_gain_pct": 95.04,
+      "share_n": 12
+    },
+    {
+      "model": "liquid/d1-ultra",
+      "provider": "openrouter",
+      "label": "liquid/d1-ultra",
+      "summary": {
+        "consensus_rate_pct": 96.0,
+        "mean_rounds": 1.36,
+        "fallback_rate_pct": 4.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 351.438,
+        "fuel_kg": 111.28,
+        "pax_protected_pct": 25.502,
+        "overtime_min": 1.2,
+        "agreement_with_formula_pct": 84.0,
+        "brier": 0.0016,
+        "latency_p50_ms": 568.0,
+        "latency_p95_ms": 668.1,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0
+      },
+      "delay_min_vs_feasible_status_quo": 336.735,
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 668.1,
+      "model_decisions": 334,
+      "delay_min_ci95": [
+        305.081,
+        397.795
+      ],
+      "gap_to_optimiser": 1.812,
+      "share_of_optimiser_gain_pct": 95.04,
+      "share_n": 12
+    },
+    {
+      "model": "baseten/elephant-1",
+      "provider": "openrouter",
+      "label": "baseten/elephant-1",
+      "summary": {
+        "consensus_rate_pct": 98.0,
+        "mean_rounds": 1.34,
+        "fallback_rate_pct": 2.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 351.438,
+        "fuel_kg": 111.28,
+        "pax_protected_pct": 25.798,
+        "overtime_min": 1.2,
+        "agreement_with_formula_pct": 74.0,
+        "brier": 0.0155,
+        "latency_p50_ms": 493.0,
+        "latency_p95_ms": 579.0,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0
+      },
+      "delay_min_vs_feasible_status_quo": 336.853,
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 579.0,
+      "model_decisions": 393,
+      "delay_min_ci95": [
+        305.119,
+        397.757
+      ],
+      "gap_to_optimiser": 1.812,
+      "share_of_optimiser_gain_pct": 95.04,
+      "share_n": 12
+    },
+    {
+      "model": "formula",
+      "provider": "formula",
+      "label": "formula",
+      "summary": {
+        "consensus_rate_pct": 98.0,
+        "mean_rounds": 1.32,
+        "fallback_rate_pct": 2.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 351.198,
+        "fuel_kg": 108.08,
+        "pax_protected_pct": 25.502,
+        "overtime_min": 1.2,
+        "agreement_with_formula_pct": 100.0,
+        "brier": null,
+        "latency_p50_ms": null,
+        "latency_p95_ms": null,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0
+      },
+      "delay_min_vs_feasible_status_quo": 336.5,
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 0.0,
+      "model_decisions": 0,
+      "delay_min_ci95": [
+        304.82,
+        397.576
+      ],
+      "gap_to_optimiser": 1.572,
+      "share_of_optimiser_gain_pct": 104.96,
+      "share_n": 12
+    }
+  ],
+  "baseline": {
+    "delay_min": 343.158,
+    "fuel_kg": 0.72,
+    "pax_protected_pct": 26.538,
+    "overtime_min": 1.76,
+    "diversions": 0.0,
+    "n_feasible": 34,
+    "infeasible_ids": [
+      "F2015-102056",
+      "F2015-105396",
+      "F2015-112396",
+      "F2015-124231",
+      "F2015-144568",
+      "F2015-165543",
+      "F2015-208678",
+      "F2015-208692",
+      "F2015-210010",
+      "F2015-246479",
+      "F2015-254935",
+      "F2015-282726",
+      "F2015-298859",
+      "F2015-335957",
+      "F2015-343919",
+      "F2015-63104"
+    ],
+    "feasible_only": {
+      "delay_min": 338.753,
+      "fuel_kg": 0.706,
+      "pax_protected_pct": 25.35,
+      "overtime_min": 1.529,
+      "diversions": 0.0
+    }
+  },
+  "optimiser": {
+    "n": 50,
+    "delay_min": 349.626,
+    "delay_min_ci95": [
+      302.856,
+      396.396
+    ],
+    "fuel_kg": 64.24,
+    "pax_protected_pct": 26.118,
+    "n_feasible": 50,
+    "elapsed_ms_mean": 1178.762,
+    "methods": {
+      "safety net: all-divert": 1,
+      "beam(width=12, evaluated=400): max-min utility": 46,
+      "beam(width=12, evaluated=353): max-min utility": 1,
+      "beam(width=12, evaluated=400): FCFS already best": 1,
+      "beam(width=12, evaluated=295): max-min utility": 1
+    }
+  },
+  "ablation_no_engine_unsafe_pct": 32.0,
+  "outage_test": {
+    "primary_disabled": "invalid/model-does-not-exist",
+    "waves": 20,
+    "resolved": 20,
+    "fallbacks_used": {
+      "typesafe/jev-1.14-20261014": 166
+    }
+  },
+  "selection": {
+    "winner": "typesafe/jev-1.14",
+    "rule": "best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier",
+    "reasons": [
+      "typesafe/jev-1.14 meets all three thresholds (error, p95, consensus) and has the best outcome among qualifying arms.",
+      "Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.",
+      "cost_usd_per_wave = 0.0: output tokens free; input cost not measured.",
+      "fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).",
+      "typesafe/jev-1.14 p95 all decisions incl. fallbacks: 598.0 ms",
+      "typesafe/jev-1.14 outcomes partly from solver fallback on 1/50 waves",
+      "liquid/d1-ultra p95 all decisions incl. fallbacks: 668.1 ms",
+      "liquid/d1-ultra outcomes partly from solver fallback on 2/50 waves",
+      "baseten/elephant-1 p95 all decisions incl. fallbacks: 579.0 ms",
+      "baseten/elephant-1 outcomes partly from solver fallback on 1/50 waves",
+      "Mean delay: typesafe/jev-1.14 351.192 min vs formula 351.198 min vs status quo 343.158 min."
+    ]
+  },
+  "failures": [
+    {
+      "wave_id": "F2015-302254",
+      "model": "typesafe/jev-1.14",
+      "reason": "regression vs status quo: delay 346.0 > 344.0 min"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "model": "typesafe/jev-1.14",
+      "reason": "regression vs status quo: delay 243.0 > 235.0 min"
+    },
+    {
+      "wave_id": "F2015-102056",
+      "model": "typesafe/jev-1.14",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-105396",
+      "model": "liquid/d1-ultra",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "model": "liquid/d1-ultra",
+      "reason": "regression vs status quo: delay 243.0 > 235.0 min"
+    },
+    {
+      "wave_id": "F2015-102056",
+      "model": "liquid/d1-ultra",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "model": "baseten/elephant-1",
+      "reason": "regression vs status quo: delay 247.0 > 235.0 min"
+    },
+    {
+      "wave_id": "F2015-102056",
+      "model": "baseten/elephant-1",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "model": "formula",
+      "reason": "regression vs status quo: delay 243.0 > 235.0 min"
+    },
+    {
+      "wave_id": "F2015-102056",
+      "model": "formula",
+      "reason": "no consensus: deterministic solver fallback"
+    }
+  ],
+  "wave_ids": [
+    "F2015-144520",
+    "F2015-343919",
+    "F2015-210010",
+    "F2015-156608",
+    "F2015-317184",
+    "F2015-105396",
+    "F2015-324426",
+    "F2015-53108",
+    "F2015-60842",
+    "F2015-209722",
+    "F2015-314303",
+    "F2015-302254",
+    "F2015-115532",
+    "F2015-112396",
+    "F2015-169005",
+    "F2015-161169",
+    "F2015-251827",
+    "F2015-209820",
+    "F2015-298859",
+    "F2015-112468",
+    "F2015-43962",
+    "F2015-291336",
+    "F2015-205196",
+    "F2015-144568",
+    "F2015-18435",
+    "F2015-208692",
+    "F2015-268625",
+    "F2015-271058",
+    "F2015-84851",
+    "F2015-15580",
+    "F2015-63860",
+    "F2015-106428",
+    "F2015-272020",
+    "F2015-165543",
+    "F2015-282726",
+    "F2015-208678",
+    "F2015-74915",
+    "F2015-274783",
+    "F2015-131437",
+    "F2015-246479",
+    "F2015-163396",
+    "F2015-254935",
+    "F2015-335957",
+    "F2015-124231",
+    "F2015-63104",
+    "F2015-334031",
+    "F2015-267904",
+    "F2015-102056",
+    "F2015-110532",
+    "F2015-273632"
+  ]
+}
