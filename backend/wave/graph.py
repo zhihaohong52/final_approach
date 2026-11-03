@@ -727,7 +727,7 @@ def _hhmm(window_start: str, minutes: float) -> str:
 
 def revision(wave: Wave, plan: JointPlan, focus: str) -> dict:
     """Challenge output for the disruption flight: revised arrival time, runway, gate and action.
-    delay_vs_schedule_min = landing slot - scheduled arrival (divert: the metrics delay)."""
+    delay_vs_schedule_min = the metrics delay: in-block - scheduled arrival (BTS gate time, spec §6.1)."""
     a = plan.get(focus)
     f = wave.flight(focus)
     m = metrics_map(wave, plan)[focus]
@@ -740,7 +740,7 @@ def revision(wave: Wave, plan: JointPlan, focus: str) -> dict:
                 "summary": f"{focus} diverts to {alt or 'its alternate'} (delay ~{m.delay_min:g} min)"}
     action = "ground_delay" if a.ground_delay_min > 0 else "hold" if m.hold_min > 0 else "land"
     slot = float(a.slot_min)
-    d = round(slot - f.sched_min, 1)
+    d = m.delay_min   # §6.1: in-block vs the scheduled gate time (a landing slot vs a gate time mixed bases)
     hhmm = _hhmm(wave.window_start, slot)
     extra = (f", ground delay {a.ground_delay_min:g} min" if a.ground_delay_min > 0 else "") + \
             (f", speed reduction {a.speed_reduction_min:g} min" if a.speed_reduction_min > 0 else "") + \

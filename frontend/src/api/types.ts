@@ -135,6 +135,7 @@ export interface WaveFlight {
   crew_shift_end_min: number;
   next_departure_min: number;
   provenance: Provenance[];
+  taxi_in_ref_min?: number | null;     // v2.2: real TAXI_IN, else airport 2015 median; absent = generic 6 min
 }
 export interface Gate {
   id: string; size: "narrow" | "wide"; pier: string; remote: boolean;
@@ -327,7 +328,7 @@ export interface Revision {
   scheduled_gate: string;
   speed_reduction_min?: number; ground_delay_min?: number; hold_min?: number;
   alternate?: string | null;           // divert only
-  delay_vs_schedule_min: number;       // landing slot - scheduled arrival (divert: estimated delay)
+  delay_vs_schedule_min: number;       // in-block - scheduled arrival (BTS gate time); divert: estimated delay
   summary: string;                     // one line for the UI
 }
 export interface Limit {

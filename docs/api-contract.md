@@ -417,7 +417,7 @@ interface Revision {
   scheduled_gate: string;
   speed_reduction_min?: number; ground_delay_min?: number; hold_min?: number;
   alternate?: string | null;           // divert only
-  delay_vs_schedule_min: number;       // landing slot - scheduled arrival (divert: estimated delay)
+  delay_vs_schedule_min: number;       // in-block - scheduled arrival (BTS gate time); divert: estimated delay
   summary: string;                     // one line for the UI
 }
 interface Limit {

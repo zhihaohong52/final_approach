@@ -96,3 +96,15 @@ def test_airport_taxi_median_and_generic_fallback():
     assert all(f.taxi_in_ref_min is None for f in w.flights)
     assert U.taxi_in_ref(w, w.flights[0].callsign) == 6.0          # generic: no real TAXI_IN on the wave
     assert U.GENERIC_TAXI_IN_MIN == 6.0
+
+
+def test_revision_delay_vs_schedule_is_in_block_delay():
+    from atm.wave import build
+    from atm.wave.graph import revision
+    from atm.wave.moves import fcfs_plan
+    from atm.wave.utility import metrics_map
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    r = revision(w, p, w.focus)
+    m = metrics_map(w, p)[w.focus]   # §6.1: delay vs the scheduled gate time, measured at in-block
+    assert r["delay_vs_schedule_min"] == m.delay_min
+    assert r["delay_vs_schedule_min"] == pytest.approx(m.in_block_min - w.flight(w.focus).sched_min, abs=0.05)
