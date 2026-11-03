@@ -50,6 +50,12 @@ class FixedMover:
     strip: str = ""               # runway_events key: the OSM strip name (e.g. "10C/28C"), else rules.strip_label
     stand: str = ""
     unrouted: str | None = None
+    label: str = ""               # reservation / runway-event / track callsign: `callsign`, or "<cs> (dep)" for a
+                                  # departure whose callsign is also a wave or queue arrival's (own events are skipped
+                                  # by callsign, so a shared one would hide a real conflict)
+
+    def __post_init__(self) -> None:
+        self.label = self.label or self.callsign
 
 
 @dataclass
@@ -227,7 +233,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
     date, t0 = _t0(wave)
     mv = movements(wave)
     mode = departure_mode(wave)
-    stats = {"no_taxi_out": 0, "callsign_collisions": []}
+    stats = {"no_taxi_out": 0}
     main = _main_comp(g) if g is not None else None
     piers = _stand_piers(wave, g, main) if g is not None else {}
     used: set[int] = set()
@@ -281,8 +287,6 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
                                   why))
             continue
         m = obj
-        if cs in wave_cs:
-            stats["callsign_collisions"].append(cs)
         mixed, arr_rw, cands = mode
         rwy = None
         if cands:
@@ -321,7 +325,8 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
         else:
             stats["no_taxi_out"] += 1
             taxi = path.unimpeded_min if path is not None else 0.0
-        out.append(FixedMover(cs, "departure", rwy or "", snode, ev - taxi, path, ev, strip, skey, why))
+        label = f"{cs} (dep)" if cs in wave_cs else cs
+        out.append(FixedMover(cs, "departure", rwy or "", snode, ev - taxi, path, ev, strip, skey, why, label))
     out.sort(key=lambda m: (m.t_start_min, m.callsign))
     return out, mode, mv is not None, stats
 
@@ -333,7 +338,7 @@ def _compute(wave: Wave) -> FixedTraffic:
     for m in movers:
         if m.strip:
             res.runway_events.setdefault(m.strip, []).append(
-                (m.event_min, "landing" if m.kind == "arrival" else "takeoff", m.callsign))
+                (m.event_min, "landing" if m.kind == "arrival" else "takeoff", m.label))
     for lst in res.runway_events.values():
         lst.sort()
     scheduled: dict[str, Scheduled] = {}
@@ -345,23 +350,23 @@ def _compute(wave: Wave) -> FixedTraffic:
             continue
         # schedule() does not skip the mover's own runway event: hide it (shared node/edge tables, filtered events)
         view = Reservations(res.node_busy, res.edge_dir,
-                            {s: [e for e in lst if e[2] != m.callsign] for s, lst in res.runway_events.items()})
-        s = surface.schedule(g, m.path, m.t_start_min, view, m.callsign)
-        scheduled[m.callsign] = s
+                            {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
+        s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
+        scheduled[m.label] = s
         if not s.ok:
-            failures.append((m.callsign, s.reason or "not scheduled"))
+            failures.append((m.label, s.reason or "not scheduled"))
         if m.kind == "departure":
             leave = s.points[-1]["t_min"]
             if leave > m.event_min + _TOL:
                 lst = res.runway_events[m.strip]
-                i = lst.index((m.event_min, "takeoff", m.callsign))
-                lst[i] = (leave, "takeoff", m.callsign)
+                i = lst.index((m.event_min, "takeoff", m.label))
+                lst[i] = (leave, "takeoff", m.label)
                 lst.sort()
                 shifted += 1
         if s.reason == "hold-short search did not converge":
             continue                     # nothing was reserved: no track to draw or verify
         names = [n for i, n in enumerate(m.path.names) if n and (i == 0 or m.path.names[i - 1] != n)]
-        tracks.append(GroundTrack(m.callsign, m.kind, False, m.runway, m.stand, names, s.points, s.waits,
+        tracks.append(GroundTrack(m.label, m.kind, False, m.runway, m.stand, names, s.points, s.waits,
                                   m.path.unimpeded_min, s.points[-1]["t_min"] - m.t_start_min, m.path.src))
     # A takeoff moved later (above) was not seen by the movers scheduled before it: re-check every track's runway
     # gaps against the final events with the independent verifier (one track at a time: checks 3 and 4 only).
@@ -444,7 +449,10 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
                      f"({', '.join(sorted({v.split()[0] for v in vac}))})")
     if unrouted:
         parts.append(f"not routed on the OSM taxi graph (runway events only): {len(unrouted)} "
-                     f"({', '.join(m.callsign for m in unrouted)})")
+                     f"({', '.join(m.label for m in unrouted)})")
+    relabel = [m.label for m in ft.movers if m.label != m.callsign]
+    if relabel:
+        parts.append(f"departures sharing a wave or queue arrival's callsign, labelled: {', '.join(relabel)}")
     if ft.takeoffs_shifted:
         parts.append(f"{ft.takeoffs_shifted} takeoffs after WHEELS_OFF because of taxi waits")
     detail = "; ".join(parts)

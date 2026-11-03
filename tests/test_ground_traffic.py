@@ -84,9 +84,13 @@ def test_runway_events_landings_and_takeoffs():
     ev = {(cs, kind): (strip, t) for strip, lst in res.runway_events.items() for t, kind, cs in lst}
     for q in w.queue:
         assert ev[(q.callsign, "landing")][1] == pytest.approx(q.slot_min)
+    arrivals = {f.callsign for f in w.flights} | {q.callsign for q in w.queue}
+    assert not any(cs in arrivals for (cs, kind) in ev if kind == "takeoff")   # own-event skip is by callsign
+    relabelled = [m for m in fixed_traffic(w) if m.label != m.callsign]
+    assert relabelled and all(m.callsign in arrivals and m.label == f"{m.callsign} (dep)" for m in relabelled)
     for m in fixed_traffic(w):
         if m.kind == "departure":
-            strip, t = ev[(m.callsign, "takeoff")]
+            strip, t = ev[(m.label, "takeoff")]
             assert t >= m.event_min - 1e-9 and strip in surface.runway_strips(g)
 
 
