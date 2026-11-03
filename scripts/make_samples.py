@@ -16,7 +16,7 @@ from backend import datastore, server
 from backend.datastore.files import FilePaths, FileStore
 
 OUT = Path(__file__).resolve().parents[1] / "frontend" / "src" / "api" / "samples"
-WAVE_ID = "F2015-310938"   # the ORD replay wave (importable: tests read it; override with argv[1])
+WAVE_ID = "F2015-7053"   # the ORD replay wave (importable: tests read it; override with argv[1])
 
 
 def _write_json(name: str, data) -> None:
