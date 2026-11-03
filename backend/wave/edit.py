@@ -209,23 +209,29 @@ def _nearest_legal(wave: Wave, plan: JointPlan, a: Assignment, others: set) -> f
 def check_edit(wave: Wave, plan: JointPlan, include_trajectories: bool = False) -> dict:
     """{plan, evaluation, suggestions: {callsign: slot_min}} for an edited plan, plus `trajectories` (the
     plan's `TrajectorySet`) when asked."""
+    from backend.wave import trajectory
     ev = evaluate(wave, plan)
     suggestions: dict[str, float] = {}
     if ev["checks"] and not ev["feasible"]:
         fails = _failures(ev)
-        for cs in sorted({c for _, c in fails if c}):
-            # tolerate other flights' breaches, except those that name this flight (e.g. a flight still on the
-            # runway at this one's landing): those it must clear too
-            caused = {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]
-                      and c.get("callsign") != cs and cs in _named(c)}
-            try:
-                s = _nearest_legal(wave, plan, plan.get(cs), {f for f in fails if f[1] != cs} - caused)
-            except StopIteration:
-                continue
-            if s is not None:
-                suggestions[cs] = s
+        with trajectory.scratch():   # up to 60 trial plans per failing flight: kept out of the shared plan cache
+            _suggest(wave, plan, ev, fails, suggestions)
     out = {"plan": plan.to_dict(), "evaluation": ev, "suggestions": suggestions}
     if include_trajectories:
-        from backend.wave import trajectory
         out["trajectories"] = trajectory.build(wave, plan).to_dict()
     return out
+
+
+def _suggest(wave: Wave, plan: JointPlan, ev: dict, fails: set, suggestions: dict[str, float]) -> None:
+    """Fill `suggestions` (callsign -> nearest legal slot) for each flight with a failing check."""
+    for cs in sorted({c for _, c in fails if c}):
+        # tolerate other flights' breaches, except those that name this flight (e.g. a flight still on the
+        # runway at this one's landing): those it must clear too
+        caused = {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]
+                  and c.get("callsign") != cs and cs in _named(c)}
+        try:
+            s = _nearest_legal(wave, plan, plan.get(cs), {f for f in fails if f[1] != cs} - caused)
+        except StopIteration:
+            continue
+        if s is not None:
+            suggestions[cs] = s

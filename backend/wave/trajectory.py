@@ -39,7 +39,9 @@ Nothing here decides legality: the rules read these objects.
 from __future__ import annotations
 
 import math
+import os
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from backend.wave import ground_traffic, holding, route, surface
@@ -47,7 +49,15 @@ from backend.wave.model import JointPlan, Wave
 from backend.wave.surface import GroundTrack
 from backend.wave.version import ENGINE_VERSION
 
-CACHE_MAX = 4096
+# Memory bounds (Render: 512 MB per process). One cached TrajectorySet is about 125-170 KB on the replay waves, so
+# PLAN_CACHE_MAX = 256 holds at most ~43 MB. The cache is FIFO and shared by every thread; ATM_PLAN_CACHE overrides
+# it, and the offline benchmark raises it to 256 per worker thread (its threads interleave waves: 256 shared entries
+# would double its rebuilds, 256 per worker matches the old 4096 at concurrency 16).
+PLAN_CACHE_MAX = int(os.environ.get("ATM_PLAN_CACHE") or 256)
+PLAN_CACHE_PER_WORKER = 256
+WAVE_CACHE_MAX = 64            # per-wave caches (_NOMINAL, _HOLDS; small): more than the benchmark's 50 waves
+LAPS_CACHE_MAX = 512           # racetrack lap polylines, one per physical hold (a few per wave)
+SCRATCH_MAX = 4                # trial plans of one edit suggestion search, kept only while that search runs
 MIN_VECTOR_DRAW_MIN = 1e-6     # below this the stretch is kept in vector_min but not drawn
 INTERP_FLOOR_AGL_FT = 4000.0   # lowest shared base at a fix whose bases are interpolated route altitudes
 MAX_HOLD_LAPS = 12             # defence in depth: ~50 min of laps, past the 30-min horizon; the rest is stretch
@@ -196,10 +206,10 @@ _NOMINAL: dict[str, dict[str, str | None]] = {}
 _LOCK = threading.Lock()   # FIFO eviction of the shared caches (the benchmark negotiates in a thread pool)
 
 
-def _put(cache: dict, k, v) -> None:
-    """Insert into a shared FIFO cache of at most CACHE_MAX entries, thread-safely."""
+def _put(cache: dict, k, v, cap: int = WAVE_CACHE_MAX) -> None:
+    """Insert into a shared FIFO cache of at most `cap` entries, thread-safely."""
     with _LOCK:
-        while len(cache) >= CACHE_MAX:
+        while len(cache) >= cap:
             cache.pop(next(iter(cache)), None)
         cache[k] = v
 
@@ -278,7 +288,7 @@ def _lap_cached(hold: holding.HoldSpec) -> list[tuple[float, float, float]]:
     k = (hold.fix, hold.lat, hold.lon, hold.inbound_true, hold.turn, hold.leg_min, hold.base_ft)
     hit = _LAPS.get(k)
     if hit is None:
-        if len(_LAPS) >= CACHE_MAX:
+        if len(_LAPS) >= LAPS_CACHE_MAX:
             _LAPS.clear()
         hit = _LAPS[k] = _lap(hold)
     return hit
@@ -698,17 +708,46 @@ def detail(o: GroundOutcome) -> str:
 
 
 _CACHE: dict[tuple[str, str], TrajectorySet] = {}
+_TLS = threading.local()
+
+
+def _scratch() -> dict | None:
+    return getattr(_TLS, "scratch", None)
+
+
+@contextmanager
+def scratch():
+    """Trial plans built in this block on this thread (an edit's suggestion search) are memoised only in a private
+    dict of SCRATCH_MAX entries, dropped on exit, never in the shared cache. A trial is built once although
+    evaluate() asks for it three times (utility, rules.check, the stack check). Nested blocks share the outer one."""
+    if _scratch() is not None:
+        yield
+        return
+    _TLS.scratch = {}
+    try:
+        yield
+    finally:
+        _TLS.scratch = None      # asyncio.to_thread reuses worker threads: never leave it set
 
 
 def build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     """Trajectories of every landing in `plan` plus the wave's fixed traffic, memoised on
-    (wave content key, plan id). The returned object is shared: treat it as read-only."""
+    (wave content key, plan id) in a shared FIFO of PLAN_CACHE_MAX entries (inside `scratch()`, in that block's
+    private dict instead). The returned object is shared: treat it as read-only."""
     k = (route.wave_key(wave), plan.id)
     hit = _CACHE.get(k)
     if hit is not None:
         return hit
+    sc = _scratch()
+    if sc is not None and (hit := sc.get(k)) is not None:
+        return hit
     ts = _build(wave, plan)
-    _put(_CACHE, k, ts)
+    if sc is not None:
+        while len(sc) >= SCRATCH_MAX:
+            sc.pop(next(iter(sc)))
+        sc[k] = ts
+    else:
+        _put(_CACHE, k, ts, PLAN_CACHE_MAX)
     return ts
 
 

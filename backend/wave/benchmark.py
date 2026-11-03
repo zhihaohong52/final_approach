@@ -871,6 +871,10 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--fixtures", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "eval"))
     a = ap.parse_args(argv)
+    from backend.wave import trajectory
+    # offline process: worker threads interleave waves, so give the shared plan cache 256 entries per worker
+    # (the server keeps the 256-entry default; see trajectory.PLAN_CACHE_MAX)
+    trajectory.PLAN_CACHE_MAX = max(trajectory.PLAN_CACHE_MAX, trajectory.PLAN_CACHE_PER_WORKER * max(1, a.concurrency))
 
     arm_list = [x.strip() for x in a.arms.split(",") if x.strip()]
     if "formula" not in arm_list:

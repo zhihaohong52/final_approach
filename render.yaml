@@ -15,3 +15,7 @@ services:
         sync: false
       - key: DATABASE_URL_POOLED   # Neon pooler URL; the app serves from files when unset or unreachable
         sync: false
+      - key: ATM_WARM              # 1 (default): warm the flights index and demo waves after boot; 0: off
+        value: "1"
+      - key: ATM_PLAN_CACHE        # trajectory plans kept in memory (~125-170 KB each); 256 stays well inside 512 MB
+        value: "256"
