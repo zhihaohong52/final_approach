@@ -277,3 +277,47 @@ def test_markdown_definition_change_caveat_under_regressions():
     assert "definition change" in head[1]
     rep["engine_notes"].pop("definition_change")
     assert "not flight physics" not in B.markdown(rep)
+
+
+from backend.wave import benchmark as B, build
+
+_w_ord = lambda: build.build_wave("F2015-270287")   # noqa: E731
+
+
+def test_taxi_validation_shape():
+    v = B.taxi_validation(waves=[_w_ord()], results={"x": {"wave_id": "F2015-270287"}})
+    assert set(v) == {"n", "mae_min", "bias_min", "per_airport", "worst"} and v["n"] == 1
+
+
+def test_taxi_validation_values_and_cause():
+    w = _w_ord()
+    v = B.taxi_validation(waves=[w], results={w.id: {"wave_id": w.id}})
+    (row,) = v["worst"]
+    assert row["wave_id"] == w.id and row["real"] == 4.0          # OO5559's real BTS TAXI_IN
+    assert v["bias_min"] == pytest.approx(row["routed"] - row["real"], abs=0.06)   # worst rows round to 0.1
+    assert v["mae_min"] == pytest.approx(abs(v["bias_min"]), abs=0.01)
+    assert set(v["per_airport"]["ORD"]) == {"n", "routed_median", "bts_median"} and v["per_airport"]["ORD"]["n"] == 1
+    assert v["per_airport"]["ORD"]["bts_median"] == build.airport_taxi_median("ORD")
+    assert [B._taxi_cause(r, x) for r, x in ((2.0, 15.0), (12.0, 4.0), (5.0, 7.0))] == \
+        ["BTS includes gate wait", "long route / remote stand", "-"]
+    # waves not in results are skipped; the empty validation has no error figures
+    assert B.taxi_validation(waves=[w], results={}) == {"n": 0, "mae_min": None, "bias_min": None,
+                                                        "per_airport": {}, "worst": []}
+
+
+def test_coverage_tiers_and_markdown_sections():
+    w = _w_ord()
+    cov = B.coverage([w], n_failed=1)
+    assert set(cov) == {"procedures", "surface", "ground_traffic"}
+    assert cov["surface"] == {"real": 1, "none": 1} and cov["ground_traffic"] == {"partial": 1, "none": 1}
+    assert sum(cov["procedures"].values()) == 2
+    import json
+    from pathlib import Path
+    rep = json.loads((Path(__file__).resolve().parent.parent / "eval" / "benchmark.json").read_text())
+    rep.pop("coverage", None); rep.pop("taxi_validation", None)
+    assert "## Taxi-in validation" not in B.markdown(rep) and "## Coverage" not in B.markdown(rep)
+    rep["coverage"] = cov
+    rep["taxi_validation"] = B.taxi_validation([w], {w.id: {}})
+    md = B.markdown(rep)
+    assert "## Taxi-in validation vs BTS 2015" in md and "| ORD | 1 |" in md and "## Coverage" in md
+    assert "surface: real 1, none 1" in md

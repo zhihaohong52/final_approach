@@ -293,6 +293,91 @@ def taxi_wait_mean(plans: list[list[dict]]) -> float:
     return mean([sum((a.get("metrics") or {}).get("taxi_wait_min", 0.0) for a in p) for p in plans])
 
 
+REAL_TAXI_IN = "(real TAXI_IN)"   # build.taxi_in_ref_row's provenance marker; the airport-median fallback lacks it
+
+
+def _taxi_cause(routed: float, real: float) -> str:
+    """Heuristic label for a large routed-vs-real gap (not a diagnosis)."""
+    if real > routed + 10:
+        return "BTS includes gate wait"
+    if routed > real + 5:
+        return "long route / remote stand"
+    return "-"
+
+
+def taxi_validation(waves: list, results: dict[str, dict]) -> dict:
+    """Taxi-in validation vs BTS 2015 (spec §10.5, no fitting): for the focus flight of every wave in `results`
+    (membership only: value["wave_id"], else the key), the routed taxi-in under the FCFS plan against that flight's
+    real BTS TAXI_IN. Routed = ROT + unimpeded taxi (`TaxiInfo.total_min`, wheels-on to in-block, the span BTS
+    TAXI_IN measures), unrounded. Only focus flights whose taxi is on the real surface tier (OSM route, src "osm")
+    and whose TAXI_IN is real (not the airport-median fallback) count. bias = mean(routed - real); BTS includes
+    gate waits, so bias < 0 is expected and reported, not corrected. per_airport: routed median of the counted
+    flights vs the airport's 2015 BTS median TAXI_IN (`build.airport_taxi_median`)."""
+    from backend.wave import moves, surface
+    from backend.wave.build import airport_taxi_median
+    from backend.wave.utility import focus_callsign
+    ids = {(r or {}).get("wave_id", k) for k, r in results.items()}
+    rows: list[dict] = []
+    for w in waves:
+        if w.id not in ids:
+            continue
+        cs = focus_callsign(w)
+        f, a = w.flight(cs), moves.fcfs_plan(w).get(cs)
+        if a is None or a.action != "land" or f.taxi_in_ref_min is None:
+            continue
+        if not any(p.layer == "flights" and REAL_TAXI_IN in (p.detail or "") for p in f.provenance):
+            continue
+        tx = surface.taxi_info(w, a.runway, a.gate, f.gate_size)
+        if tx.tier != "real" or tx.src != "osm":
+            continue
+        rows.append({"wave_id": w.id, "callsign": cs, "iata": w.airport.iata,
+                     "routed": tx.total_min, "real": float(f.taxi_in_ref_min)})
+    if not rows:
+        return {"n": 0, "mae_min": None, "bias_min": None, "per_airport": {}, "worst": []}
+    by_ap: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_ap[r["iata"]].append(r)
+    worst = sorted(rows, key=lambda r: (-abs(r["routed"] - r["real"]), r["wave_id"]))[:5]
+    return {
+        "n": len(rows),
+        "mae_min": round(statistics.fmean(abs(r["routed"] - r["real"]) for r in rows), 2),
+        "bias_min": round(statistics.fmean(r["routed"] - r["real"] for r in rows), 2),
+        "per_airport": {ap: {"n": len(rs), "routed_median": round(statistics.median(r["routed"] for r in rs), 2),
+                             "bts_median": airport_taxi_median(ap)} for ap, rs in sorted(by_ap.items())},
+        "worst": [{"wave_id": r["wave_id"], "callsign": r["callsign"], "routed": round(r["routed"], 1),
+                   "real": r["real"], "cause": _taxi_cause(r["routed"], r["real"])} for r in worst],
+    }
+
+
+_PROC_RANK = ("star+iap", "iap", "straight-in")
+
+
+def _procedures_tier(wave) -> str:
+    """Best approach tier over the wave's open-runway routes (route.routes_for_wave); "none" without routes."""
+    from backend.wave import route
+    tiers = {r.tier for r in route.routes_for_wave(wave).values()}
+    return next((t for t in _PROC_RANK if t in tiers), "none")
+
+
+def coverage(waves: list, n_failed: int = 0) -> dict[str, dict[str, int]]:
+    """Tier counts over the benchmark waves (spec §10.6). procedures: best route tier (star+iap / iap /
+    straight-in); surface: the wave's `surface` provenance status (real / generic, decided per wave); ground_traffic:
+    real (BTS 2015 movements) or partial (challenge-file subset). Waves that failed to build count as "none", so
+    every layer sums to the requested wave count."""
+    out: dict[str, Counter] = {"procedures": Counter(), "surface": Counter(), "ground_traffic": Counter()}
+    for w in waves:
+        st = {p.layer: p.status for p in w.provenance}
+        out["procedures"][_procedures_tier(w)] += 1
+        out["surface"][st.get("surface", "none")] += 1
+        gt = st.get("ground_traffic")
+        out["ground_traffic"]["none" if gt is None else "real" if gt == "real" else "partial"] += 1
+    for c in out.values():
+        if n_failed:
+            c["none"] += n_failed
+    order = {t: i for i, t in enumerate((*_PROC_RANK, "real", "generic", "partial", "none"))}
+    return {k: dict(sorted(c.items(), key=lambda kv: (order.get(kv[0], len(order)), kv[0]))) for k, c in out.items()}
+
+
 def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list, common: set[str],
               max_prompt_chars: int = 0) -> tuple[dict, dict]:
     """Returns (contract summary, extras for selection/markdown)."""
@@ -739,6 +824,25 @@ def markdown(rep: dict) -> str:
           for r in rg[:20]] or ["- none"]
     if len(rg) > 20:
         L.append(f"- ... and {len(rg) - 20} more in benchmark.json")
+    tv = rep.get("taxi_validation")
+    if tv:
+        L += ["", "## Taxi-in validation vs BTS 2015", "",
+              "Focus flight of each benchmark wave on the real surface tier (OSM route) with a real BTS TAXI_IN, under the "
+              "FCFS plan. Routed = ROT + unimpeded routed taxi (wheels-on to in-block, the span TAXI_IN measures). "
+              "No fitting: speeds are fixed up front. BTS TAXI_IN includes gate waits and ramp delays, so routed < real "
+              "(bias < 0) is expected; the bias is stated, not corrected.", "",
+              f"n = {tv['n']}, MAE {_f(tv['mae_min'])} min, bias (routed - real) {_f(tv['bias_min'])} min.", "",
+              "| airport | n | routed median min | BTS 2015 median min |", "|---|---|---|---|"]
+        L += [f"| {ap} | {d['n']} | {d['routed_median']} | {_f(d['bts_median'])} |"
+              for ap, d in tv["per_airport"].items()]
+        L += ["", "Largest gaps (cause is a heuristic):", ""]
+        L += [f"- `{r['wave_id']}` {r['callsign']}: routed {r['routed']} min, real {r['real']} min; {r['cause']}"
+              for r in tv["worst"]] or ["- none"]
+    cov = rep.get("coverage")
+    if cov:
+        L += ["", "## Coverage", "", f"Tier counts over the {rep['n_waves']} benchmark waves (waves that failed to build "
+              "count as none):", ""]
+        L += [f"- {layer}: " + ", ".join(f"{t} {n}" for t, n in tiers.items()) for layer, tiers in cov.items()]
     en = rep.get("engine_notes")   # hand-written analysis of the engine change, stored in benchmark.json
     if en:
         L += ["", f"## {en['title']}", ""] + [f"- {x}" for x in en.get("items", [])]
@@ -828,6 +932,8 @@ def main(argv: list[str] | None = None) -> dict:
         "selection": selection, "failures": failures, "wave_ids": [w.id for w in waves],
     }
     report = {"engine_version": ENGINE_VERSION, **report}
+    report["coverage"] = coverage(waves, n_failed=len(build_fail))
+    report["taxi_validation"] = taxi_validation(waves, {w: x["result"] for w, x in formula_runs.items() if "result" in x})
     report["per_wave"] = {model: per_wave_table(all_runs[arm], common)
                           for arm in arm_list for model in [arm_parts(arm)[1]]}
     archive = [r for r in load_archive(ROOT / "eval" / "archive") if r["engine_version"] != ENGINE_VERSION]
