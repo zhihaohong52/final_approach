@@ -1,4 +1,4 @@
-import type { Assignment, JointPlan, WaveScenario } from "../api/types";
+import type { Assignment, JointPlan, TrajectorySet, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
 import type { Tone } from "./Radar";
@@ -6,6 +6,8 @@ import type { Tone } from "./Radar";
 // Flight progress strips, as in a tower or approach position: one strip per arrival, racked by where it is at
 // the replay clock (on final, sequenced, later, down). Each strip carries what the controller reads at a glance:
 // callsign, type and origin; runway and landing time; gate; and on the second line what changed and who changed it.
+// A third line carries the path when the engine has one: the entry fix and time before the target is on the
+// scope, the hold (fix, laps, level), and the route and vector time the runway choice adds.
 const FINAL_MIN = 10;              // ~30 NM out at 180 kt: established on the approach
 const SEQ_MIN = 45;                // inside the wave: already given a runway and a time
 
@@ -19,19 +21,42 @@ interface Props {
   tone: (cs: string) => Tone;
   selected: string | null;
   onSelect: (cs: string | null) => void;
+  paths?: TrajectorySet | null;    // the engine's trajectories for `plan`, when it has them
 }
 
-type Strip = { cs: string; rem: number; tone: Tone; type: string; from: string; rw: string; time: string; gate: string; note: string; who: "you" | "agents" | null };
+type Strip = { cs: string; rem: number; tone: Tone; type: string; from: string; rw: string; time: string; gate: string; note: string; who: "you" | "agents" | null; path: string };
 
-export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected, onSelect }: Props) {
+const tPlus = (m: number) => `T${m < 0 ? "−" : "+"}${Math.abs(Math.round(m))}`;
+const signedMin = (m: number) => `${m < 0 ? "−" : "+"}${Math.abs(m).toFixed(1)}′`;
+
+/** The strip's path line: "inbound, entry BFORD T+12" before the target appears, "HLD BENKY 2L 120" for a
+ *  flight that holds, and the route time its runway adds over the nominal one ("rte +2.1′") plus any vector
+ *  stretch ("vec +1.5′"). Empty when there is nothing to say. */
+export function pathLine(a: Assignment | undefined, air: TrajectorySet["air"][number] | undefined, t: number): string {
+  const parts: string[] = [];
+  if (air && air.points.length && t < air.appears_min) {
+    const fix = air.points.find((p) => p.fix)?.fix;
+    parts.push(`inbound${fix ? `, entry ${fix}` : ""} ${tPlus(air.appears_min)}`);
+  }
+  const m = a?.metrics;
+  const hold = air?.hold && air.hold.laps >= 1 ? { fix: air.hold.fix, laps: air.hold.laps, level: air.hold.level_ft }
+    : m?.hold_laps && m.hold_laps >= 1 && m.hold_fix ? { fix: m.hold_fix, laps: m.hold_laps, level: m.hold_level_ft ?? null } : null;
+  if (hold) parts.push(`HLD ${hold.fix} ${hold.laps}L${hold.level != null ? ` ${String(Math.round(hold.level / 100)).padStart(3, "0")}` : ""}`);
+  if (m?.route_extra_min != null && Math.abs(m.route_extra_min) >= 0.1) parts.push(`rte ${signedMin(m.route_extra_min)}`);
+  if (m?.vector_min != null && m.vector_min >= 0.1) parts.push(`vec ${signedMin(m.vector_min)}`);
+  return parts.join(" · ");
+}
+
+export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected, onSelect, paths = null }: Props) {
+  const airBy = new Map((paths?.air ?? []).map((x) => [x.callsign, x]));
   const at = (p: JointPlan | null, cs: string): Assignment | undefined => p?.assignments.find((a) => a.callsign === cs);
   const hhmm = (m: number) => clock(wave.window_start, m);
 
   const strips: Strip[] = wave.flights.map((f) => {
     const a = at(plan, f.callsign);
     const base = { cs: f.callsign, tone: tone(f.callsign), type: f.aircraft_type ?? "", from: f.origin };
-    if (!a) return { ...base, rem: f.sched_min - t, rw: "", time: hhmm(f.sched_min), gate: f.scheduled_gate, note: "no runway yet", who: null };
-    if (a.action === "divert") return { ...base, rem: Infinity, rw: "DIV", time: "", gate: "", note: `diverts to ${f.fuel.alternate}`, who: null };
+    if (!a) return { ...base, rem: f.sched_min - t, rw: "", time: hhmm(f.sched_min), gate: f.scheduled_gate, note: "no runway yet", who: null, path: "" };
+    if (a.action === "divert") return { ...base, rem: Infinity, rw: "DIV", time: "", gate: "", note: `diverts to ${f.fuel.alternate}`, who: null, path: "" };
     const slot = a.slot_min ?? f.sched_min;
     // what changed, against the plan it came from: the duty manager's edit against the agents', the agents' against the status quo
     const ref = edited(f.callsign) ? at(agreed, f.callsign) : at(baseline, f.callsign);
@@ -39,7 +64,7 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
     // one change fits the strip: the runway if it moved, else the time, else the gate (the full story is on the timeline)
     const was = !moved ? "" : ref.runway !== a.runway ? `${ref.runway}` : ref.slot_min !== a.slot_min ? hhmm(ref.slot_min ?? 0) : `gate ${ref.gate}`;
     const note = moved ? `was ${was}` : a.metrics.hold_min >= 1 ? `holds ${Math.round(a.metrics.hold_min)} min` : `due ${hhmm(f.sched_min)}`;
-    return { ...base, rem: slot - t, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null };
+    return { ...base, rem: slot - t, rw: a.runway ?? "", time: hhmm(slot), gate: a.gate === "RS" ? "RS" : a.gate ?? "", note, who: moved ? (edited(f.callsign) ? "you" : "agents") : null, path: pathLine(a, airBy.get(f.callsign), t) };
   });
   const fixed = wave.queue.filter((q) => q.slot_min - t >= 0 && q.slot_min - t <= SEQ_MIN).sort((p, q) => p.slot_min - q.slot_min);
 
@@ -64,6 +89,7 @@ export function Strips({ wave, plan, agreed, baseline, edited, t, tone, selected
                 <span className="s-id"><b>{icao(s.cs)}</b><small>{[s.type, s.from].filter(Boolean).join(" · ")}</small></span>
                 <span className="s-slot"><b>{s.rw} <i>{s.time}</i></b><small className={s.who ?? ""}>{s.note}</small></span>
                 <span className="s-gate">{s.gate}</span>
+                {s.path && <small className="s-path">{s.path}</small>}
               </button>
             ))}
           </div>

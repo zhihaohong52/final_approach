@@ -1,22 +1,32 @@
 import { useEffect, useRef, useState } from "react";
-import type { Assignment, JointPlan, Runway, WaveScenario } from "../api/types";
+import type { Assignment, JointPlan, Runway, TrajectorySet, WaveGeo, WaveScenario } from "../api/types";
 import { icao } from "../callsign";
 import { clock } from "../format";
+import { holdLap, levelLabel, positionAt, scanFloor, scanTimes, segmentDashed, trend } from "../geo/track";
 
 // An approach-radar picture of the plan at one moment. The scope is centred on the airport reference point,
-// runways are drawn to scale from their end coordinates, range rings are true nautical miles, and each
-// arrival sits on the extended centreline of the runway end it lands on, as far out as it still has to fly
-// at a typical final-approach groundspeed. Positions are replayed from the plan, not from surveillance data.
-const GS_NM_PER_MIN = 3;          // ~180 kt over the last 30 NM
-const RANGES = [10, 20, 40];           // NM from centre to the short edge, as on a scope range knob
+// runways are drawn to scale from their end coordinates and range rings are true nautical miles.
+// With the wave's procedures (/geo) and the engine's trajectories for the plan on screen, each arrival is
+// sampled from its own 4D track once per radar scan: STAR legs, holding laps at its stack level, vectors and
+// final, exactly the path the engine costed. Synthesized legs (vectors, generic holds, corner posts) are
+// dashed. Without them the scope falls back to the v2 schematic: each arrival sits on the extended
+// centreline of its runway end at a typical final-approach groundspeed, and says so.
+// Positions are replayed from the plan, not from surveillance data.
+const GS_NM_PER_MIN = 3;          // ~180 kt over the last 30 NM (schematic only)
+const RANGES = [10, 20, 40, 80];       // NM from centre to the short edge, as on a scope range knob
 const LEAD = 22;                   // leader line length, px
 export const SCAN_MIN = 4.8 / 60;  // one radar update, minutes: a terminal antenna turns at 12.5 rpm
 const TRAIL = 5;                   // history dots: where the target was on the last five scans
 const AHEAD_MIN = 1;               // predicted track line: where it will be in a minute
+const TREND_MIN = 0.25;            // the climb/descent arrow compares the level now with 15 s later
+const MAX_FIX_LABELS = 8;          // sparse fix labels: the rest are symbols with their name on hover
 
 export type Tone = "focus" | "flight" | "edited" | "alert" | "fixed";
 type End = Runway & { le_lat: number; le_lon: number; he_lat: number; he_lon: number };
 const hasGeo = (r: Runway): r is End => [r.le_lat, r.le_lon, r.he_lat, r.he_lon].every((v) => typeof v === "number");
+type Air = TrajectorySet["air"][number];
+type Pt = Air["points"][number];
+type XY = [number, number];
 
 interface Props {
   wave: WaveScenario;
@@ -25,14 +35,19 @@ interface Props {
   tone: (cs: string) => Tone;
   selected: string | null;
   onSelect: (cs: string | null) => void;
+  geo?: WaveGeo | null;                        // procedures for the wave; null = no geometry
+  paths?: TrajectorySet | null;                // the engine's trajectories for `plan`; null = none
+  pathsNote?: string | null;                   // set when a recorded run has no paths: no targets are drawn
+  updating?: boolean;                          // trajectories for an edited plan are being recomputed
 }
 
 interface Blip { cs: string; x: number; y: number; tone: Tone; l1: string; l2: string; out: number | null; title: string; trail: [number, number][]; ahead: [number, number] }
 
-export function Radar({ wave, plan, t, tone, selected, onSelect }: Props) {
+export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, boxH], setSize] = useState([960, 0]);
-  const [range, setRange] = useState(10);
+  const [range, setRange] = useState(20);
+  const [hoverFix, setHoverFix] = useState<string | null>(null);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -89,10 +104,108 @@ export function Radar({ wave, plan, t, tone, selected, onSelect }: Props) {
     return { p, u, out };
   };
 
+  // Three pictures: the engine's paths (fly), the v2 schematic with a caption, or a recorded run whose
+  // paths do not exist (runways only, no targets: drawing the schematic there would pass it off as the run).
+  const fly = !!geo && !!paths && !pathsNote;
+  const noTargets = !!pathsNote;
+  const inScope = ([x, y]: XY) => x >= lim.l && x <= lim.r && y >= lim.t && y <= lim.b;
+
   const blips: Blip[] = [];
-  const awaiting = plan ? [] : [...wave.flights].sort((p, q) => Number(q.callsign === wave.focus) - Number(p.callsign === wave.focus) || p.sched_min - q.sched_min);
+  const awaiting = plan || noTargets ? [] : [...wave.flights].sort((p, q) => Number(q.callsign === wave.focus) - Number(p.callsign === wave.focus) || p.sched_min - q.sched_min);
   const beyond: { cs: string; rw: string; rem: number; tone: Tone }[] = [];   // inbound but past the scope edge
+  const titleOf = new Map<string, string>();
+  for (const q of wave.queue) titleOf.set(q.callsign, `${icao(q.callsign)} · fixed traffic · ${q.aircraft_type ?? ""} ${q.wake} · runway ${q.runway} ${clock(wave.window_start, q.slot_min)}`);
+  for (const a of land) titleOf.set(a.callsign, `${icao(a.callsign)} (${a.callsign}) · runway ${a.runway} at ${clock(wave.window_start, a.slot_min ?? 0)} · gate ${a.gate}${a.metrics.hold_min ? ` · holds ${a.metrics.hold_min} min` : ""}`);
+
+  // ---------- the engine's paths ----------
+  const ts = scanFloor(t, SCAN_MIN);                    // the picture is the last scan, also when scrubbing
+  const air: Air[] = fly ? paths!.air.filter((a) => a.points.length > 0) : [];
+  if (fly) for (const a of air) usedEnds.add(a.runway);
+  // holds someone in the shown plan flies, with the levels they use
+  const holdsUsed = new Map<string, { levels: Set<number>; n: number }>();
+  for (const a of air) if (a.hold && a.hold.laps >= 1) {
+    const h = holdsUsed.get(a.hold.fix) ?? { levels: new Set<number>(), n: 0 };
+    h.levels.add(a.hold.level_ft); h.n++; holdsUsed.set(a.hold.fix, h);
+  }
+  const racetracks = fly ? geo!.procedures.holds.filter((h) => holdsUsed.has(h.fix) && h.polygon.length > 2) : [];
+  const drawnHold = new Set(racetracks.map((h) => h.fix));
+  // what is still ahead of each target, split into runs of solid (published) and dashed (synthesized) legs;
+  // laps of a hold that has its racetrack drawn are left to the racetrack
+  type Run = { cs: string; tone: Tone; dashed: boolean; pts: XY[] };
+  const runs: Run[] = [];
+  let anySynth = racetracks.some((h) => h.src === "synth");
+  const aheadFixes = new Set<string>();                 // fixes still to be flown by a target on the scope
+  if (fly) for (const a of air) {
+    const tn = a.wave ? tone(a.callsign) : "fixed";
+    const now = ts < a.appears_min ? null : positionAt(a.points, ts);
+    if (!now) continue;
+    let cur: Run | null = null;
+    let prev: { xy: XY; p: Pt } = { xy: nm(now.lat, now.lon), p: a.points[now.seg] };
+    for (let i = now.seg + 1; i < a.points.length; i++) {
+      const p = a.points[i], xy = nm(p.lat, p.lon);
+      if (p.fix) aheadFixes.add(p.fix);
+      const skip = prev.p.kind === "hold" && p.kind === "hold" && drawnHold.has(a.hold?.fix ?? "");
+      const dashed = segmentDashed(prev.p, p);
+      if (skip) cur = null;
+      else {
+        if (dashed) anySynth = true;
+        if (!cur || cur.dashed !== dashed) { cur = { cs: a.callsign, tone: tn, dashed, pts: [prev.xy] }; runs.push(cur); }
+        cur.pts.push(xy);
+      }
+      prev = { xy, p };
+    }
+  }
+
+  // sparse fix labels: hold fixes, then the FAFs of runways in use, then entry fixes; at most eight on screen.
+  // A hold fix with its racetrack drawn is named by the racetrack's label, which counts toward the eight.
+  const fixBy = new Map((geo?.procedures.fixes ?? []).map((f) => [f.id, f]));
+  const onPath = new Set<string>();
+  const entries: string[] = [];
+  for (const a of air) {
+    const named = a.points.filter((p) => p.fix && fixBy.has(p.fix)).map((p) => p.fix!);
+    named.forEach((f) => onPath.add(f));
+    const entry = named.find((f) => fixBy.get(f)!.kind === "entry") ?? named[0];
+    if (entry) entries.push(entry);
+  }
+  const fafs = [...onPath].filter((f) => fixBy.get(f)!.kind === "faf");
+  const fixLabels: { id: string; x: number; y: number; hold: boolean }[] = [];
+  for (const id of [...new Set([...holdsUsed.keys(), ...fafs, ...entries])]) {
+    const f = fixBy.get(id);
+    if (!f || fixLabels.length >= MAX_FIX_LABELS) continue;
+    const p = nm(f.lat, f.lon);
+    if (!inScope(p)) continue;
+    const [x, y] = P(p);
+    if (fixLabels.some((l) => Math.abs(l.x - x) < 40 && Math.abs(l.y - y) < 12)) continue;
+    fixLabels.push({ id, x, y, hold: drawnHold.has(id) });
+  }
+  // fix symbols: what the targets on the scope still fly, plus the labelled ones; the rest of the procedure stays off
+  const fixSyms = [...onPath].filter((id) => aheadFixes.has(id) || fixLabels.some((l) => l.id === id))
+    .map((id) => fixBy.get(id)!).filter((f) => inScope(nm(f.lat, f.lon)));
+
+  if (fly) for (const a of air) {
+    const tn: Tone = a.wave ? tone(a.callsign) : "fixed";
+    if (ts < a.appears_min) continue;                     // not yet on frequency: listed in the strips
+    const now = positionAt(a.points, ts);
+    if (!now) continue;                                   // landed
+    const p = nm(now.lat, now.lon);
+    const last = a.points[a.points.length - 1];
+    if (!inScope(p)) { beyond.push({ cs: a.callsign, rw: a.runway, rem: Math.round(last.t_min - ts), tone: tn }); continue; }
+    const [x, y] = P(p);
+    const trail = scanTimes(ts, TRAIL + 1, SCAN_MIN).slice(1)
+      .map((s) => positionAt(a.points, s)).filter((h): h is NonNullable<typeof h> => !!h)
+      .map((h) => nm(h.lat, h.lon)).filter(inScope).map(P);
+    const nx = positionAt(a.points, ts + AHEAD_MIN) ?? last;
+    const lap = holdLap(a, ts);
+    const alt = `${levelLabel(now.alt_ft)}${lap ? "" : trend(now.alt_ft, positionAt(a.points, ts + TREND_MIN)?.alt_ft ?? last.alt_ft)}`;
+    const l2 = lap ? `${alt} HLD ${lap.lap}/${lap.of}` : `${alt} ${a.runway}`;
+    blips.push({ cs: a.callsign, x, y, tone: tn, l1: icao(a.callsign), l2, out: null,
+      title: `${titleOf.get(a.callsign) ?? icao(a.callsign)} · ${Math.round(now.alt_ft ?? 0).toLocaleString("en-US")} ft${lap ? ` · holding at ${a.hold!.fix}, lap ${lap.lap} of ${lap.of}` : ""}`,
+      trail, ahead: P(nm(nx.lat, nx.lon)) });
+  }
+
+  // ---------- the v2 schematic ----------
   const add = (cs: string, rw: string, slot: number, tn: Tone, l2: string, title: string) => {
+    if (fly || noTargets) return;
     const rem = slot - t;
     if (rem < 0 || rem > 60) return;                    // landed, or not yet inbound
     const a = approach(rw, rem * GS_NM_PER_MIN);
@@ -105,17 +218,30 @@ export function Radar({ wave, plan, t, tone, selected, onSelect }: Props) {
     const ahead = P(approach(rw, Math.max(0, rem - AHEAD_MIN) * GS_NM_PER_MIN)!.p);
     blips.push({ cs, x, y, tone: tn, l1: icao(cs), l2, out: null, title, trail, ahead });
   };
-  for (const q of wave.queue) add(q.callsign, q.runway, q.slot_min, "fixed", `${q.runway} ${clock(wave.window_start, q.slot_min)}`, `${icao(q.callsign)} · fixed traffic · ${q.aircraft_type ?? ""} ${q.wake} · runway ${q.runway} ${clock(wave.window_start, q.slot_min)}`);
+  for (const q of wave.queue) add(q.callsign, q.runway, q.slot_min, "fixed", `${q.runway} ${clock(wave.window_start, q.slot_min)}`, titleOf.get(q.callsign)!);
   for (const a of land) {
     const tn = tone(a.callsign);
-    add(a.callsign, a.runway!, a.slot_min ?? 0, tn, `${a.runway} ${a.gate === "RS" ? "RS" : a.gate} ${clock(wave.window_start, a.slot_min ?? 0)}`,
-      `${icao(a.callsign)} (${a.callsign}) · runway ${a.runway} at ${clock(wave.window_start, a.slot_min ?? 0)} · gate ${a.gate}${a.metrics.hold_min ? ` · holds ${a.metrics.hold_min} min` : ""}`);
+    add(a.callsign, a.runway!, a.slot_min ?? 0, tn, `${a.runway} ${a.gate === "RS" ? "RS" : a.gate} ${clock(wave.window_start, a.slot_min ?? 0)}`, titleOf.get(a.callsign)!);
   }
   // draw the negotiated flights last, so they sit on top of fixed traffic
   blips.sort((a, b) => (a.tone === "fixed" ? 0 : 1) - (b.tone === "fixed" ? 0 : 1));
 
-  // data blocks: try four corners, keep the one that collides least with blocks already placed
-  const placed: [number, number, number, number][] = [];
+  // racetracks in screen space, with their "{fix} ×{levels} · {lo}-{hi}k" label above the pattern
+  const holdDraw = racetracks.map((h) => {
+    const pts = h.polygon.map(([la, lo]) => P(nm(la, lo)));
+    const u = holdsUsed.get(h.fix)!;
+    const lv = [...u.levels].sort((a, b) => a - b);
+    const lo = Math.round(lv[0] / 1000), hi = Math.round(lv[lv.length - 1] / 1000);
+    const top = pts.reduce((m, p) => (p[1] < m[1] ? p : m), pts[0]);
+    const f = fixBy.get(h.fix);
+    return { h, pts, lv, n: u.n, x: (f ? P(nm(f.lat, f.lon)) : top)[0], y: top[1] - 6, text: `${h.fix} ×${lv.length} · ${lo === hi ? lo : `${lo}-${hi}`}k` };
+  });
+
+  // data blocks: try four corners, keep the one that collides least with blocks and labels already placed
+  const placed: [number, number, number, number][] = [
+    ...holdDraw.map((d): [number, number, number, number] => [d.x - d.text.length * 3.4, d.y - 11, d.text.length * 6.8, 14]),
+    ...fixLabels.filter((l) => !l.hold).map((l): [number, number, number, number] => [l.x + 6, l.y - 15, l.id.length * 6.8, 13]),
+  ];
   const blocks = blips.map((b) => {
     const w = Math.max(b.l1.length, b.l2.length) * 7.4 + 6, h = b.tone === "fixed" ? 16 : 30;
     const opts: [number, number][] = [[1, -1], [-1, -1], [1, 1], [-1, 1]];
@@ -179,8 +305,39 @@ export function Radar({ wave, plan, t, tone, selected, onSelect }: Props) {
         ))}
         <text className="ring" x={cx} y={14} textAnchor="middle">N</text>
 
-        {/* extended centrelines of the runway ends in use, out to the scope edge */}
-        {[...usedEnds].map((id) => {
+        {fly && (
+          <g className="paths">
+            {/* holding racetracks in use, at the published (or synthesized) pattern, with the levels stacked there */}
+            {holdDraw.map(({ h, pts, lv, n, x, y, text }) => (
+              <g key={h.fix} className={`racetrack${h.src === "synth" ? " synth" : ""}`}>
+                <title>{`${h.fix} hold · ${h.turn === "R" ? "right" : "left"} turns · inbound ${String(Math.round(h.inbound_true)).padStart(3, "0")}°T · ${h.leg_min} min legs · ${n} holding at ${lv.map((l) => levelLabel(l)).join(", ")} · ${h.src === "synth" ? "synthesized, not published" : "published (CIFP)"}`}</title>
+                <polygon points={pts.map((p) => p.join(",")).join(" ")} strokeDasharray={h.src === "synth" ? "5 4" : undefined} />
+                <text className="hold-label" x={x} y={y} textAnchor="middle">{text}</text>
+              </g>
+            ))}
+            {/* the path still ahead of each target; the selected flight's is brighter */}
+            {runs.map((r, i) => (
+              <polyline key={i} className={`path blip ${r.tone}${selected === r.cs ? " sel" : ""}`} points={r.pts.map((p) => P(p).join(",")).join(" ")}
+                strokeDasharray={r.dashed ? "5 4" : undefined} />
+            ))}
+            {fixSyms.map((f) => {
+              const [x, y] = P(nm(f.lat, f.lon));
+              const labelled = fixLabels.some((l) => l.id === f.id && !l.hold);
+              return (
+                <g key={f.id} className="fix" onMouseEnter={() => setHoverFix(f.id)} onMouseLeave={() => setHoverFix((h) => (h === f.id ? null : h))}>
+                  <title>{`${f.id} · ${f.kind.toUpperCase()} · ${f.src === "synth" ? "synthesized" : "CIFP"}`}</title>
+                  <path d={`M${x} ${y - 3.5}l3.5 6h-7z`} strokeDasharray={f.src === "synth" ? "2 2" : undefined} />
+                  <circle cx={x} cy={y} r={7} fill="transparent" stroke="none" />
+                  {(labelled || hoverFix === f.id) && <text className="fix-label" x={x + 6} y={y - 5}>{f.id}</text>}
+                </g>
+              );
+            })}
+          </g>
+        )}
+
+        {/* extended centrelines of the runway ends in use, out to the scope edge (schematic only: in the
+            engine's picture the final is part of each path) */}
+        {!fly && [...usedEnds].map((id) => {
           const a = approach(id, 200);
           const e = endBy.get(id);
           if (!a || !e) return null;
@@ -242,7 +399,25 @@ export function Radar({ wave, plan, t, tone, selected, onSelect }: Props) {
             : <line x1={Math.cos(wr) * 18} y1={Math.sin(wr) * 18} x2={-Math.cos(wr) * 16} y2={-Math.sin(wr) * 16} stroke="var(--soft)" strokeWidth={1.8} markerEnd="url(#wind-tip)" />}
           <text className="wind" textAnchor="middle" y={42}>{calm ? "wind calm" : `${dir != null ? String(Math.round(dir)).padStart(3, "0") : "VRB"}° ${m!.wind_kt}${m!.gust_kt ? `G${m!.gust_kt}` : ""} kt`}</text>
         </g>
-        <text className="scope-note" x={14} y={H - 12}>{wave.airport.icao} · rings {step} NM{wide ? ` · replayed from the plan at ${GS_NM_PER_MIN * 60} kt · updates every ${SCAN_MIN * 60} s` : ` · ${GS_NM_PER_MIN * 60} kt · ${SCAN_MIN * 60} s scan`}</text>
+        {fly ? (
+          <>
+            <text className="scope-note" x={14} y={H - 12}>{wave.airport.icao} · rings {step} NM{wide ? ` · the engine's paths for this plan · updates every ${SCAN_MIN * 60} s` : ` · ${SCAN_MIN * 60} s scan`}{updating ? " · updating paths…" : ""}</text>
+            {anySynth && (
+              <g className="legend-synth" transform={`translate(${W - 16} ${TOP + 4})`}>
+                <line x1={-252} y1={-4} x2={-226} y2={-4} strokeDasharray="5 4" />
+                <text x={0} y={0} textAnchor="end">dashed = synthesized, not published</text>
+              </g>
+            )}
+            <text className="scope-note" x={wide ? W - 16 : 14} y={wide ? H - 12 : H - 26} textAnchor={wide ? "end" : "start"}>
+              {geo!.procedures.status === "real" ? `Procedures: FAA CIFP ${geo!.procedures.cycle}, not for navigation` : "Procedures: synthesized (no published procedures), not for navigation"}
+            </text>
+          </>
+        ) : (
+          <>
+            <text className="scope-note" x={14} y={H - 12}>{wave.airport.icao} · rings {step} NM{noTargets ? "" : wide ? ` · replayed from the plan at ${GS_NM_PER_MIN * 60} kt · updates every ${SCAN_MIN * 60} s` : ` · ${GS_NM_PER_MIN * 60} kt · ${SCAN_MIN * 60} s scan`}</text>
+            <text className="scope-caption" x={W - 16} y={TOP + 4} textAnchor="end">{pathsNote ?? "schematic, not the engine's path"}</text>
+          </>
+        )}
       </svg>
     </div>
   );

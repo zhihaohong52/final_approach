@@ -357,6 +357,7 @@ tbody tr:hover { background: #18171c; }
 .strip.fixed { border-left-color: var(--fixed); cursor: default; background: transparent; border-top: 1px solid var(--border); border-radius: 0; padding-top: 5px; padding-bottom: 5px; }
 .strip.fixed:hover { background: transparent; } .strip.fixed .s-id b { color: var(--fixed); font-weight: 500; }
 .strip.down { opacity: .55; }
+.strip .s-path { grid-column: 1 / -1; margin-top: -4px; color: #7d8a95; }   /* the path: entry, hold, route and vector time */
 .strips .more { font-size: 12px; color: var(--muted); margin: 4px 4px 0; }
 .scope-card { position: relative; background: var(--scope); border-radius: var(--radius-card); overflow: hidden; min-width: 0; box-shadow: var(--shadow); border: 1px solid #16181c; }
 .scope-head { position: absolute; z-index: 1; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; pointer-events: none; }
@@ -394,6 +395,19 @@ tbody tr:hover { background: #18171c; }
 .blip.fixed .db1 { font-weight: 400; }
 .blip .halo { fill: none; stroke: var(--negative); stroke-width: 1.5; animation: halo 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes halo { 0% { opacity: .9; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.5); } }
+/* the engine's paths: what is still ahead of each target, holding racetracks in use, and sparse fixes */
+.radar .paths { pointer-events: none; }
+.radar .paths .fix, .radar .paths .racetrack { pointer-events: auto; }
+.radar .path { fill: none; stroke: currentColor; stroke-width: 1; stroke-opacity: .32; stroke-linejoin: round; }
+.radar .path.fixed { stroke-opacity: .16; }
+.radar .path.sel { stroke-opacity: .8; stroke-width: 1.4; }
+.radar .racetrack polygon { fill: none; stroke: #5d7385; stroke-width: 1.2; }
+.radar .hold-label { font: 500 11px var(--mono); fill: #8fa3b3; }
+.radar .fix path { fill: none; stroke: #55626d; stroke-width: 1; }
+.radar .fix-label { font: 11px var(--mono); fill: #7d8a95; }
+.radar .legend-synth line { stroke: var(--soft); stroke-width: 1.2; }
+.radar .legend-synth text, .radar .scope-caption { font: 11px var(--mono); fill: var(--muted); }
+.radar .scope-caption { fill: var(--warning); }
 .empty-radar { min-height: 300px; display: grid; place-items: center; }
 .scope-key { position: absolute; left: 16px; bottom: 30px; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); pointer-events: none; }
 .scope-key span { display: inline-flex; align-items: center; gap: 6px; }

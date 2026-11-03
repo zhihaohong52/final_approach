@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, isOffline } from "./api/client";
-import type { Assignment, Config, EvaluateResponse, FlightRow, JointPlan, Mode, NegotiationMessage, NegotiationResult, PlanEvaluation, WaveScenario, WaveSummary } from "./api/types";
+import { ApiError, api, isOffline } from "./api/client";
+import type { Assignment, Config, EvaluateResponse, FlightRow, JointPlan, Mode, NegotiationMessage, NegotiationResult, PlanEvaluation, TrajectorySet, WaveGeo, WaveScenario, WaveSummary } from "./api/types";
 import { icao, icaoText, spoken } from "./callsign";
 import { AlertList, RULE_NAME, deriveAlerts } from "./components/Alerts";
 import { Gantt, GanttLegend, type Patch, type Rejection, type View } from "./components/Gantt";
@@ -41,6 +41,10 @@ function applyEdits(p: JointPlan, edits: Edits, checked: EvaluateResponse | null
   };
 }
 
+// what makes two plans fly the same paths: the trajectory request is re-sent only when this changes
+const planKey = (p: JointPlan | null) => (p ? JSON.stringify(p.assignments.map((a) => [a.callsign, a.action, a.runway ?? null, a.slot_min ?? null, a.gate ?? null, a.speed_reduction_min, a.ground_delay_min])) : "");
+type Fetched = { key: string; set: TrajectorySet | null; mismatch?: boolean };
+
 export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [waves, setWaves] = useState<WaveSummary[]>([]);
@@ -75,6 +79,9 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const [t, setT] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(10);          // replay speed: replayed seconds per real second
+  const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
+  const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
+  const [pathsBusy, setPathsBusy] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const tableRef = useRef<JointPlan | null>(null);
   const showTable = (p: JointPlan | null) => { tableRef.current = p; setTable(p); };
@@ -87,10 +94,13 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     abort.current?.abort();
     setStatus("idle"); setMessages([]); showTable(null); setResult(null); setRejection(null); setRunErr(null); setOpening(null);
     setDecision(null); setOverriding(false); setNote(""); setView("after"); setSelected(null); setT(null); setPlaying(false); resetEdits();
+    setGeo(null); setFetched(null);
     try {
       const w = await api.wave(id);
       if (seq !== loadSeq.current) return;
       setWave(w); setLoadErr(null);
+      // procedures are only served for waves the backend can place; a failure leaves the schematic radar
+      if (w.geo_available) api.getGeo(id).then((g) => { if (seq === loadSeq.current) setGeo(g); }).catch(() => {});
       // the status quo is on screen from the start; the negotiation then works from it
       if (w.status_quo) { showTable(w.status_quo.plan); setOpening(w.status_quo); } history.replaceState(null, "", `${location.search}#/wave/${id}`);
     } catch (e) { if (seq === loadSeq.current) setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); }
@@ -240,6 +250,34 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   })();
   const blocked = nEdits > 0 && (checking || !!checkErr && checkErr !== "offline" || (checked != null && !checked.evaluation.feasible));
 
+  // ---------- the engine's paths for the plan on screen ----------
+  // A finished run embeds its final and status-quo paths; anything else (the status quo before a run, the
+  // proposals as they stream in, the duty manager's edits) is asked of /api/trajectories. A run recorded on
+  // another engine has no paths, and the radar says so instead of drawing any.
+  const recordedOn = result ? result.engine_version ?? "v2" : null;
+  const noPaths = !!result && !result.trajectories && recordedOn !== (wave?.engine_version ?? "v2");
+  const embedded = result?.trajectories ? (view === "before" ? result.trajectories.baseline : !nEdits ? result.trajectories.final : undefined) : undefined;
+  const shownKey = planKey(shown);
+  const shownRef = useRef(shown); shownRef.current = shown;
+  const wantFetch = !!geo && !!wave && !!shown && !noPaths && !embedded;
+  useEffect(() => {
+    if (!wantFetch || fetched?.key === shownKey) { setPathsBusy(false); return; }
+    const ctl = new AbortController();
+    setPathsBusy(true);
+    const timer = setTimeout(() => {
+      api.postTrajectories(wave!.id, shownRef.current!.assignments, ctl.signal)
+        .then((set) => { setFetched({ key: shownKey, set }); setPathsBusy(false); })
+        .catch((e) => {
+          if ((e as Error).name === "AbortError") return;
+          setFetched({ key: shownKey, set: null, mismatch: e instanceof ApiError && e.code === "engine_mismatch" }); setPathsBusy(false);
+        });
+    }, 150);
+    return () => { clearTimeout(timer); ctl.abort(); };
+  }, [wantFetch, shownKey, wave?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // while a new plan's paths are on their way the previous ones stay up, marked "updating"
+  const paths: TrajectorySet | null = !geo || noPaths ? null : embedded ?? (wantFetch ? fetched?.set ?? null : null);
+  const pathsNote = noPaths || (wantFetch && fetched?.key === shownKey && fetched.mismatch) ? `recorded on engine ${recordedOn ?? "v2"}; paths not available` : null;
+
   // the replay clock: starts a few minutes before the disrupted flight lands, so it is on the scope
   const focusA = shown?.assignments.find((a) => a.callsign === wave?.focus);
   const defaultT = focusA?.slot_min != null ? Math.round(focusA.slot_min - 2) : 0;   // ~6 NM out on final
@@ -340,7 +378,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
 
       <div className="ops-top">
         <Strips wave={wave} plan={shown} agreed={agreed} baseline={baseline} edited={(cs) => editsOn && !!edits[cs]} t={tNow}
-          tone={tone} selected={selected} onSelect={setSelected} />
+          tone={tone} selected={selected} onSelect={setSelected} paths={pathsNote ? null : paths} />
         <section className="scope-card" aria-label="Approach radar">
           <div className="scope-head">
             <h2>Approach</h2>
@@ -356,7 +394,8 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               {t != null && <button className="btn text sm" onClick={() => { setT(null); setPlaying(false); }}>Reset</button>}
             </div>
           </div>
-          <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected} />
+          <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
+            geo={geo} paths={paths} pathsNote={pathsNote} updating={pathsBusy && !!paths} />
           <div className="scope-key" aria-hidden="true">
             {wave.focus && <span><i className="k k-focus" />Disrupted</span>}
             <span><i className="k k-flight" />Re-planned</span>

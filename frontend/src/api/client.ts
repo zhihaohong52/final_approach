@@ -1,6 +1,6 @@
 import type {
-  BenchmarkReport, Config, DecisionRequest, EvaluateRequest, EvaluateResponse, FlightsResponse, NegotiateRequest,
-  NegotiationEvent, NegotiationResult, WaveScenario, WaveSummary,
+  Assignment, BenchmarkReport, Config, DecisionRequest, EvaluateRequest, EvaluateResponse, FlightsResponse, NegotiateRequest,
+  NegotiationEvent, NegotiationResult, TrajectorySet, WaveGeo, WaveScenario, WaveSummary,
 } from "./types";
 
 // ?mock=1 forces the offline demo (the backend's recorded sample run); otherwise the mock is used only when the API is unreachable.
@@ -68,6 +68,39 @@ export const api = {
   async evaluate(req: EvaluateRequest, signal?: AbortSignal): Promise<EvaluateResponse | null> {
     if (offline) return null;
     const r = await fetch("/api/evaluate", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
+    if (r.status === 404 && !(await r.clone().json().catch(() => ({})))?.error) return null;   // an older backend without the route
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new ApiError(e?.error?.code ?? String(r.status), e?.error?.message ?? r.statusText, r.status);
+    }
+    return r.json();
+  },
+
+  /** The wave's procedures and surface geometry (static per wave). null when the airport has no geometry
+   *  (404 geo_unavailable), the route is not deployed, or the demo is offline. Never flips the app offline:
+   *  a missing /geo only means the radar stays schematic. */
+  async getGeo(waveId: string): Promise<WaveGeo | null> {
+    if (offline) return null;
+    try {
+      const r = await fetch(`/api/wave/${encodeURIComponent(waveId)}/geo`);
+      if (!(r.headers.get("content-type") ?? "").includes("json") || r.status === 404) return null;
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new ApiError(e?.error?.code ?? String(r.status), e?.error?.message ?? r.statusText, r.status);
+      }
+      return r.json();
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      return null;
+    }
+  },
+
+  /** The engine's 4D trajectories for a plan (deterministic, model-free). null when offline or the route is
+   *  not deployed. A run recorded on another engine version is rejected with ApiError code "engine_mismatch". */
+  async postTrajectories(waveId: string, assignments: Assignment[], signal?: AbortSignal): Promise<TrajectorySet | null> {
+    if (offline) return null;
+    const r = await fetch("/api/trajectories", { method: "POST", signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ wave_id: waveId, assignments }) });
+    if (!(r.headers.get("content-type") ?? "").includes("json")) return null;               // dev server without the API
     if (r.status === 404 && !(await r.clone().json().catch(() => ({})))?.error) return null;   // an older backend without the route
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
