@@ -241,3 +241,47 @@ def test_fallback_logs_reason(monkeypatch):
     fb = r["log"][-1]
     assert fb["type"] == "FALLBACK" and "No consensus within 3 turns" in fb["body"]["reason"]
     assert "reservation" in fb["body"]["reason"]
+
+
+def _result_with_focus_metrics(**metrics):
+    """A formulas-run result whose focus flight's final-plan metrics are overridden with `metrics`."""
+    import copy
+    r = copy.deepcopy(negotiate_wave(make_wave(), "formulas"))
+    a = next(a for a in r["final_plan"]["assignments"] if a["callsign"] == r["focus"])
+    a["metrics"] = {**(a.get("metrics") or {}), **metrics}
+    return r
+
+
+def test_template_mentions_laps():
+    from atm.wave import narrate
+    r = _result_with_focus_metrics(hold_laps=2, hold_fix="BENKY", fuel_kg=428.0)
+    assert "2 laps at BENKY (428 kg)" in narrate._template(r)["brief"]
+
+
+def test_template_one_lap_singular():
+    from atm.wave import narrate
+    r = _result_with_focus_metrics(hold_laps=1, hold_fix="BENKY", fuel_kg=214.0)
+    assert "1 lap at BENKY" in narrate._template(r)["brief"]
+
+
+def test_template_no_lap_clause_when_absent():
+    from atm.wave import narrate
+    r = _result_with_focus_metrics(hold_laps=0, hold_fix=None)
+    assert " lap" not in narrate._template(r)["brief"].replace("overlap", "")
+    r2 = _result_with_focus_metrics(hold_laps=None, hold_fix=None, taxi_wait_min=None)
+    assert "hold-short" not in narrate._template(r2)["brief"]
+
+
+def test_template_hold_short_and_laps_survive_trim():
+    from atm.wave import narrate
+    r = _result_with_focus_metrics(hold_laps=3, hold_fix="BENKY", fuel_kg=500.0, taxi_wait_min=2.5,
+                                   hold_short_strip="27R/09L")
+    b = narrate._template(r)["brief"]
+    assert "3 laps at BENKY (500 kg)" in b and "hold-short 27R/09L 2.5 min" in b
+
+
+def test_compact_passes_path_fields():
+    from atm.wave import narrate
+    r = _result_with_focus_metrics(hold_laps=2, hold_fix="BENKY", taxi_wait_min=1.5)
+    c = narrate._compact(r)
+    assert (c["hold_laps"], c["hold_fix"], c["taxi_wait_min"]) == (2, "BENKY", 1.5)

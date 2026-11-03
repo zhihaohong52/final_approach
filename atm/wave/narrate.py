@@ -43,6 +43,29 @@ def _key_messages(result: dict) -> list[dict]:
     return out[:MAX_LINES]
 
 
+def _focus_metrics(result: dict) -> dict:
+    """The focus flight's final-plan metrics, {} when absent (path fields are filled only by newer engines)."""
+    for a in (result.get("final_plan") or {}).get("assignments") or []:
+        if a.get("callsign") == result.get("focus"):
+            return a.get("metrics") or {}
+    return {}
+
+
+def _path_clauses(result: dict) -> list[str]:
+    """Holding-lap and hold-short clauses for the focus flight; absent/None/0 fields give no clause."""
+    m = _focus_metrics(result)
+    out = []
+    n = int(m.get("hold_laps") or 0)
+    if n > 0:
+        out.append(f"{n} lap{'s' if n != 1 else ''} at {m.get('hold_fix') or 'the hold'} "
+                   f"({(m.get('fuel_kg') or 0):.0f} kg)")
+    wait = m.get("taxi_wait_min") or 0
+    if wait > 0:
+        strip = m.get("hold_short_strip") or m.get("hold_short") or m.get("exit") or "runway"
+        out.append(f"hold-short {strip} {wait:g} min")
+    return out
+
+
 def _compact(result: dict) -> dict:
     ev, base = result["evaluation"], result["baseline"]["evaluation"]
     failed = [c for c in base.get("checks", []) if not c["passed"]]
@@ -53,6 +76,8 @@ def _compact(result: dict) -> dict:
         "assignments": [{k: a.get(k) for k in ("callsign", "action", "runway", "slot_min", "gate",
                                                 "speed_reduction_min", "ground_delay_min")}
                         for a in result["final_plan"]["assignments"]],
+        "hold_laps": _focus_metrics(result).get("hold_laps"), "hold_fix": _focus_metrics(result).get("hold_fix"),
+        "taxi_wait_min": _focus_metrics(result).get("taxi_wait_min"),
         "totals": ev["totals"], "baseline_totals": base["totals"],
         "utilities": ev["utilities"],
         "rule_checks": {"final_all_passed": ev["feasible"], "final_count": len(ev["checks"]),
@@ -81,7 +106,9 @@ def _template(result: dict) -> dict:
         risks.append(f"{t['overtime_min']:g} min crew overtime")
     if result["stats"].get("fallbacks"):
         risks.append(f"{result['stats']['fallbacks']} decision-model fallback(s)")
-    brief = (f"{how}: {result['final_plan']['label']}. All {len(ev['checks'])} safety checks pass. "
+    path = _path_clauses(result)
+    path_s = f"{result.get('focus') or 'Focus flight'}: {', '.join(path)}. " if path else ""
+    brief = (f"{how}: {result['final_plan']['label']}. All {len(ev['checks'])} safety checks pass. {path_s}"
              f"Delay {t['delay_min']:g} min vs {b['delay_min']:g} baseline, holding fuel {t['fuel_kg']:g} kg vs "
              f"{b['fuel_kg']:g}, connections protected {t['pax_protected_pct']:g}% vs {b['pax_protected_pct']:g}%. "
              f"Status quo had {base_v} rule violation(s). Risks: {', '.join(risks) or 'none flagged'}. "

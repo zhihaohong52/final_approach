@@ -12,7 +12,7 @@ import dataclasses
 
 from mcp.server.fastmcp import FastMCP
 
-from atm.wave import build, graph, moves, utility
+from atm.wave import build, graph, moves, trajectory, utility
 from atm.wave.model import Assignment, JointPlan
 
 mcp = FastMCP("disruption-negotiator", stateless_http=True)
@@ -63,6 +63,14 @@ async def check_plan(wave_id: str, plan: dict) -> dict:
     """Evaluate a joint plan for a wave and return its PlanEvaluation (feasibility, violations, utilities).
     Read-only. Legality is decided only by the deterministic rule engine, never by the caller or a model."""
     return await asyncio.to_thread(lambda: utility.evaluate(build.build_wave(wave_id), _plan_from_dict(plan)))
+
+
+@mcp.tool()
+async def get_trajectory(wave_id: str, assignments: list[dict]) -> dict:
+    """Return the 4D trajectories (airborne tracks with holding laps and stack levels, ground segments, conflicts)
+    of a plan's assignments for a wave. Read-only. Legality is decided only by the deterministic rule engine."""
+    return await asyncio.to_thread(
+        lambda: trajectory.build(build.build_wave(wave_id), _plan_from_dict({"assignments": assignments})).to_dict())
 
 
 @mcp.tool()
