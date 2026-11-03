@@ -121,10 +121,11 @@ def taxi_min(wave: Wave, runway: str | None, gate_id: str | None) -> float:
     return TAXI_NEAR_MIN if near else TAXI_FAR_MIN
 
 
-def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
-    """One flight's metrics given its AirTrack from the plan's TrajectorySet (None when not drawn). In-block (spec
-    §6.5, v3-taxi) = slot + ROT + unimpeded taxi to the gate (`surface.taxi_info`, the same object the ground track
-    is drawn from); slot + v2 near/far taxi in the no-geometry tier."""
+def _flight_metrics(wave: Wave, a: Assignment, track, ground=None) -> FlightMetrics:
+    """One flight's metrics given its AirTrack and GroundOutcome from the plan's TrajectorySet (None when not drawn).
+    In-block (spec §6.5, v3-traffic) = slot + ROT + taxi, taxi = unimpeded taxi to the gate (`surface.taxi_info`, the
+    same object the ground track is drawn from) + the hold-short / give-way waits the plan's hold-short pass gave it
+    (`taxi_wait_min`; 0 when ground conflicts are not modelled); slot + v2 near/far taxi in the no-geometry tier."""
     f = wave.flight(a.callsign)
     pax_total = sum(int(c.get("pax", 0)) for c in f.connections)
     burn = hold_burn(f)
@@ -161,9 +162,11 @@ def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
     if tx.tier == "none":
         in_block = slot + tx.taxi_min
     else:
-        in_block = slot + tx.total_min
+        wait = ground.wait_min if ground is not None and ground.modelled else 0.0
+        in_block = slot + tx.total_min + wait
         path.update({"exit": tx.exit_label, "rot_s": tx.rot_s, "taxi_unimpeded_min": tx.taxi_min,
-                     "taxi_wait_min": 0.0, "taxi_min": tx.taxi_min})
+                     "taxi_wait_min": wait, "taxi_min": tx.taxi_min + wait,
+                     "hold_short_strip": ground.hold_short_strip if ground is not None else None})
     pax_ready = in_block + (REMOTE_BUS_MIN if gate is not None and gate.remote else 0.0)
     protected = sum(int(c.get("pax", 0)) for c in f.connections
                     if float(c["departs_min"]) - pax_ready >= MIN_CONNECT_MIN)
@@ -185,11 +188,13 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
     `lap_min`, `vector_min`, `route_min`, `route_extra_min`) are copied unrounded from the AirTrack.
     No-geometry tier (no route for the assigned runway): v2's `hold = max(0, slot - ETA - SR - GD)`, no
     route term, path fields left at their defaults. Taxi fields (`exit`, `rot_s`, `taxi_unimpeded_min`,
-    `taxi_wait_min` = 0 until hold-short waits are scheduled, `taxi_min`) come from `surface.taxi_info` (unrounded);
-    unset in the no-geometry taxi tier."""
+    `taxi_wait_min`, `taxi_min` = unimpeded + waits, `hold_short_strip`) come from `surface.taxi_info` and the plan's
+    hold-short pass (`TrajectorySet.outcomes`), unrounded; unset in the no-geometry taxi tier."""
     from backend.wave import trajectory   # lazy: build / rules / moves import this module (import cycle)
-    tracks = {t.callsign: t for t in trajectory.build(wave, plan).air if t.wave}
-    return {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None)
+    ts = trajectory.build(wave, plan)
+    tracks = {t.callsign: t for t in ts.air if t.wave}
+    return {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None,
+                                        ts.outcomes.get(a.callsign) if a.action == "land" else None)
             for a in plan.assignments}
 
 

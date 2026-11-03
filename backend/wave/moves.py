@@ -232,6 +232,17 @@ def _taxi(wave: Wave, cs: str, runway: str | None, gate: str | None) -> float:
     return surface.taxi_info(wave, runway, gate, _flight(wave, cs).gate_size).taxi_min
 
 
+def _wait_txt(wave: Wave, plan: JointPlan, m: Move, cs: str, who: bool = False) -> str:
+    """` +{wait} hold-short {strip}` (or ` +{wait} taxi wait` for give-way waits only) of `cs` in the plan the move
+    produces, from its hold-short pass (spec §6.7); "" without a wait. `who` appends the callsign (two-flight moves)."""
+    mm = metrics_map(wave, apply(wave, plan, m))[cs]
+    w = mm.taxi_wait_min or 0.0
+    if w < 0.05:
+        return ""
+    what = f"hold-short {mm.hold_short_strip}" if mm.hold_short_strip else "taxi wait"
+    return f" +{w:.1f} {what}" + (f" {cs}" if who else "")
+
+
 def _own_violations(checks) -> int:
     """Violations of rules a hold may be justified by (ATC-*, PLT-*); GND-* are Ground's to fix."""
     return sum(1 for c in checks if not c.passed and c.rule.startswith(HOLD_JUSTIFYING))
@@ -283,9 +294,9 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 # route delta: earliest landing on rw minus on the current runway (same SR / GD)
                 dr = (_min_slot(wave, replace(a, runway=rw)) - _min_slot(wave, a)) if a.runway else 0.0
                 tx = _taxi(wave, a.callsign, rw, a.gate)
-                mv.append(_move("ATC", "change_runway", [a.callsign], {"runway": rw},
-                                f"Move {a.callsign} from {a.runway} to runway {rw} ({dr:+.1f} min route, "
-                                f"taxi {tx:.0f} min)"))
+                m = _move("ATC", "change_runway", [a.callsign], {"runway": rw}, "")
+                mv.append(replace(m, label=f"Move {a.callsign} from {a.runway} to runway {rw} ({dr:+.1f} min route, "
+                                           f"taxi {tx:.0f} min{_wait_txt(wave, plan, m, a.callsign)})"))
             if a.runway and has_slot(a):
                 for d in SHIFT_STEPS:
                     mv.append(_move("ATC", "shift_slot", [a.callsign], {"minutes": d},
@@ -329,14 +340,16 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 if any(o.gate == g.id and o is not a and (mm[o.callsign].in_block_min or 0) < end
                        and ib < (mm[o.callsign].in_block_min or 0) + turn for o in landing):
                     continue
-                mv.append(_move("GROUND", "reassign_gate", [a.callsign], {"gate": g.id},
-                                f"Reassign {a.callsign} from gate {a.gate} to {g.id} "
-                                f"(taxi {_taxi(wave, a.callsign, a.runway, g.id):.0f} min)"))
+                m = _move("GROUND", "reassign_gate", [a.callsign], {"gate": g.id}, "")
+                mv.append(replace(m, label=f"Reassign {a.callsign} from gate {a.gate} to {g.id} "
+                                           f"(taxi {_taxi(wave, a.callsign, a.runway, g.id):.0f} min"
+                                           f"{_wait_txt(wave, plan, m, a.callsign)})"))
             rs = next((g for g in wave.gates if g.remote), None)
             if rs is not None and a.gate != rs.id:
-                mv.append(_move("GROUND", "remote_stand", [a.callsign], {"gate": rs.id},
-                                f"Send {a.callsign} to remote stand {rs.id} (bussing, "
-                                f"taxi {_taxi(wave, a.callsign, a.runway, rs.id):.0f} min)"))
+                m = _move("GROUND", "remote_stand", [a.callsign], {"gate": rs.id}, "")
+                mv.append(replace(m, label=f"Send {a.callsign} to remote stand {rs.id} (bussing, "
+                                           f"taxi {_taxi(wave, a.callsign, a.runway, rs.id):.0f} min"
+                                           f"{_wait_txt(wave, plan, m, a.callsign)})"))
         for i, a in enumerate(landing):
             for b in landing[i + 1:]:
                 ga, gb = gates.get(a.gate or ""), gates.get(b.gate or "")
@@ -347,9 +360,10 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                    (fb.gate_size == "wide" and ga.size != "wide" and not ga.remote):
                     continue
                 ta, tb = _taxi(wave, a.callsign, a.runway, b.gate), _taxi(wave, b.callsign, b.runway, a.gate)
-                mv.append(_move("GROUND", "swap_gates", [a.callsign, b.callsign], {},
-                                f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) "
-                                f"(taxi {ta:.0f}/{tb:.0f} min)"))
+                m = _move("GROUND", "swap_gates", [a.callsign, b.callsign], {}, "")
+                wt = _wait_txt(wave, plan, m, a.callsign, True) + _wait_txt(wave, plan, m, b.callsign, True)
+                mv.append(replace(m, label=f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) "
+                                           f"(taxi {ta:.0f}/{tb:.0f} min{wt})"))
     else:
         cs = agent_id.split(":", 1)[1]
         a = plan.get(cs)

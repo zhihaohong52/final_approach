@@ -447,7 +447,7 @@ class Reservations:
 @dataclass
 class Scheduled:
     points: list[dict]            # {t_min, lat, lon, node}: arrival at each node, departure after a wait, then parked
-    waits: list[dict]             # {node, lat, lon, from_min, to_min, reason}
+    waits: list[dict]             # {node, lat, lon, from_min, to_min, reason, strip, kind, for}
     ok: bool
     reason: str | None
     # arrivals: time the aircraft reaches the first node outside the protected zone of the runway it exits (it has
@@ -592,7 +592,7 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
 
     arr0_nb = t0_min                       # earliest arrival at the first node
     nb = [-math.inf] * n                   # earliest departure from each node
-    why: dict[int, str] = {}               # index -> reason of the binding wait there (-1 = before the first node)
+    why: dict[int, tuple] = {}             # index -> (reason, strip, kind, cs) of the binding wait (-1 = before the first node)
     arr = [0.0] * n
     dep = [0.0] * n
 
@@ -603,8 +603,9 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             if i + 1 < n:
                 arr[i + 1] = dep[i] + seg[i]
 
-    def push(i: int, target: float, reason: str) -> int:
-        """Make the arrival at index i no earlier than `target`; returns the index to rescan from."""
+    def push(i: int, target: float, reason: tuple[str, str | None, str | None, str]) -> int:
+        """Make the arrival at index i no earlier than `target`; returns the index to rescan from. `reason` is
+        (text, strip or None, event kind or None, callsign)."""
         nonlocal arr0_nb
         if i == 0:
             if target > arr0_nb:
@@ -635,7 +636,7 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             hit = gap_hits(strip, dep[h], arr[ze])
             if hit:
                 target, kind, cs = max(hit)
-                restart = push(h + 1, target + seg[h], f"hold short {strip} for {kind} {cs}")
+                restart = push(h + 1, target + seg[h], (f"hold short {strip} for {kind} {cs}", strip, kind, cs))
                 break
         # (a) the node is clear of other reservations by the headway, over the whole dwell
         if restart is None:
@@ -643,14 +644,14 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
                    if s < dep[i] + hw - _TOL and arr[i] < e + hw - _TOL]
             if hit:
                 target, cs = max(hit)
-                restart = push(i, target, f"give way to {cs}")
+                restart = push(i, target, (f"give way to {cs}", None, None, cs))
         # (b) the next edge is not in use in the opposite direction during the traversal
         if restart is None and i + 1 < n:
             hit = [(e + seg[i], cs) for s, e, cs in res.edge_dir.get((nodes[i + 1], node), ())
                    if s < arr[i + 1] - _TOL and dep[i] < e - _TOL]
             if hit:
                 target, cs = max(hit)
-                restart = push(i + 1, target, f"give way to {cs}")
+                restart = push(i + 1, target, (f"give way to {cs}", None, None, cs))
         if restart is None:
             i += 1
         else:
@@ -675,9 +676,11 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
     def pt(t: float, node: int) -> dict:
         return {"t_min": t, "lat": g.nodes[node][0], "lon": g.nodes[node][1], "node": node}
 
-    def wait(node: int, a: float, b: float, reason: str) -> dict:
+    def wait(node: int, a: float, b: float, reason: tuple) -> dict:
+        # contract keys (lat, lon, from_min, to_min, reason) plus structured ones for the rule and the labels:
+        # strip (None for a give-way), kind ("landing" | "takeoff" | None) and the callsign waited for
         return {"node": node, "lat": g.nodes[node][0], "lon": g.nodes[node][1], "from_min": a, "to_min": b,
-                "reason": reason}
+                "reason": reason[0], "strip": reason[1], "kind": reason[2], "for": reason[3]}
 
     points, waits = [], []
     if arr[0] > t0_min + _TOL:
@@ -755,6 +758,7 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
     if not runway_events:
         return out
     window = {"landing": (1.5, 1.0), "takeoff": (1.0, 1.0)}     # (before, after) the event, minutes
+    strips_g = set(runway_strips(g))     # strips with runway edges in the graph (cached on g)
 
     def tagged(u: int, v: int, strip: str) -> bool:
         return any(w == v and kind != "runway" and st == strip for w, _, kind, _, st in g.adj.get(u, ()))
@@ -767,7 +771,7 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
         if first_rw:
             # (4) vacating: out of the zone of the runway it starts on, and off every runway's pavement, before another
             # flight lands or takes off on that runway (the check T31 makes with exit_clear_min)
-            all_rw = {name for es in g.adj.values() for _, _, k_, name, _ in es if k_ == "runway" and name}
+            all_rw = strips_g
             x = 0
             while x < nv - 1 and (any(not (vis[x][0] in g.holds and g.holds[vis[x][0]] in (None, st)
                                                and not on_runway(g, vis[x][0], st))
@@ -784,8 +788,7 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
         for strip in sorted(runway_events):
             evs = [(ev, kind, cs) for ev, kind, cs in sorted(runway_events[strip]) if cs != tr.callsign
                    and kind in window]
-            if not evs or not any(name == strip for es in g.adj.values() for _, _, k_, name, _ in es
-                                  if k_ == "runway"):
+            if not evs or strip not in strips_g:
                 continue
             # an OSM hold ends the zone only when it is off the pavement (some were snapped onto runway nodes)
             zone = [not (nd in g.holds and g.holds[nd] in (None, strip) and not on_runway(g, nd, strip))

@@ -641,6 +641,8 @@ def test_ground_track_serialises_node_as_string():
 def test_taxi_points_are_monotonic_and_start_after_rot():
     w = build.build_wave("F2015-270287"); p = fcfs_plan(w); mm = metrics_map(w, p)
     for g in trajectory.build(w, p).ground:
+        if not g.wave:
+            continue                       # fixed traffic (v3-traffic): starts at its own exit / pushback
         ts = [q["t_min"] for q in g.points]
         assert ts == sorted(ts)
         a = p.get(g.callsign)

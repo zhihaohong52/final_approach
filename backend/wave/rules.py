@@ -31,6 +31,8 @@ OVERTIME_MULT = 1.5
 REMOTE_STAND_POSITIONS = 2   # assumption: aircraft on the remote stand (RS) at overlapping times
 SRC_RWY = "airport runway status"
 SRC_TAXI_OSM = surface.SRC_ROUTED
+SRC_TAXI_CONFLICT = ("FAA JO 7110.65 §3-7-2 (ground control route and hold-short); headway 30 s, crossing gap, "
+                     "30-min horizon (assumption)")
 WET_VIS_SM = 3.0
 WEATHER_FACTOR_BAD = 1.25
 _RWY_RE = re.compile(r"^(\d{1,2})([LRC]?)$")
@@ -101,10 +103,53 @@ LIMITS = [
              "Quality gate per wave: every open runway end in OSM reaches >= 80 % of the wave's bound stands, else "
              "the wave uses the generic estimate (straight line runway midpoint -> gate x1.4 at 15 kt, generic exit at "
              "the required roll and 12 kt; assumption). Runways without coordinates keep v2's 6 min near / 10 min "
-             "far. Remote stand: + 10 min bus. No taxiway closures modelled. The time is UNIMPEDED: no ramp, gate or "
-             "queue waits (taxi_wait_min = 0 until ATC-TAXI-CONFLICT schedules hold-shorts), so it sits below BTS "
-             "TAXI_IN (FCFS medians, ROT + taxi vs taxi-in reference: ORD 2.3 / 9.0, MIA 2.5 / 6.0, ATL 5.7 / 12.5, "
-             "DFW 5.8 / 13.5, DEN 6.4 / 5.5 min); see the taxi validation (Task 27)"},
+             "far. Remote stand: + 10 min bus. No taxiway closures modelled. taxi = unimpeded + the hold-short / give-way "
+             "waits of the plan's hold-short pass (ATC-TAXI-CONFLICT); no ramp or gate waits, so it can sit below BTS "
+             "TAXI_IN (FCFS medians on the replays with the 2015 movements, ROT + taxi + waits vs taxi-in reference: "
+             "ORD 2.3 / 9.0, MIA 2.5 / 6.0, ATL 5.7 / 12.5, DFW 16.0 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
+             "validation (Task 27)"},
+    {"limit": "ground node headway", "value": f"{surface.HEADWAY_S:g} s", "source": "assumption",
+     "note": "ATC-TAXI-CONFLICT (FAA JO 7110.65 §3-7-2: ground control issues the route and hold-short "
+             "instructions): wave flights move along their fixed route (no rerouting) in runway-exit order and wait "
+             "at the previous node, or at the hold before a runway's zone, until every node is clear of the fixed "
+             "traffic and earlier wave flights by this headway and no edge is in use head-on. Fixed traffic (queue "
+             "arrivals, real 2015 departures) is scheduled once per wave and never yields"},
+    {"limit": "runway crossing gap", "value": "no landing on the crossed strip from 1.5 min before to 1 min after "
+     "the time in its zone; no takeoff within 1 min either side", "source": "assumption",
+     "note": "the whole time inside the strip's protected zone (from leaving the hold to past the zone) is checked "
+             "against the fixed traffic's landings and takeoffs and every landing of the plan. A plan landing inside "
+             "the same window of an already scheduled fixed crossing, or while a fixed arrival is still on that "
+             "runway, fails ATC-TAXI-CONFLICT for the landing wave flight (evidence landing_conflicts): the fixed "
+             "traffic is scheduled before the plan and is never re-timed, so the plan keeps its landings clear of it "
+             "(spec §6.4 wave flights yield; ruling T31, reversible: LANDING_VS_FIXED_FAILS). A ground controller "
+             "would hold the crosser instead; re-timing fixed crossers per plan is not modelled"},
+    {"limit": "taxi search horizon", "value": f"{surface.HORIZON_MIN:g} min", "source": "assumption",
+     "note": "a wave flight whose total taxi wait exceeds it (or whose route starts inside another strip's zone "
+             "during a landing or takeoff) fails ATC-TAXI-CONFLICT; shorter waits never fail, they add to in-block"},
+    {"limit": "runway vacate", "value": "clear of the runway before the next landing or takeoff on that strip",
+     "source": "assumption",
+     "note": "FAA JO 7110.65 §3-10-3 (same-runway separation: the preceding aircraft has taxied off before the next "
+             "crosses the threshold). ATC-TAXI-CONFLICT fails when a wave flight's exit clear time (first node past "
+             "the exit runway's 90 m zone and off every runway's pavement) is after another flight's landing or "
+             "takeoff on that strip, counted from its own landing. No pre-landing margin (unlike the crossing gap): "
+             "the same-runway rule sets none, and the independent verifier's runway-vacate check uses the same "
+             "window, so every verifier 'still vacating' message on a wave flight is a failing check"},
+    {"limit": "landing / takeoff gap on one runway", "value": "1 min", "source": "assumption",
+     "note": "mixed mode (fixed departures sharing the arrival runway, e.g. MIA): a fixed takeoff stays 1 min from "
+             "every landing on its strip (the arrival has vacated, or the departure is airborne before the arrival "
+             "crosses the threshold). Wave landings against fixed takeoffs on the same strip are checked only through "
+             "the runway-vacate rule (a takeoff while the wave flight is still on the runway)"},
+    {"limit": "departure holding-point queue", "value": "holding node reserved until line-up (30 s before "
+     "takeoff); queue drawn upstream", "source": "assumption",
+     "note": "a fixed departure keeps its holding-point node from arrival there until it lines up, so later "
+             "departures (and wave flights through that node) wait upstream on the taxiway and the queue is visible. "
+             "Takeoffs are spaced only from takeoffs already settled in pushback order (a departure not yet scheduled "
+             "does not block an earlier one). Replays with the 2015 movements (dwell on the holding node median / "
+             "p95 / max; upstream queue wait median / max; departures over the 30-min horizon): ORD 1.0 / 8.0 / 21.0, "
+             "24.0 / 53.2, 64 of 160; ATL 1.0 / 10.0 / 55.1, 17.1 / 40.3, 3; DFW 2.0 / 11.0 / 34.0, 6.3 / 23.7, 0; "
+             "MIA 3.0 / 14.0 / 18.5, 7.7 / 20.0, 0; DEN 6.9 / 17.7 / 23.2, 3.2 / 14.4, 0. Pushback is WHEELS_OFF - "
+             "TAXI_OUT, and BTS TAXI_OUT already contains the real queue; ORD has one free departure parallel in this "
+             "model (over capacity at 1 takeoff a minute)"},
     {"limit": "runway ends missing from OSM", "value": "generic straight-line taxi", "source": "assumption",
      "note": "open in 2015 but not in today's OSM; taxi uses the straight-line generic estimate"},
     {"limit": "runway hold clearance", "value": f"{surface.RUNWAY_HOLD_CLEARANCE_M:g} m from a crossed runway's "
@@ -143,18 +188,22 @@ LIMITS = [
              "holding point, never before WHEELS_OFF, spaced from the strip's other takeoffs (departure takeoff "
              "spacing); a schedule that is not ok, or a takeoff inside an already scheduled crossing's window, ranks "
              "last; ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
-             "WHEELS_OFF - TAXI_OUT; the departure holds 30 s at the holding point (line-up buffer); takeoff at "
-             "WHEELS_OFF, later only if taxi waits, takeoff spacing or a scheduled crossing hold it. Known limitation: arrival runways are v2's FCFS choice "
+             "WHEELS_OFF - TAXI_OUT; the departure holds the holding-point node until it lines up 30 s before "
+             "takeoff (departure holding-point queue); takeoff at WHEELS_OFF, later only if taxi waits, takeoff "
+             "spacing, a landing on its strip or a scheduled crossing hold it. Known limitation: arrival runways are v2's FCFS choice "
              "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
              "ATL lands on the outboard runways (08L, 09R, 10) and departs from 08R/09L"},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
      "note": "a departure's recorded takeoff is the earliest time >= max(WHEELS_OFF, leaving the holding point) "
              "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "
              "(the departure waits at the holding point: FCFS, the crosser came first); the runway choice uses the "
-             "same time. It matches the holding-point throughput of the ground scheduler (30 s node headway + 30 s "
-             "line-up buffer). Known limitation: with one free departure parallel (ORD in this model) or a busy one "
-             "(ATL 09L) more departures than 1/min queue, so takeoffs run late (ORD 45 of 160, ATL 108 of 175 on the "
-             "replays); real 2015 operations used more departure runways"},
+             "same time; it is spaced only from takeoffs already settled in pushback order and from every landing on "
+             "the strip (1 min). It matches the holding-point throughput of the ground scheduler (30 s node headway + "
+             "30 s line-up). Known limitation: with one free departure parallel (ORD in this model) or a busy one "
+             "(ATL 09L) more departures than 1/min queue, and since v3-traffic the queue is drawn upstream (node "
+             "headway plus taxi time between queue positions), so takeoffs run late (replays with the 2015 "
+             "movements, late of all: ORD 149 of 160, ATL 108 of 175, DFW 23 of 119, MIA 7 of 28, DEN 0 of 24; "
+             "v3-taxi: ORD 46, ATL 97, others 0); real 2015 operations used more departure runways"},
 ]
 
 
@@ -447,7 +496,8 @@ def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
             r = rs.get((t.callsign, t.runway))
             if r is not None:
                 groups.setdefault(trajectory.stack_key(r.hold), []).append(t)
-    labels = trajectory.stack_labels(groups)
+    # one key set for both layers (parked T14): the labels the trajectory set gave its stacks
+    labels = {k: ts.stack_labels.get(k) or trajectory.stack_labels(groups)[k] for k in groups}
     out: dict[str, RuleCheck] = {}
     for key, ts_ in groups.items():
         label = labels[key]
@@ -548,6 +598,36 @@ def _taxi_route_check(wave: Wave, a, f, g, cs: str) -> RuleCheck:
     return RuleCheck("ATC-TAXI-ROUTE", "ATC", True, det, tx.source, ev, cs)
 
 
+def _taxi_conflict_check(ts, cs: str) -> RuleCheck:
+    """ATC-TAXI-CONFLICT (spec §6.4, §6.6) from the plan's hold-short pass (`trajectory.GroundOutcome`). Fails iff
+    the scheduler could not give the flight a conflict-free taxi within the 30-min horizon (`Scheduled.ok` false), or
+    it is still on the runway it exits (exit_clear_min) at another flight's landing or takeoff on that strip, or its
+    landing falls inside a fixed mover's scheduled runway crossing window or runway occupancy. Waits alone never fail
+    it: they cost in-block time. Not modelled (pass) without a routed OSM taxi."""
+    o = ts.outcomes.get(cs)
+    if o is None:
+        return RuleCheck("ATC-TAXI-CONFLICT", "ATC", True, f"{cs}: no valid runway/slot, no taxi scheduled",
+                         SRC_TAXI_CONFLICT, {"waits": 0, "wait_min": 0.0, "crossings": "none",
+                                             "exit_clear_min": "none", "next_landing_min": "none"}, cs)
+    nx = o.next_event
+    ev = {"waits": len(o.waits), "wait_min": round(o.wait_min, 2),
+          "crossings": ", ".join(o.crossings) if o.crossings else "none",
+          "exit_clear_min": round(o.exit_clear_min, 2) if o.exit_clear_min is not None else "none",
+          "next_landing_min": round(nx[0], 2) if nx else "none",
+          "next_event": f"{nx[1]} {nx[2]}" if nx else "none", "tier": o.tier}
+    if o.hold_short_strip:
+        ev["hold_short_strip"] = o.hold_short_strip
+    if o.blocking:
+        ev["blocking"] = ", ".join(f"{k} {lab} T{t:+.2f}" for t, k, lab in o.blocking)
+    if o.landing_conflicts:
+        ev["landing_conflicts"] = "; ".join(o.landing_conflicts)
+    if not o.ok:
+        ev["reason"] = o.reason or "not scheduled"
+    if not o.modelled and o.passed:
+        ev["tier"] = o.tier
+    return RuleCheck("ATC-TAXI-CONFLICT", "ATC", o.passed, trajectory.detail(o), SRC_TAXI_CONFLICT, ev, cs)
+
+
 def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
     """PLT-CREW-DUTY: in-block (landing slot + taxi-in) or alternate arrival within the flight crew duty end.
     Fails iff the plan's arrival exceeds the duty end AND the earliest possible in-block over the open
@@ -597,6 +677,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
     opposite = direction_conflicts(wave, plan)
     cap = _capacity_checks(wave, plan)
     stack = _stack_checks(wave, plan)
+    ts = trajectory.build(wave, plan)
     rs = route.routes_for_wave(wave)
     turn = turnaround_min(wave)
     metar = wave.metar
@@ -643,6 +724,9 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
         # ATC-TAXI-ROUTE
         g = gates.get(a.gate or "")
         out.append(_taxi_route_check(wave, a, f, g, cs))
+
+        # ATC-TAXI-CONFLICT (the plan's hold-short pass)
+        out.append(_taxi_conflict_check(ts, cs))
 
         # ATC-WIND-LIMITS
         if metar is None:

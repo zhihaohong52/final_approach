@@ -809,7 +809,7 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
 
 @app.post("/api/evaluate")
 async def evaluate_plan(body: dict = Body(...)):
-    """Re-check a plan the duty manager edited: same rules (`rules.check`) and scores as the negotiation."""
+    """Re-check a plan the duty manager edited: the same 14 rules (`rules.check`) and scores as the negotiation."""
     from .wave import edit
     wave_id, rows = body.get("wave_id"), body.get("assignments")
     inc = body.get("include_trajectories", False)

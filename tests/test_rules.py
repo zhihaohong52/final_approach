@@ -180,7 +180,7 @@ def test_evaluate_shape():
     rules_seen = {c["rule"] for c in ev["checks"]}
     assert rules_seen == {"ATC-RWY-OPEN", "ATC-WAKE-SEP", "ATC-TAXI-ROUTE", "ATC-WIND-LIMITS", "PLT-EARLIEST-ETA",
                           "PLT-FUEL-RESERVE", "GND-GATE-SIZE", "GND-GATE-FREE", "GND-CREW-DUTY",
-                          "GND-GATE-NOTICE", "ATC-RWY-CAPACITY", "ATC-HOLD-STACK"}
+                          "GND-GATE-NOTICE", "ATC-RWY-CAPACITY", "ATC-HOLD-STACK", "ATC-TAXI-CONFLICT"}
     assert all(a.metrics.in_block_min is not None for a in p.assignments)
 
 
@@ -524,9 +524,9 @@ def test_limits_list_new_rows():
     assert all(l["source"] in ("workbook", "real data", "assumption") for l in rules.LIMITS)
 
 
-def test_thirteen_rules_on_ord():
+def test_fourteen_rules_on_ord():
     w = build.build_wave(ORD)
-    assert len({c.rule for c in rules.check(w, fcfs_plan(w))}) == 13
+    assert len({c.rule for c in rules.check(w, fcfs_plan(w))}) == 14
 
 
 def test_earliest_eta_shorter_route_runway_passes_below_eta():
@@ -565,3 +565,230 @@ def test_fuel_reserve_float_tolerance():
         w2 = _r(w, flights=[_r(f, fuel={**f.fuel, "extra_min": extra}) if x is f else x for x in w.flights])
         q = p.with_assignment(replace(a, runway=far, slot_min=trajectory.earliest(w2, a.callsign, far)))
         assert _by(rules.check(w2, q), "PLT-FUEL-RESERVE", a.callsign).passed is passed
+
+
+# --------------------------------------------------------------- ATC-TAXI-CONFLICT (Task 31, spec §6.4-6.6)
+
+import json as _json   # noqa: E402
+from pathlib import Path as _Path   # noqa: E402
+
+from backend.wave import surface   # noqa: E402
+from backend.wave.surface import verify_separation   # noqa: E402
+from backend.wave.utility import metrics_map   # noqa: E402
+
+
+@pytest.fixture
+def _fixture_movements(monkeypatch):
+    """Real BTS 2015 ORD/ATL/DFW movements from the committed fixtures (as tests/test_ground_traffic.py), so the
+    ATC-TAXI-CONFLICT tests schedule against real departures with or without data/ref/movements2015."""
+    import pandas as pd
+    from backend.datastore import files
+    from backend.geo import store
+    from backend.wave import ground_traffic
+    from tests.test_ground_traffic import DAYS, FIXTURES
+    real = files._movements
+    frames = {k: pd.read_csv(FIXTURES / v, dtype=str, keep_default_na=False) for k, v in DAYS.items()}
+    monkeypatch.setattr(files, "_movements", lambda iata: (frames[iata], "date") if iata in frames else real(iata))
+    store.load_movements.cache_clear(); ground_traffic._cache_clear(); trajectory.build.cache_clear()
+    yield
+    store.load_movements.cache_clear(); ground_traffic._cache_clear(); trajectory.build.cache_clear()
+
+
+def _bench_ids():
+    return _json.loads((_Path(__file__).resolve().parents[1] / "eval" / "benchmark.json").read_text())["wave_ids"]
+
+
+def _ord_plan_with_crossing():
+    """ORD replay wave, FCFS plan, with one wave flight A moved to a runway whose taxi route crosses another strip and
+    a second wave flight B landing on that strip 0.5 min after A would reach the crossing unimpeded, so A must hold
+    short. A is `assignments[0]`."""
+    w = build.build_wave(ORD)
+    p = fcfs_plan(w)
+    flow = set(moves_fcfs_runways(w).values())
+    for a in p.assignments:
+        f = w.flight(a.callsign)
+        for r in sorted(r.id for r in w.airport.runways if r.open):
+            tx = surface.taxi_info(w, r, a.gate, f.gate_size)
+            if tx.tier != "real" or tx.path is None or not tx.path.crossings:
+                continue
+            strip = tx.path.crossings[0][1]
+            ends = [e for e in strip.split("/") if any(x.id == e and x.open for x in w.airport.runways)]
+            end = next((e for e in ends if e in flow), ends[0] if ends else None)
+            if end is None:
+                continue
+            b = next(x for x in p.assignments if x.callsign != a.callsign)
+            c = tx.path.nodes.index(tx.path.crossings[0][0])
+            at_crossing = a.slot_min + tx.rot_s / 60.0 + sum(tx.path.seg_s[:c]) / 60.0   # unimpeded, at the crossing
+            q = p.with_assignment(replace(a, runway=r)).with_assignment(replace(b, runway=end,
+                                                                                 slot_min=round(at_crossing + 0.5, 1)))
+            first = q.get(a.callsign)
+            return w, JointPlan([first] + [x for x in q.assignments if x.callsign != a.callsign], q.label)
+    raise AssertionError("no crossing route on the ORD replay wave")
+
+
+def moves_fcfs_runways(w):
+    from backend.wave import moves
+    return moves.fcfs_runways(w)
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_taxi_wait_feeds_in_block():
+    w, p = _ord_plan_with_crossing()      # helper: pick a wave flight whose route crosses a strip with a landing 0.5 min after its exit
+    m = metrics_map(w, p)[p.assignments[0].callsign]
+    assert m.taxi_wait_min > 0 and m.taxi_min == pytest.approx(m.taxi_unimpeded_min + m.taxi_wait_min, abs=1e-6)
+    assert m.in_block_min == pytest.approx(p.assignments[0].slot_min + m.rot_s / 60.0 + m.taxi_min, abs=0.05)
+    assert m.hold_short_strip is not None
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_taxi_conflict_rule_passes_with_waits_and_cites_source():
+    w, p = _ord_plan_with_crossing()
+    c = _by(rules.check(w, p), "ATC-TAXI-CONFLICT", p.assignments[0].callsign)
+    assert c.passed and c.evidence["waits"] >= 1 and c.source.startswith("FAA JO 7110.65 §3-7-2")
+    for k in ("waits", "wait_min", "crossings", "exit_clear_min", "next_landing_min"):
+        assert k in c.evidence
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_taxi_conflict_fails_when_runway_cannot_be_vacated(monkeypatch):
+    from backend.wave import ground_traffic, surface
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    a = p.get(w.focus)
+    ex = next(t for t in trajectory.build(w, p).ground if t.callsign == w.focus).points[0]   # exit point
+    nxt = min((b for b in p.assignments if b.action == "land" and b.runway == a.runway and b.slot_min > a.slot_min),
+              key=lambda b: b.slot_min)
+    real = ground_traffic.reservations(w)
+    blocked = surface.Reservations({**real.node_busy, ex["node"]: [(a.slot_min, nxt.slot_min + 1.0, "BLOCK")]},
+                                   real.edge_dir, real.runway_events)
+    monkeypatch.setattr(ground_traffic, "reservations", lambda wave: blocked)
+    trajectory.build.cache_clear()
+    c = _by(rules.check(w, p), "ATC-TAXI-CONFLICT", w.focus)
+    assert not c.passed and nxt.callsign in c.detail
+    ts = trajectory.build(w, p)
+    hit = [x for x in ts.conflicts if x["callsign"] == w.focus]
+    assert hit and hit[0]["rule"] == "ATC-TAXI-CONFLICT" and {"at_min", "lat", "lon", "detail"} <= set(hit[0])
+    assert not any(k in x for x in ts.to_dict()["conflicts"] for k in ("node",))
+
+
+def test_taxi_conflict_not_modelled_without_surface():
+    w = make_wave()                       # fixture airport: no OSM surface
+    p = fcfs_plan(w)
+    for a in p.assignments:
+        c = _by(rules.check(w, p), "ATC-TAXI-CONFLICT", a.callsign)
+        assert c.passed and "ground conflicts not modelled" in c.detail
+
+
+def _verify(w, ts):
+    g = surface._geo(w).graph
+    if g is None or surface.wave_tier(w, g) != "real":
+        return verify_separation(ts.ground)
+    return verify_separation(ts.ground, runway_events=ts.runway_events, g=g)
+
+
+def test_all_benchmark_fcfs_ground_tracks_separated():
+    """Brief: verify_separation on the FCFS ground tracks of the first 10 benchmark waves, with the runway events and
+    the graph (carry T29 b). Every message involving a wave flight's track is a failure of the test; fixed tracks are
+    scheduled before the plan exists, so a fixed track inside a strip's zone during one of the plan's landings must be
+    a failing ATC-TAXI-CONFLICT of that landing naming the fixed mover (fixed-vs-fixed separation is
+    tests/test_ground_traffic.py's). Pairs are checked wave track x every track (fixed-vs-fixed pairs skipped: at
+    movement airports there are ~160 fixed tracks)."""
+    for wid in _bench_ids()[:10]:
+        w = build.build_wave(wid); p = fcfs_plan(w); ts = trajectory.build(w, p)
+        wave_t = [t for t in ts.ground if t.wave]
+        fixed_t = [t for t in ts.ground if not t.wave]
+        msgs = _verify(w, replace(ts, ground=wave_t))
+        msgs += [m for a in wave_t for b in fixed_t for m in verify_separation([a, b])]
+        checks = {c.callsign: c for c in rules.check(w, p) if c.rule == "ATC-TAXI-CONFLICT"}
+        # a wave flight still on its runway at another flight's landing or takeoff (e.g. a mixed-mode fixed takeoff)
+        # is the runway-vacate failure of the rule, not a scheduler bug
+        vac = [m for m in msgs if "still vacating" in m]
+        assert all(not checks[m.split()[0]].passed and m.split()[-3] in checks[m.split()[0]].evidence["blocking"]
+                   for m in vac), (wid, vac)
+        assert [m for m in msgs if m not in vac] == [], wid
+        g = surface._geo(w).graph
+        if not ts.runway_events or g is None:
+            continue
+        for t in fixed_t:
+            for m in verify_separation([t], runway_events=ts.runway_events, g=g):
+                cs = m.split()[-3]
+                if cs in checks:
+                    assert not checks[cs].passed and t.callsign in checks[cs].evidence["landing_conflicts"], (wid, m)
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_every_still_vacating_message_is_a_failing_taxi_conflict(monkeypatch):
+    """Carry T29 (c): the verifier's runway-vacate check (4) and the rule agree: every wave flight it flags fails
+    ATC-TAXI-CONFLICT (no pre-landing margin on either side: JO 7110.65 §3-10-3, clear of the runway before the
+    next aircraft crosses the threshold)."""
+    from backend.wave import ground_traffic
+    w = build.build_wave(ORD); p = fcfs_plan(w)
+    a = p.get(w.focus)
+    pts = next(t for t in trajectory.build(w, p).ground if t.callsign == w.focus).points
+    second = next(q["node"] for q in pts if q["node"] != pts[0]["node"])     # still inside the runway's zone
+    nxt = min((b for b in p.assignments if b.action == "land" and b.runway == a.runway and b.slot_min > a.slot_min),
+              key=lambda b: b.slot_min)
+    real = ground_traffic.reservations(w)
+    # the node after the exit is busy past the next landing: the focus waits at its exit node (first point at its
+    # runway exit, no wait is ever placed inside the vacate stretch) and is still on the runway when OO5570 lands
+    blocked = surface.Reservations({**real.node_busy, second: [(a.slot_min, nxt.slot_min + 1.0, "BLOCK")]},
+                                   real.edge_dir, real.runway_events)
+    monkeypatch.setattr(ground_traffic, "reservations", lambda wave: blocked)
+    trajectory.build.cache_clear()
+    ts = trajectory.build(w, p)
+    g = surface._geo(w).graph
+    wave_cs = {x.callsign for x in w.flights}
+    flagged = {m.split()[0] for m in verify_separation([t for t in ts.ground if t.wave], runway_events=ts.runway_events,
+                                                         g=g) if "still vacating" in m}
+    failing = {c.callsign for c in rules.check(w, p) if c.rule == "ATC-TAXI-CONFLICT" and not c.passed}
+    assert flagged and flagged <= failing and flagged <= wave_cs
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_stack_labels_come_from_the_trajectory_set():
+    """Parked T14: ATC-HOLD-STACK labels and TrajectorySet.stack_violations use one key set."""
+    w = build.build_wave(ORD); p = fcfs_plan(w)
+    ts = trajectory.build(w, p)
+    assert isinstance(ts.stack_labels, dict)
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_landing_inside_a_fixed_crossing_fails_and_matches_the_verifier():
+    """The fixed traffic is scheduled before the plan exists and never re-timed, so a plan landing inside a fixed
+    mover's runway-crossing gap window is a conflict the plan must avoid (spec §6.4: wave flights yield; §6.6: every
+    crossing meets the gap). ORD replay FCFS: OO5559 lands 04L/22R at T+58 while real 2015 departures cross it.
+    Every verifier message about a fixed track during a wave landing is a failing check naming that fixed mover."""
+    w = build.build_wave(ORD); p = fcfs_plan(w)
+    ts = trajectory.build(w, p)
+    g = surface._geo(w).graph
+    checks = {c.callsign: c for c in rules.check(w, p) if c.rule == "ATC-TAXI-CONFLICT"}
+    wave_cs = {f.callsign for f in w.flights}
+    msgs = [m for t in ts.ground if not t.wave
+            for m in verify_separation([t], runway_events=ts.runway_events, g=g)]
+    hits = [(m.split()[0], m.split()[-3]) for m in msgs if m.split()[-3] in wave_cs]   # (fixed label, wave landing)
+    assert hits
+    for fixed, cs in hits:
+        c = checks[cs]
+        assert not c.passed and fixed in c.evidence["landing_conflicts"]
+    c = checks["OO5559"]
+    assert not c.passed and "landing_conflicts" in c.evidence and c.evidence["waits"] == 0
+    assert any(x["callsign"] == "OO5559" and x["lat"] is not None for x in ts.conflicts)
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_hold_short_shows_in_move_labels_and_views(monkeypatch):
+    """Spec §6.7: a move whose resulting plan makes the flight hold short says so in its label (`+{wait} hold-short
+    {strip}`, <= 120 chars), and the agent views add `hold short {strip} {wait} min for {cs}`."""
+    from backend.wave import graph, moves
+    w, p = _ord_plan_with_crossing()
+    a = p.assignments[0]
+    m = metrics_map(w, p)[a.callsign]
+    line = graph._view(w, p, "ATC")["taxi"][a.callsign]
+    assert f"hold short {m.hold_short_strip}" in line and " min for " in line and len(line) <= 120
+    # every taxi-bearing label appends moves._wait_txt of the plan the move produces: here that plan is `p`
+    mv = moves._move("GROUND", "reassign_gate", [a.callsign], {"gate": a.gate}, "")
+    with monkeypatch.context() as mp:
+        mp.setattr(moves, "apply", lambda wave, plan, move: p)
+        txt = moves._wait_txt(w, p, mv, a.callsign)
+    assert txt == f" +{m.taxi_wait_min:.1f} hold-short {m.hold_short_strip}"
+    labels = [x.label for ag in ("ATC", "GROUND") for x in moves._candidates(w, p, ag)]
+    assert all(len(x) <= 120 for x in labels)

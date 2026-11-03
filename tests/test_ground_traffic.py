@@ -157,10 +157,10 @@ def test_trial_scheduling_does_not_leak(monkeypatch):
     real = GT._settle_runway
     calls = []
 
-    def checked(g, m, res, spans):
+    def checked(g, m, res, spans, settled=None):
         before = copy.deepcopy((res.node_busy, res.edge_dir, spans))
         ev = copy.deepcopy(res.runway_events)
-        real(g, m, res, spans)
+        real(g, m, res, spans, settled)
         assert (res.node_busy, res.edge_dir, spans) == before          # trials wrote only to their views
         mine = lambda evs: sorted((s, e) for s, l in evs.items() for e in l if e[2] == m.label)
         others = lambda evs: {s: [e for e in l if e[2] != m.label] for s, l in evs.items()}
@@ -193,3 +193,76 @@ def test_cow_table_reads_through_and_copies_on_write():
     v.setdefault(1, []).append((2.0, 3.0, "B"))
     v.setdefault(2, []).append((4.0, 5.0, "C"))
     assert base == {1: [(0.0, 1.0, "A")]} and v[1][-1][2] == "B" and v[2] == [(4.0, 5.0, "C")]
+
+
+# --------------------------------------------------------------- Task 31 carries (holding-point queue, mixed mode)
+
+def test_takeoff_kept_clear_of_landings_on_its_strip():
+    """Mixed mode (MIA): a takeoff stays LANDING_TAKEOFF_GAP_MIN (1 min) from every landing on its strip."""
+    from backend.wave.ground_traffic import LANDING_TAKEOFF_GAP_MIN, _takeoff_time
+    assert LANDING_TAKEOFF_GAP_MIN == 1.0
+    ev = [(10.5, "landing", "UA1"), (12.0, "takeoff", "AA2")]
+    t = _takeoff_time(ev, [], 10.0)
+    assert t == pytest.approx(13.0)                      # 11.5 clears the landing, then 1 min after AA2's takeoff
+    assert _takeoff_time([(20.0, "landing", "UA1")], [], 10.0) == pytest.approx(10.0)
+    assert _takeoff_time([(9.2, "landing", "UA1")], [], 10.0) == pytest.approx(10.2)
+
+
+def test_takeoffs_clear_of_landings_on_every_strip():
+    w = build.build_wave("F2015-75")
+    res = reservations(w)
+    for strip, lst in res.runway_events.items():
+        lands = [t for t, k, _ in lst if k == "landing"]
+        for t, k, _ in lst:
+            if k == "takeoff":
+                assert all(abs(t - x) >= 1.0 - 1e-6 for x in lands), strip
+
+
+def test_holding_node_reserved_until_line_up_and_queue_forms_upstream():
+    """Carry T30: a departure keeps its holding-point node until it lines up (30 s before takeoff), so the queue
+    behind it waits upstream on the taxiway (visible to the wave flights), and the hold lengths are reported."""
+    from backend.wave import ground_traffic as GT
+    w = build.build_wave("F2015-270287")
+    ft = GT._get(w)
+    to = {e[2]: e[0] for lst in ft.reservations.runway_events.values() for e in lst if e[1] == "takeoff"}
+    held = 0
+    for tr in ft.tracks:
+        if tr.kind != "departure":
+            continue
+        last = tr.points[-1]["node"]
+        mine = [b for b in ft.reservations.node_busy[last] if b[2] == tr.callsign]
+        assert len(mine) == 1 and mine[0][1] == pytest.approx(max(to[tr.callsign] - 0.5, mine[0][1]))
+        if tr.waits and tr.waits[-1]["reason"].startswith("hold for takeoff"):
+            held += 1
+            assert mine[0][1] == pytest.approx(to[tr.callsign] - 0.5)
+            assert tr.points[-1]["t_min"] == pytest.approx(to[tr.callsign] - 0.5)
+    assert held > 0
+    deps = {m.label for m in ft.movers if m.kind == "departure"}
+    assert any(w_["for"] in deps for tr in ft.tracks if tr.kind == "departure" for w_ in tr.waits
+               if w_["reason"].startswith("give way"))            # a queue upstream, behind another departure
+    for strip, lst in ft.reservations.runway_events.items():    # takeoffs still 1 a minute per strip
+        tos = sorted(t for t, k, _ in lst if k == "takeoff")
+        assert all(b - a >= 1.0 - 1e-6 for a, b in zip(tos, tos[1:])), strip
+    hs = GT.hold_stats(ft)
+    assert hs["n"] == len([m for m in ft.movers if m.kind == "departure" and m.path is not None])
+    pv = next(p for p in w.provenance if p.layer == "ground_traffic")
+    assert "holding point" in pv.detail and "p95" in pv.detail
+
+
+def test_fixed_traffic_is_pinned_on_the_built_wave():
+    from backend import datastore
+    from backend.wave import ground_traffic as GT
+    w = build.build_wave("F2015-270287")
+    ft = GT._get(w)
+    GT._CACHE.clear()                                   # evicted from the shared cache: the pin still serves it
+
+    class Exploding:
+        def __getattr__(self, name):
+            raise AssertionError(f"store.{name} called")
+    datastore.set_store(Exploding())
+    try:
+        assert GT._get(w) is ft and GT.reservations(w) is ft.reservations
+    finally:
+        datastore.set_store(None)
+    reservations.cache_clear()                          # bumps the generation: the pin no longer serves
+    assert GT._get(w) is not ft

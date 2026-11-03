@@ -166,6 +166,7 @@ export interface FlightMetrics {
   vector_min?: number; route_min?: number | null; route_extra_min?: number;
   exit?: string | null; rot_s?: number | null;
   taxi_unimpeded_min?: number | null; taxi_wait_min?: number; taxi_min?: number | null;
+  hold_short_strip?: string | null;    // v3-traffic: strip of the longest hold-short wait (null: none)
 }
 export interface RuleCheck {
   rule: RuleId;

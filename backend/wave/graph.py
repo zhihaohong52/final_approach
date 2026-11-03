@@ -166,8 +166,23 @@ def _path_line(wave: Wave, a) -> str:
     return f"{head} · hold {h.fix} base {h.base_ft:,} · lap {h.lap_min:.1f} min = {kg:.0f} kg"
 
 
-def _taxi_line(wave: Wave, a) -> str:
-    """Per-flight taxi line (spec §6.7): `{exit} → {stand} {unimpeded:.1f} min`, from the per-wave taxi table."""
+def _wait_clause(o) -> str:
+    """Hold-short clause of one flight's ground outcome (spec §6.7): `hold short {strip} {wait:.1f} min for {cs}` for
+    its longest hold-short wait (`give way {wait:.1f} min to {cs}` when it only gives way), plus the total when it has
+    other waits; "" without waits."""
+    if o is None or not o.modelled or not o.waits:
+        return ""
+    dur = lambda w: w["to_min"] - w["from_min"]
+    hs = [w for w in o.waits if w.get("strip")]
+    b = max(hs or o.waits, key=dur)
+    txt = (f"hold short {b['strip']} {dur(b):.1f} min for {b['for']}" if b.get("strip") else
+           f"give way {dur(b):.1f} min to {b['for']}")
+    return txt + (f" ({o.wait_min:.1f} min waits in all)" if o.wait_min > dur(b) + 0.05 else "")
+
+
+def _taxi_line(wave: Wave, a, ts=None) -> str:
+    """Per-flight taxi line (spec §6.7): `{exit} → {stand} {unimpeded:.1f} min`, from the per-wave taxi table, plus the
+    hold-short clause of the plan's hold-short pass (`ts`, the plan's TrajectorySet) when the flight waits."""
     if a.action != "land" or not a.runway:
         return "no taxi (not landing)"
     tx = surface.taxi_info(wave, a.runway, a.gate, wave.flight(a.callsign).gate_size)
@@ -175,11 +190,14 @@ def _taxi_line(wave: Wave, a) -> str:
         return f"{a.runway} → {a.gate} {tx.taxi_min:.1f} min (near/far estimate, no runway geometry)"
     stand = tx.stand if tx.stand == a.gate else f"{a.gate}/{tx.stand}"
     line = f"{tx.exit_label or a.runway + ' exit'} → {stand} {tx.taxi_min:.1f} min"
-    return line + (" (straight-line estimate)" if tx.src == "synth" else "")
+    line += " (straight-line estimate)" if tx.src == "synth" else ""
+    clause = _wait_clause(ts.outcomes.get(a.callsign)) if ts is not None else ""
+    return line + (f" · {clause}" if clause else "")
 
 
 def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
     role = _role(agent)
+    ts = trajectory.build(wave, plan)
     if role == "ATC":
         m = wave.metar
         rw = []
@@ -195,14 +213,14 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
                 "wave": [[a.callsign, wave.flight(a.callsign).wake, a.action, a.runway, a.slot_min]
                          for a in plan.assignments],
                 "path": {a.callsign: _path_line(wave, a) for a in plan.assignments},
-                "taxi": {a.callsign: _taxi_line(wave, a) for a in plan.assignments}}
+                "taxi": {a.callsign: _taxi_line(wave, a, ts) for a in plan.assignments}}
     if role == "GROUND":
         mm = metrics_map(wave, plan)
         return {"gates": [[g.id, g.size, "remote" if g.remote else g.pier,
                            [[b["from_min"], b["to_min"]] for b in g.busy][:4]] for g in wave.gates][:24],
                 "flights": [{"cs": a.callsign, "size": wave.flight(a.callsign).gate_size,
                              "gate": a.gate, "scheduled_gate": wave.flight(a.callsign).scheduled_gate,
-                             "in_block": mm[a.callsign].in_block_min, "taxi": _taxi_line(wave, a),
+                             "in_block": mm[a.callsign].in_block_min, "taxi": _taxi_line(wave, a, ts),
                              "crew_shift_end": wave.flight(a.callsign).crew_shift_end_min,
                              "next_dep": wave.flight(a.callsign).next_departure_min}
                             for a in plan.assignments]}
@@ -214,7 +232,7 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
             "sched_in_block": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
                            "speed_reduction": a.speed_reduction_min, "ground_delay": a.ground_delay_min},
-            "path": _path_line(wave, a), "taxi": _taxi_line(wave, a),
+            "path": _path_line(wave, a), "taxi": _taxi_line(wave, a, ts),
             "metrics": {"hold": m.hold_min, "fuel_kg": m.fuel_kg, "delay": m.delay_min,
                         "pax_protected": m.pax_protected, "pax_total": m.pax_total}}
 
