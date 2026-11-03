@@ -325,7 +325,7 @@ Recorded runs in `data/replay/` (engine v3-taxi, live decision models: `liquid/d
 - `F2015-77162` DEN: DL927 on 16L, gate C35, +133 min. The status quo fails GND-GATE-FREE (NK853, WN463 on gate C46); legal plan agreed in round 1. WN463 laps 7 times (37.5 min) because the plan pushes it from T+120 to T+160 min, which clears the gate conflict.
 - `F2015-75` DFW, crosswind runway closures: AA1344 on 35L, gate A38, +111 min. The status quo already passes every check, so the agents just move AA1344 and AA2441 from 35C to 35L; no flight holds (no lap).
 
-In MIA, ATL and DEN the laps are airborne holding spent on gate relief for a non-focus flight (see the engine notes in `eval/BENCHMARK.md`).
+In MIA, ATL and DEN the laps are airborne holding spent on gate relief for a non-focus flight (the GND-GATE-FREE pair and the pushed slot are listed above; the same pattern is analysed in `eval/archive/engine-v3-air/BENCHMARK.md`).
 
 Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan on the table passes the engine CHECK, so the log shows three `NO_CONSENSUS` messages and a `FALLBACK` with its reason; the safety net diverts DL2019 to CSG (about 320 min). The system declines to invent a plan it cannot prove legal.
 
