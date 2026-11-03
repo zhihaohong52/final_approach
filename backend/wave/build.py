@@ -53,10 +53,12 @@ def _reset_caches() -> None:
     """Drop every in-process reader cache of the wave builders (tests only: parity runs swap the store between
     builds). The FileStore's own file caches are not touched."""
     from backend import scenario
-    from backend.wave import flights2015
+    from backend.wave import flights2015, surface
     _CACHE.clear()
     _waves_cache_clear()
     _metar_table.cache_clear()
+    airport_taxi_median.cache_clear()
+    surface.cache_clear()        # gate bindings, wave tiers, per-wave taxi tables, Dijkstra tree FIFO
     flights2015._IEM_MEM.clear()
     constraints._load.cache_clear()
     for fn in (scenario.disruptions, scenario.airports, scenario.airlines):
