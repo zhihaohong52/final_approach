@@ -101,7 +101,10 @@ LIMITS = [
              "Quality gate per wave: every open runway end in OSM reaches >= 80 % of the wave's bound stands, else "
              "the wave uses the generic estimate (straight line runway midpoint -> gate x1.4 at 15 kt, generic exit at "
              "the required roll and 12 kt; assumption). Runways without coordinates keep v2's 6 min near / 10 min "
-             "far. Remote stand: + 10 min bus. No taxiway closures modelled"},
+             "far. Remote stand: + 10 min bus. No taxiway closures modelled. The time is UNIMPEDED: no ramp, gate or "
+             "queue waits (taxi_wait_min = 0 until ATC-TAXI-CONFLICT schedules hold-shorts), so it sits below BTS "
+             "TAXI_IN (FCFS medians, ROT + taxi vs taxi-in reference: ORD 2.3 / 9.0, MIA 2.5 / 6.0, ATL 5.7 / 12.5, "
+             "DFW 5.8 / 13.5, DEN 6.4 / 5.5 min); see the taxi validation (Task 27)"},
     {"limit": "runway ends missing from OSM", "value": "generic straight-line taxi", "source": "assumption",
      "note": "open in 2015 but not in today's OSM; taxi uses the straight-line generic estimate"},
     {"limit": "runway hold clearance", "value": f"{surface.RUNWAY_HOLD_CLEARANCE_M:g} m from a crossed runway's "
@@ -519,7 +522,9 @@ def _taxi_route_check(wave: Wave, a, f, g, cs: str) -> RuleCheck:
     p = tx.path
     route_s = " ".join(dict.fromkeys(n for n in p.names if n)) if p is not None else ""
     cross = sorted(dict.fromkeys(st for _, st in p.crossings)) if p is not None else []
-    ev = {"runway": str(a.runway), "exit": tx.exit_label or ("generic" if tx.tier != "none" else "none"),
+    ex = tx.exit_label or ("generic" if tx.tier == "generic" else
+                           f"{a.runway} exit {tx.exit['dist_m']:.0f} m" if tx.tier == "real" and tx.exit else "none")
+    ev = {"runway": str(a.runway), "exit": ex,
           "gate": str(a.gate), "stand": tx.stand, "route": route_s or "none",
           "crossings": ", ".join(cross) if cross else "none", "unimpeded_min": round(tx.taxi_min, 2),
           "tier": tx.tier}
@@ -533,9 +538,10 @@ def _taxi_route_check(wave: Wave, a, f, g, cs: str) -> RuleCheck:
                f", {tx.taxi_min:.1f} min unimpeded" + (f", crosses {', '.join(cross)}" if cross else ""))
     elif tx.tier == "generic":
         g_ = surface._geo(wave).graph
-        why = ("runway end not in today's OSM" if g_ is not None and a.runway not in g_.exits else
+        why = ("no OSM surface" if g_ is None else
+               "runway end not in today's OSM" if a.runway not in g_.exits else
                "gate not bound to an OSM stand" if surface.stand_node_for(wave, a.gate) is None else
-               "surface below the quality gate" if g_ is not None else "no OSM surface")
+               "surface below the quality gate")
         det = f"{cs}: taxi {a.runway} -> {dest} {tx.taxi_min:.1f} min, straight-line estimate ({why})"
     else:
         det = f"{cs}: taxi route {a.runway} -> {dest} available ({tx.taxi_min:g} min); no runway geometry"

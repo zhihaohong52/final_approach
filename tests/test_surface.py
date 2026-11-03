@@ -647,13 +647,45 @@ def test_taxi_points_are_monotonic_and_start_after_rot():
         assert ts[0] == pytest.approx(a.slot_min + mm[a.callsign].rot_s / 60)
 
 
-def test_hot_path_taxi_is_warm_after_build():
-    # the per-wave taxi table is built at wave-build time: evaluating a plan never runs a Dijkstra
-    import time
-    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
-    trajectory.build.cache_clear(); surface.wave_tier.cache_clear()
-    surface.precompute(w)
-    t = time.perf_counter()
+def test_hot_path_taxi_is_warm_after_build(monkeypatch, fresh_taxi):
+    # the per-wave taxi table is built at wave-build time: evaluating a plan (metrics, rules, utilities) never runs
+    # a Dijkstra
     from backend.wave.utility import evaluate
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    trajectory.build.cache_clear(); surface.precompute(w)
+
+    def boom(g, root):
+        raise AssertionError("Dijkstra in the hot path")
+    monkeypatch.setattr(surface, "_tree", boom)
     evaluate(w, p)
-    assert time.perf_counter() - t < 0.25
+    for ag in ("ATC", "GROUND", f"PILOT:{w.focus}"):
+        moves._candidates(w, p, ag)
+
+
+def test_exit_fallback_keeps_choose_exit_order(monkeypatch, fresh_taxi):
+    # the chosen exit cannot reach the stand: the fallback is the next forward exit past the required roll, never a
+    # short or backward exit (which would understate the ROT and the in-block)
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    a = p.get(w.focus); size = w.flight(w.focus).gate_size
+    g = surface.load_graph("KORD")
+    first = surface.choose_exit(g, a.runway, size, False)
+    real = surface.unimpeded
+
+    def fake(gr, exit_node, stand):
+        if exit_node == first["node"]:
+            raise surface.NoPath("blocked")
+        return real(gr, exit_node, stand)
+    monkeypatch.setattr(surface, "unimpeded", fake)
+    trajectory.build.cache_clear()
+    tx = surface.taxi_info(w, a.runway, a.gate, size)
+    assert tx.tier == "real" and tx.no_path is None and tx.exit["node"] != first["node"]
+    assert tx.exit["angle_deg"] <= surface.BACKWARD_DEG and tx.exit["dist_m"] >= surface.ROLL_M[size]
+    short = [e for e in g.exits[a.runway] if e["dist_m"] < surface.ROLL_M[size] or e["angle_deg"] > 90]
+    assert short                     # the end has exits the old fallback order could have picked first
+
+
+def test_surface_cache_clear():
+    w = build.build_wave("F2015-270287")
+    surface.cache_clear()
+    assert not surface._GEO and not surface._TABLE and not surface._TREE_ORDER
+    assert surface.taxi_info(w, "22R", w.flight(w.focus).scheduled_gate, "narrow").tier == "real"   # pin still valid

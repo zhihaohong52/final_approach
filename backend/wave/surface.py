@@ -843,7 +843,7 @@ SRC_ROUTED = "OpenStreetMap surface (ODbL), routed"
 SRC_GENERIC = "generic surface (straight line x1.4 at 15 kt)"
 SRC_NO_GEOMETRY = "ops rule (no geometry)"
 TIER_REACH = 0.80             # quality gate: each open end in OSM reaches >= 80 % of the wave's bound stands
-WAVE_CACHE_MAX = 64           # waves kept in the per-wave tier / taxi-table caches (FIFO)
+WAVE_CACHE_MAX = 32           # waves kept in the per-wave tier / taxi-table caches (FIFO; = build_wave's LRU)
 _PIN = "_surface"             # wave.__dict__ slot: (wave_key, GateGeo) pinned at build time (not a dataclass field)
 
 
@@ -969,7 +969,8 @@ def _tier(g: TaxiGraph | None, runways, bind: dict[str, dict]) -> Literal["real"
 
 def wave_tier(wave, g: TaxiGraph | None) -> Literal["real", "generic"]:
     """The wave's surface tier (spec §6.9), memoised on the wave key (`wave_tier.cache_clear()` also drops the taxi
-    table, which depends on it)."""
+    table, which depends on it). `g` (kept for the T24 interface) must be the wave's graph, `_geo(wave).graph`:
+    it is what the gate binding refers to; the memo is keyed on the wave only."""
     from backend.wave.route import wave_key
     k = wave_key(wave)
     hit = _TIER.get(k)
@@ -1018,7 +1019,10 @@ def _compute(wave, geo: GateGeo, tier_w: str, runway_end: str | None, gate_id: s
             and int(b.get("node", -1)) >= 0):
         first = choose_exit(g, rw.id, size, wet)
         seen, cands = set(), []
-        for e in [first] + list(g.exits[rw.id]):
+        # fallback order as choose_exit ranks exits: forward and past the required roll, then forward, then any
+        ex = list(g.exits[rw.id])
+        fwd = [e for e in ex if e["angle_deg"] <= BACKWARD_DEG]
+        for e in [first] + [e for e in fwd if e["dist_m"] >= need] + fwd + ex:
             if e["node"] not in seen:
                 seen.add(e["node"])
                 cands.append(e)
@@ -1114,6 +1118,19 @@ def _clear() -> None:
 
 wave_tier.cache_clear = _clear
 taxi_info.cache_clear = _clear
+
+
+def cache_clear() -> None:
+    """Drop every surface cache (gate bindings, tiers, taxi tables, the global tree FIFO and the trees it holds);
+    for `build._reset_caches`. Pinned GateGeo objects on live waves stay valid (their trees rebuild lazily)."""
+    _clear()
+    with _LOCK:
+        _GEO.clear()
+    with _TREE_LOCK:
+        for og, ok in _TREE_ORDER:
+            og._trees.pop(ok, None)
+        _TREE_ORDER.clear()
+    load_graph.cache_clear()
 
 
 def arrival_track(wave, callsign: str, info: TaxiInfo, slot_min: float) -> GroundTrack | None:
