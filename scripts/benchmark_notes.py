@@ -38,6 +38,9 @@ def main(argv=None) -> None:
         return
     if a.variants:
         firm, relaxing = (json.loads(Path(p).read_text()) for p in a.variants)
+        for want, r, path in (("firm", firm, a.variants[0]), ("relaxing", relaxing, a.variants[1])):
+            if r.get("fairness") != want:
+                ap.error(f"{path} has fairness {r.get('fairness')!r}, expected {want!r} (arguments are FIRM then RELAXING)")
         prev = json.loads(Path(a.prev or EVAL / "archive" / "engine-v3-traffic" / "benchmark.json").read_text())
         part = lambda r: {"arms": [{"label": x["label"], "summary": x["summary"]} for x in r["arms"]]}  # noqa: E731
         rep["fairness_variants"] = {"firm": part(firm), "relaxing": part(relaxing),

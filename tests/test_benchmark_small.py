@@ -6,7 +6,7 @@ from backend.wave.benchmark import main
 SUMMARY_KEYS = {"consensus_rate_pct", "mean_rounds", "fallback_rate_pct", "rule_violations_in_agreed_plans",
                 "delay_min", "fuel_kg", "pax_protected_pct", "overtime_min", "agreement_with_formula_pct", "brier",
                 "latency_p50_ms", "latency_p95_ms", "error_rate_pct", "cost_usd_per_wave",
-                "lap_share_pct", "taxi_wait_min", "max_prompt_chars", "worse_than_status_quo_pct", "model_calls_per_wave"}
+                "lap_share_pct", "taxi_wait_min", "max_prompt_chars", "worse_than_status_quo_pct", "worse_flight_pct", "model_calls_per_wave"}
 
 
 def test_small_benchmark(tmp_path):
@@ -355,7 +355,7 @@ def test_worse_than_sq_pct():
 
 
 def _rep(cons, worse, n=50, labels=("m", "formula")):
-    return {"n_waves": n, "arms": [{"label": lb, "summary": {"consensus_rate_pct": c, "worse_than_status_quo_pct": w,
+    return {"n_waves": n, "arms": [{"label": lb, "summary": {"consensus_rate_pct": c, "worse_flight_pct": w,
                                                               "delay_min": 1.0, "fuel_kg": 2.0}}
                                    for lb, c, w in zip(labels, cons, worse)]}
 
@@ -447,6 +447,8 @@ def test_history_row_computes_worse_pct_from_archived_per_wave():
 
 def test_markdown_fairness_variants_section(tmp_path):
     rep = main(["--fixtures", "--n", "2", "--out", str(tmp_path), "--no-ablation", "--outage-n", "0"])
+    for a in rep["arms"]:
+        a["summary"].setdefault("worse_flight_pct", 0.0)
     v = lambda: {"arms": [{"label": "formula", "summary": rep["arms"][0]["summary"]}]}   # noqa: E731
     pick = B.pick_fairness(rep, rep, rep)
     md = B.markdown({**rep, "fairness_variants": {"firm": v(), "relaxing": v(), "pick": pick}})
@@ -461,9 +463,9 @@ def test_notes_variants_attaches_pick(tmp_path, monkeypatch):
     ev = tmp_path / "eval"
     (ev / "archive" / "engine-v3-traffic").mkdir(parents=True)
     cur = main(["--fixtures", "--n", "2", "--out", str(tmp_path / "cur"), "--no-ablation", "--outage-n", "0"])
-    for p in (ev / "benchmark.json", ev / "archive" / "engine-v3-traffic" / "benchmark.json",
-              tmp_path / "f.json", tmp_path / "r.json"):
-        p.write_text(json.dumps(cur))
+    for p, fv in ((ev / "benchmark.json", None), (ev / "archive" / "engine-v3-traffic" / "benchmark.json", None),
+                  (tmp_path / "f.json", "firm"), (tmp_path / "r.json", "relaxing")):
+        p.write_text(json.dumps({**cur, **({"fairness": fv} if fv else {})}))
     monkeypatch.setattr(N, "EVAL", ev)
     N.main(["--variants", str(tmp_path / "f.json"), str(tmp_path / "r.json")])
     out = json.loads((ev / "benchmark.json").read_text())
@@ -471,3 +473,65 @@ def test_notes_variants_attaches_pick(tmp_path, monkeypatch):
     assert set(fv) == {"firm", "relaxing", "pick"} and fv["pick"]["variant"] == "firm"
     assert set(fv["firm"]) == {"arms"} and set(fv["firm"]["arms"][0]) == {"label", "summary"}
     assert "## Fairness variants" in (ev / "BENCHMARK.md").read_text()
+
+
+def test_notes_variants_rejects_swapped_or_unlabelled(tmp_path, monkeypatch):
+    import json, sys
+    sys.path.insert(0, str(B.ROOT / "scripts"))
+    import benchmark_notes as N
+    ev = tmp_path / "eval"
+    ev.mkdir()
+    (ev / "benchmark.json").write_text("{}")
+    for n, v in (("f.json", "firm"), ("r.json", "relaxing"), ("x.json", None)):
+        (tmp_path / n).write_text(json.dumps({"arms": [], **({"fairness": v} if v else {})}))
+    monkeypatch.setattr(N, "EVAL", ev)
+    for args in ((tmp_path / "r.json", tmp_path / "f.json"), (tmp_path / "f.json", tmp_path / "f.json"),
+                 (tmp_path / "f.json", tmp_path / "x.json")):
+        with pytest.raises(SystemExit):
+            N.main(["--variants", *map(str, args)])
+
+
+def test_worse_flight_pct_is_per_flight():
+    r = lambda fin, base: {"final_plan": {"assignments": fin}, "baseline": {"plan": {"assignments": base}}}   # noqa: E731
+    m = lambda cs, d, f: {"callsign": cs, "metrics": {"delay_min": d, "fuel_kg": f}}   # noqa: E731
+    b = m("B", 10.0, 100.0)
+    # flight A improves a lot, flight B is worse: the wave total improves but a flight is worse
+    mixed = r([m("A", 0.0, 0.0), m("B", 12.0, 100.0)], [m("A", 20.0, 50.0), b])
+    within = r([{"callsign": "B", "metrics": {"delay_min": 10.05, "fuel_kg": 100.5}}], [b])
+    fuel = r([{"callsign": "B", "metrics": {"delay_min": 1.0, "fuel_kg": 100.6}}], [b])
+    assert B.worse_flight_pct([mixed, within, fuel, within]) == 50.0
+    assert B.worse_flight_pct([]) is None
+
+
+def test_pick_fairness_scores_the_label_intersection():
+    prev = _rep([98.0, 96.0], [None, None])
+    full = _rep([98.0, 96.0], [5.0, 5.0])
+    # relaxing lacks "formula": scored on "m" only, both variants compared like for like
+    p = B.pick_fairness(full, _rep([98.0], [1.0], labels=("m",)), prev)
+    assert p["variant"] == "relaxing" and {r["label"] for r in p["rows"]} == {"m"}
+    assert any("formula" in x for x in p["reasons"])
+    # an empty variant report is not vacuously eligible
+    with pytest.raises(ValueError):
+        B.pick_fairness(full, {"n_waves": 50, "arms": []}, prev)
+    with pytest.raises(ValueError):
+        B.pick_fairness(full, _rep([98.0], [1.0], labels=("zzz",)), prev)
+    with pytest.raises(ValueError, match="consensus_rate_pct"):
+        B.pick_fairness(full, _rep([None, 96.0], [1.0, 1.0]), prev)
+
+
+def test_pick_fairness_tie_uses_unrounded_values():
+    prev = _rep([98.0], [None], labels=("m",))
+    # 10.1 - 10.05 is 0.0499999... in floats: a true 0.05 gap is not a tie
+    p = B.pick_fairness(_rep([98.0], [10.1], labels=("m",)), _rep([98.0], [10.05], labels=("m",)), prev)
+    assert p["variant"] == "relaxing"
+    p = B.pick_fairness(_rep([98.0], [10.1], labels=("m",)), _rep([98.0], [10.06], labels=("m",)), prev)
+    assert p["variant"] == "firm"
+
+
+def test_main_passes_fairness_to_arm_runs(tmp_path, monkeypatch):
+    seen = []
+    real = B.negotiate_wave
+    monkeypatch.setattr(B, "negotiate_wave", lambda w, m, chain=None, **kw: (seen.append(kw.get("fairness")),
+                                                                              real(w, m, chain=chain, **kw))[1])
+    main(["--fixtures", "--n", "2", "--fairness", "firm", "--out", str(tmp_path), "--no-ablation", "--outage-n", "0"])
+    assert seen and set(seen) == {"firm"}
