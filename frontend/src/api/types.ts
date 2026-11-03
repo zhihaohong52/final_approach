@@ -371,7 +371,8 @@ export interface BenchmarkReport {
   selection: { winner: string; rule: string; reasons: string[] };
   failures: { wave_id: string; model: string; reason: string }[];   // clickable: open the wave
   engine_version?: string;             // v2.2
-  coverage?: Record<string, number>;   // v2.2: tier counts
+  coverage?: { procedures: Record<string, number>; surface: Record<string, number>;
+    ground_traffic: Record<string, number> };   // v2.2: per layer, tier -> wave count (sums to n_waves)
   taxi_validation?: Record<string, unknown>;   // v2.2: filled by the taxi validation step
 }
 
