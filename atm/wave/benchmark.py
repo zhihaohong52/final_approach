@@ -19,6 +19,7 @@ import json
 import random
 import statistics
 import sys
+import threading
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -38,7 +39,7 @@ DEAD_MODEL = "openrouter:invalid/model-does-not-exist"
 P95_LIMIT_MS, ERR_LIMIT_PCT, CONSENSUS_LIMIT_PCT = 1000, 2.0, 90.0
 TOTAL_KEYS = ("delay_min", "fuel_kg", "pax_protected_pct", "overtime_min")
 PROMPT_BUDGET_CHARS = 32000   # spec §6.7: 8k tokens at chars/4
-PROMPT_MAX: dict[str, int] = {}   # arm tag -> largest state + instructions + options any Decider.choice call received
+PROMPT_MAX: dict[str, int] = {}   # arm tag -> largest state + instructions + options any Decider call (choice, score, noul, noul_batch) received
 HISTORY_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min",
                 "consensus_rate_pct", "rule_violations_in_agreed_plans")
 ATTRIBUTION_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min")
@@ -154,13 +155,26 @@ def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int
     _reset_breakers()
     out: dict[str, dict] = {}
     PROMPT_MAX[arm] = 0
-    real_choice = Decider.choice
+    lock = threading.Lock()
+    methods = ("choice", "score", "noul", "noul_batch")
+    real = {m: getattr(Decider, m) for m in methods}
+    params = {"choice": ("state", "instructions", "options"), "score": ("state", "instructions", "levels"),
+              "noul": ("state", "instructions"), "noul_batch": ("state", "items", "formula", "criteria")}
 
-    def choice(self, state, instructions, options, formula):
-        if chain != ["formula"]:   # the formula arm sends no prompt
-            n = len(json.dumps(_stringify(state))) + len(instructions) + len(json.dumps(options))
-            PROMPT_MAX[arm] = max(PROMPT_MAX[arm], n)
-        return real_choice(self, state, instructions, options, formula)
+    def size(m, args, kw):
+        """Chars a call sends: state + instructions + options/criteria/levels (noul_batch: every item)."""
+        a = dict(zip(params[m], args), **kw)
+        a.pop("formula", None)
+        return len(json.dumps(_stringify(a.pop("state")))) + sum(len(json.dumps(v, default=str)) for v in a.values())
+
+    def wrap(m):
+        def call(self, *args, **kw):
+            if chain != ["formula"]:   # the formula arm sends no prompt
+                n = size(m, args, kw)
+                with lock:
+                    PROMPT_MAX[arm] = max(PROMPT_MAX[arm], n)
+            return real[m](self, *args, **kw)
+        return call
 
     def one(w):
         t0 = time.monotonic()
@@ -173,12 +187,14 @@ def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int
             out[w.id] = {"error": f"{type(e).__name__}: {e}"[:300]}
             log(f"[{tag}] {w.id}: EXCEPTION {e}")
 
-    Decider.choice = choice   # not thread-safe across arms: arms run one after another
+    for m in methods:   # arms run one after another, so the class patch is not shared between arms
+        setattr(Decider, m, wrap(m))
     try:
         with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
             list(ex.map(one, waves))
     finally:
-        Decider.choice = real_choice
+        for m in methods:
+            setattr(Decider, m, real[m])
     return out
 
 
@@ -487,23 +503,31 @@ def _rows(rep: dict, version: str) -> list[dict]:
                  None, b.get("n_feasible"))]
     for a in rep["arms"]:
         s = a["summary"]
-        nf = a["n_ok"] - s["rule_violations_in_agreed_plans"] if "n_ok" in a else None
+        nf = a["n_ok"] - s.get("rule_violations_in_agreed_plans", 0) if "n_ok" in a else None
         rows.append(_row(version, a["model"], s, a.get("n_ok"), nf))
     return rows
 
 
+VERSION_ORDER = ("v2", "v3-air", "v3-time", "v3-taxi", "v3-traffic")
+
+
+def _version_rank(v: str) -> int:
+    return VERSION_ORDER.index(v) if v in VERSION_ORDER else len(VERSION_ORDER)
+
+
 def load_archive(archive_dir: Path) -> list[dict]:
-    """Frozen reports under archive_dir/<name>/benchmark.json, sorted by directory name; a report without
+    """Frozen reports under archive_dir/<name>/benchmark.json, in engine-version order; a report without
     engine_version is v2."""
     out = []
-    for f in sorted(Path(archive_dir).glob("*/benchmark.json")):
+    for f in Path(archive_dir).glob("*/benchmark.json"):
         try:
             r = json.loads(f.read_text())
-        except (OSError, ValueError):
+        except (OSError, ValueError) as e:
+            log(f"WARNING: unreadable archive report {f}: {e}")
             continue
         r.setdefault("engine_version", "v2")
         out.append(r)
-    return out
+    return sorted(out, key=lambda r: _version_rank(r["engine_version"]))
 
 
 def engine_history(archive_dir: Path, current: dict) -> list[dict]:
@@ -528,7 +552,15 @@ def attribution(prev: dict, cur: dict) -> dict:
     phys = {k: round(cb[k] - pb[k], 3) for k in ATTRIBUTION_KEYS if _num(cb.get(k)) and _num(pb.get(k))}
     neg = {a["model"]: {k: round(a["summary"][k] - cb[k], 3) for k in ATTRIBUTION_KEYS
                         if _num(a["summary"].get(k)) and _num(cb.get(k))} for a in cur["arms"]}
-    return {"physics_delta": phys, "negotiation_delta": neg}
+    notes = []
+    pw, cw = prev.get("wave_ids"), cur.get("wave_ids")
+    if pw is not None and cw is not None and set(pw) != set(cw):
+        notes.append(f"wave sets differ ({len(set(pw) & set(cw))} shared of {len(pw)} previous / {len(cw)} current): "
+                     "the physics delta mixes waves")
+    elif pw is None or cw is None:
+        if prev.get("n_common") != cur.get("n_common") and (prev.get("n_common") or cur.get("n_common")):
+            notes.append(f"n_common differs ({prev.get('n_common')} vs {cur.get('n_common')}): wave sets may differ")
+    return {"physics_delta": phys, "negotiation_delta": neg, "notes": notes}
 
 
 def per_wave_table(arm_runs: dict[str, dict], common: set[str]) -> dict[str, dict]:
@@ -544,23 +576,34 @@ def per_wave_table(arm_runs: dict[str, dict], common: set[str]) -> dict[str, dic
     return out
 
 
-def find_regressions(cur_pw: dict[str, dict[str, dict]], prev_pw: dict | None, sq: dict[str, float]) -> list[dict]:
-    """Waves where an arm got worse. Against the previous engine's per-wave table (delay and fuel) when the archived
-    report has one, else against the same run's feasible status quo (delay only)."""
+def per_wave_baseline(formula_runs: dict[str, dict], common: set[str]) -> dict[str, dict]:
+    """wave id -> {delay_min, fuel_kg} of the status quo under the current engine."""
+    return {w: {k: formula_runs[w]["result"]["baseline"]["evaluation"]["totals"][k] for k in ("delay_min", "fuel_kg")}
+            for w in sorted(common)}
+
+
+def find_regressions(cur_pw: dict[str, dict[str, dict]], prev_pw: dict | None) -> list[dict]:
+    """Waves where an arm got worse in delay or fuel against the previous engine's per-wave table. Without that
+    table (e.g. the v2 archive) there is nothing to compare and the list is empty. cause is "physics" when the
+    status quo (the "baseline" table) worsened on that wave by at least as much as the arm, else "negotiation"."""
+    if not prev_pw:
+        return []
     out = []
     for arm, waves in cur_pw.items():
+        if arm == "baseline":
+            continue
         for wid, v in waves.items():
-            if prev_pw is not None:
-                p = (prev_pw.get(arm) or {}).get(wid)
-                pairs = [(k, p[k], v[k]) for k in ("delay_min", "fuel_kg")] if p else []
-                src = "previous engine"
-            else:
-                pairs = [("delay_min", sq[wid], v["delay_min"])] if wid in sq else []
-                src = "status quo (previous engine has no per-wave table)"
-            for k, a, b in pairs:
-                if b > a + 1e-9:
-                    out.append({"wave_id": wid, "arm": arm, "metric": k, "v_prev": a, "v_cur": b,
-                                "cause": f"vs {src}: {v['cause']}"})
+            p = (prev_pw.get(arm) or {}).get(wid)
+            if not p:
+                continue
+            for k in ("delay_min", "fuel_kg"):
+                change = v[k] - p[k]
+                if change <= 1e-9:
+                    continue
+                cb, pb = (cur_pw.get("baseline") or {}).get(wid), (prev_pw.get("baseline") or {}).get(wid)
+                moved = (cb[k] - pb[k]) if cb and pb else 0.0
+                out.append({"wave_id": wid, "arm": arm, "metric": k, "v_prev": p[k], "v_cur": v[k],
+                            "cause": "physics" if moved >= change - 1e-9 else "negotiation"})
     return out
 
 
@@ -639,8 +682,9 @@ def markdown(rep: dict) -> str:
           "not run" if ab is None else f"{ab}% of formula-arm final plans are infeasible under the real rules "
           "when the engine is disabled.", "", "## Failures", ""]
     L += [f"- `{f['wave_id']}` ({f['model']}): {f['reason']}" for f in rep["failures"]] or ["- none"]
-    L += ["", "## Prompt budget", "",
-          f"Largest agent prompt (state + instructions + options) per arm, against the {PROMPT_BUDGET_CHARS:,}-char "
+    L += ["", "## Prompt budget (largest prompt of any kind)", "",
+          f"Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state + instructions + "
+          f"options) per arm, against the {PROMPT_BUDGET_CHARS:,}-char "
           "(8k-token) budget:", ""]
     L += [f"- {a['label']}: {a['summary'].get('max_prompt_chars', 0):,} chars "
           f"({'within' if a['summary'].get('max_prompt_chars', 0) <= PROMPT_BUDGET_CHARS else 'OVER'} budget)"
@@ -662,12 +706,22 @@ def markdown(rep: dict) -> str:
         L.append("No earlier engine version is archived; nothing to attribute.")
     else:
         sg = lambda v: f"{v:+g}"   # noqa: E731
-        L += [f"Engine {at['from']} to {at['to']}.", "",
-              "Physics (status quo under the new engine minus under the old): "
+        better = {"delay_min": "lower", "fuel_kg": "lower", "lap_share_pct": "lower", "taxi_wait_min": "lower",
+                  "pax_protected_pct": "higher", "overtime_min": "lower"}
+        L += [f"Engine {at['from']} to {at['to']}. Better is: " + ", ".join(f"{k} {v}" for k, v in better.items()) + ".",
+              ""] + [f"Note: {n}." for n in at.get("notes", [])]
+        L += ["Physics (status quo under the new engine minus under the old): "
               + (", ".join(f"{k} {sg(v)}" for k, v in at["physics_delta"].items()) or "n/a"), "",
               "Negotiation (arm minus status quo, same engine); headline claims come from these deltas:", ""]
         L += [f"- {arm}: " + (", ".join(f"{k} {sg(v)}" for k, v in d.items()) or "n/a")
               for arm, d in at["negotiation_delta"].items()]
+        best = min(at["negotiation_delta"].items(), key=lambda kv: kv[1].get("delay_min", 0.0), default=None)
+        if best and "delay_min" in best[1]:
+            d = best[1]["delay_min"]
+            L += ["", f"Headline: under engine {at['to']}, negotiation ({best[0]}) "
+                      f"{'cuts' if d < 0 else 'adds'} {abs(d):g} min of mean delay against the status quo."]
+        if not at.get("prev_has_per_wave", True):
+            L += ["", f"No per-wave data in {at['from']}; regressions start next run."]
     rg = rep.get("regressions", [])
     L += ["", f"Regressions ({len(rg)}):", ""]
     L += [f"- `{r['wave_id']}` ({r['arm']}) {r['metric']} {r['v_prev']} to {r['v_cur']}; {r['cause']}"
@@ -764,10 +818,11 @@ def main(argv: list[str] | None = None) -> dict:
                           for arm in arm_list for model in [arm_parts(arm)[1]]}
     archive = [r for r in load_archive(ROOT / "eval" / "archive") if r["engine_version"] != ENGINE_VERSION]
     prev = archive[-1] if archive else None
-    report["regressions"] = find_regressions(report["per_wave"], (prev or {}).get("per_wave"),
-                                             {w: sq_delay[w] for w in sq_ok})
+    report["per_wave"]["baseline"] = per_wave_baseline(formula_runs, common)
+    report["regressions"] = find_regressions(report["per_wave"], (prev or {}).get("per_wave"))
     report["engine_history"] = engine_history(ROOT / "eval" / "archive", report)
-    report["attribution"] = ({"from": prev["engine_version"], "to": ENGINE_VERSION, **attribution(prev, report)}
+    report["attribution"] = ({"from": prev["engine_version"], "to": ENGINE_VERSION,
+                              "prev_has_per_wave": bool(prev.get("per_wave")), **attribution(prev, report)}
                              if prev else None)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)

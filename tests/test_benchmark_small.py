@@ -171,19 +171,70 @@ def test_frozen_v2_archive():
     assert (d / "BENCHMARK.md").read_text().startswith("# Benchmark")
 
 
-def test_max_prompt_chars_tracks_choice(monkeypatch):
+def test_max_prompt_chars_tracks_every_decider_call(monkeypatch):
+    import json
+    from dataclasses import replace
     from atm.decide import Decider
     from atm.wave import benchmark as B
     from atm.wave.fixtures import make_wave
-    seen = {}
-    real = B.negotiate_wave
 
     def fake(wave, mode, chain=None, **kw):
-        Decider(chain=["formula"]).choice({"k": "v" * 10}, "i" * 5, {"a": "b" * 3}, lambda: "a")
-        return real(wave, mode, chain=chain, **kw)
+        d = Decider(chain=["formula"])   # the formula entry never reaches the network
+        d.choice({"k": "v" * 10}, "i" * 5, {"a": "b" * 3}, lambda: "a")
+        d.score({"k": "v"}, "i" * 40, ["lo", "hi"], lambda: 0)
+        d.noul({"k": "v"}, "q" * 20, lambda: 0.5)
+        d.noul_batch({"k": "v"}, {"x": "y" * 300, "z": "w" * 100}, lambda i: 0.5)   # the largest call
+        return {"outcome": "consensus", "rounds": 1, "evaluation": {"totals": {"delay_min": 0}}}
     monkeypatch.setattr(B, "negotiate_wave", fake)
-    out = B.run_arm("model-arm", [make_wave()], ["openrouter:m", "formula"], "decision", 1, "t")
-    assert B.PROMPT_MAX["model-arm"] > 0
+    waves = [replace(make_wave(), id=f"w{i}") for i in range(6)]
+    B.run_arm("model-arm", waves, ["openrouter:m", "formula"], "decision", 4, "t")
+    want = len(json.dumps({"k": "v"})) + len(json.dumps({"x": "y" * 300, "z": "w" * 100}))
+    assert B.PROMPT_MAX["model-arm"] == want
+    B.run_arm("formula", waves, ["formula"], "formulas", 2, "t")
+    assert B.PROMPT_MAX["formula"] == 0
+
+
+def _pw(delay, fuel, cause="x"):
+    return {"delay_min": delay, "fuel_kg": fuel, "cause": cause}
+
+
+def test_find_regressions():
+    from atm.wave.benchmark import find_regressions
+    cur = {"formula": {"w1": _pw(12, 5), "w2": _pw(10, 5), "w3": _pw(9, 5)},
+           "baseline": {"w1": _pw(14, 5), "w2": _pw(10, 5), "w3": _pw(9, 5)}}
+    prev = {"formula": {"w1": _pw(10, 5), "w2": _pw(10, 5), "w3": _pw(10, 5)},
+            "baseline": {"w1": _pw(10, 5), "w2": _pw(10, 5), "w3": _pw(10, 5)}}
+    r = find_regressions(cur, prev)
+    assert [(x["wave_id"], x["metric"], x["cause"]) for x in r] == [("w1", "delay_min", "physics")]
+    assert (r[0]["v_prev"], r[0]["v_cur"]) == (10, 12)   # unchanged w2 and improved w3 produce none
+    cur["baseline"]["w1"] = _pw(10, 5)   # the status quo did not move: the arm itself regressed
+    assert find_regressions(cur, prev)[0]["cause"] == "negotiation"
+    assert find_regressions(cur, None) == [] and find_regressions(cur, {}) == []
+
+
+def test_per_wave_table():
+    from atm.wave.benchmark import per_wave_table
+    asg = [{"metrics": {"hold_min": 4.0, "hold_laps": 1, "vector_min": 1.5, "taxi_wait_min": 0.5}},
+           {"metrics": {"hold_min": 0.0, "hold_laps": 0}}]
+    runs = {"w1": {"result": {"final_plan": {"assignments": asg},
+                              "evaluation": {"totals": {"delay_min": 7.0, "fuel_kg": 2.0}}}}}
+    t = per_wave_table(runs, {"w1"})
+    assert t["w1"]["delay_min"] == 7.0 and t["w1"]["fuel_kg"] == 2.0
+    assert t["w1"]["cause"] == "hold 4.0 min (1 lap(s)), vector 1.5 min, taxi wait 0.5 min"
+
+
+def test_archive_order_and_attribution_notes(tmp_path):
+    import json
+    from atm.wave.benchmark import attribution, load_archive
+    for d, v in (("a-late", "v3-time"), ("z-early", "v2")):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "benchmark.json").write_text(json.dumps({"engine_version": v, "baseline": {}, "arms": []}))
+    (tmp_path / "bad").mkdir()
+    (tmp_path / "bad" / "benchmark.json").write_text("{")
+    assert [r["engine_version"] for r in load_archive(tmp_path)] == ["v2", "v3-time"]
+    a = attribution({"baseline": {}, "arms": [], "wave_ids": ["a", "b"]},
+                    {"baseline": {}, "arms": [], "wave_ids": ["a", "c"]})
+    assert a["notes"] and "differ" in a["notes"][0]
 
 
 import pytest
