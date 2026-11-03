@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, isOffline } from "./api/client";
 import type { Assignment, Config, EvaluateResponse, FlightRow, JointPlan, Mode, NegotiationMessage, NegotiationResult, PlanEvaluation, TrajectorySet, WaveGeo, WaveScenario, WaveSummary } from "./api/types";
+import { namesFlight, rulesCount } from "./rules";
 import { icao, icaoText, spoken } from "./callsign";
 import { AlertList, RULE_NAME, deriveAlerts } from "./components/Alerts";
 import { Gantt, GanttLegend, type DragPreview, type Patch, type Rejection, type View } from "./components/Gantt";
@@ -215,7 +216,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     return () => removeEventListener("keydown", on);
   });
 
-  // every change to the edits is re-checked by the server against the same 12 rules
+  // every change to the edits is re-checked by the server against the same rules (Config.rule_ids)
   useEffect(() => {
     if (!result || !wave || !nEdits) { setChecked(null); setChecking(false); setCheckErr(null); return; }
     const ctl = new AbortController();
@@ -268,7 +269,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const editsOn = view !== "before";
   for (const c of (view === "before" ? result?.baseline.evaluation : currentEv)?.checks ?? []) {
     if (c.passed || !c.callsign) continue;
-    const named = (wave?.flights ?? []).map((f) => f.callsign).filter((cs) => cs === c.callsign || c.detail.includes(cs));
+    const named = (wave?.flights ?? []).map((f) => f.callsign).filter((cs) => namesFlight(c, cs));
     named.forEach((cs) => involved.add(cs));
     if (!(editsOn && named.some((cs) => edits[cs])) && !failing.has(c.callsign)) failing.set(c.callsign, c.rule);
   }
@@ -528,7 +529,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               <p className="dec-kicker">Disrupted flight</p>
               <p className="dec-head">{focusName ? <>{focusName} <span className="muted">{spoken(wave.focus!)}</span></> : "No single focus flight"}</p>
               <p className="dec-line">{intro(wave)}</p>
-              <p className="dec-line muted">ATC, the pilot and Ground negotiate its runway, slot and gate for up to 3 turns. A rule engine vetoes any plan that breaks one of 12 safety rules. You approve, edit or override the result.</p>
+              <p className="dec-line muted">ATC, the pilot and Ground negotiate its runway, slot and gate for up to 3 turns. A rule engine checks {rulesCount(config?.rule_ids)} and vetoes any plan that breaks one. You approve, edit or override the result.</p>
               {runErr && <p className="dec-line neg">{runErr}</p>}
               <div className="dec-actions"><button className="btn primary wide" onClick={negotiate}>{status === "error" ? "Run again" : "Start negotiation"}</button></div>
             </div>
@@ -647,11 +648,11 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         <section className="card feed-card">
           <div className="feed-head">
             <h2>Negotiation</h2>
-            <span className="meta">{status === "running" ? `turn ${Math.max(1, lastTurn?.round ?? 1)} of 3` : result ? `${result.stats.model_calls} model calls · ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}` : "3 agents · 12 rules"}</span>
+            <span className="meta">{status === "running" ? `turn ${Math.max(1, lastTurn?.round ?? 1)} of 3` : result ? `${result.stats.model_calls} model calls · ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}` : `3 agents · ${config?.rule_ids?.length ? `${config.rule_ids.length} rules` : "rule engine"}`}</span>
           </div>
           {result?.narration && <p className="brief">{icaoText(result.narration.brief)}<span className="brief-src"> {result.narration.source === "claude" ? `Written by ${result.narration.model ?? "Claude"} from the log; it decides nothing.` : "From a template over the log."}</span></p>}
           {result?.model_errors.length ? <p className="warnline">{result.model_errors.join(" · ")}</p> : null}
-          <div className="feed"><Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} /></div>
+          <div className="feed"><Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} ruleIds={config?.rule_ids} /></div>
           {messages.length > 0 && <label className="check foot"><input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />Show model, probability and latency</label>}
         </section>
         <section className="card flights-card">
@@ -726,12 +727,13 @@ function changes(base: JointPlan, now: JointPlan | null, ws: string): string {
   return `${moved.length} of ${now.assignments.length} flights moved: ${moved.map((a) => { const b = base.assignments.find((x) => x.callsign === a.callsign)!; return `${icao(a.callsign)} ${b.runway}→${a.runway}${b.slot_min !== a.slot_min ? ` ${clock(ws, b.slot_min ?? 0)}→${clock(ws, a.slot_min ?? 0)}` : ""}`; }).join(", ")}`;
 }
 
+// Each line re-derived from a formulas run on engine v3-traffic (files store, 4 Nov 2026); re-check after data changes.
 const HARD_CASES = [
-  { id: "F2015-6291", title: "ORD, every runway closed", what: "no legal landing: solver diverts to MDW" },
-  { id: "F2015-70412", title: "PHX, every runway closed", what: "no legal landing: solver diverts to TUS" },
-  { id: "F2015-252123", title: "LGA, runway closed, 5 queued", what: "agreement only in turn 3" },
-  { id: "F2015-247837", title: "SLC, 3 of 6 runways closed", what: "agreement only in turn 3" },
-  { id: "F2015-102056", title: "DL2019, nothing passes the rules", what: "solver safety net" },
+  { id: "F2015-6291", title: "ORD, 1 of 16 runways open (32R), 15 queued", what: "agreed in turn 1; EV3263 lands 72 min late" },
+  { id: "F2015-70412", title: "PHX, every runway closed", what: "no legal landing: safety net diverts all 4 to TUS" },
+  { id: "F2015-102056", title: "ATL, every runway closed", what: "no legal landing: safety net diverts all 4 to CSG" },
+  { id: "F2015-252123", title: "LGA, runway 13 closed, 5 queued", what: "status quo breaks GND-GATE-FREE; agreed in turn 2" },
+  { id: "F2015-247837", title: "SLC, 3 of 6 runways closed", what: "status quo breaks GND-GATE-FREE; agreed in turn 2" },
 ];
 
 function FlightPicker({ airport, onPick }: { airport: string; onPick: (waveId: string) => void }) {

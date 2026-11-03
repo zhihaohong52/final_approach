@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import type { AgentTurnBody, Assignment, DecisionMeta, JointPlan, NegotiationMessage } from "../api/types";
+import type { AgentTurnBody, Assignment, DecisionMeta, JointPlan, NegotiationMessage, RuleId } from "../api/types";
 import { icao, icaoText } from "../callsign";
 import { agentClass, agentName as rawAgentName } from "../format";
+import { rulesCount } from "../rules";
 
 const agentName = (s: string) => icaoText(rawAgentName(s as never));
 
@@ -145,7 +146,7 @@ function Turn({ b, details, diff }: { b: AgentTurnBody; details: boolean; diff?:
   );
 }
 
-export function Log({ messages, running, focus, details = false }: { messages: NegotiationMessage[]; running: boolean; focus?: string | null; details?: boolean }) {
+export function Log({ messages, running, focus, details = false, ruleIds }: { messages: NegotiationMessage[]; running: boolean; focus?: string | null; details?: boolean; ruleIds?: RuleId[] }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => { if (running && box.current) box.current.scrollTop = box.current.scrollHeight; }, [messages.length, running]);
   if (!messages.length) {
@@ -153,7 +154,7 @@ export function Log({ messages, running, focus, details = false }: { messages: N
       ["ATC", "atc", "Sees the runways, the queue and the wind. Sequences every flight: landing order, runway, slot, speed control or ground delay."],
       [focus ? `Pilot ${icao(focus)}` : "Pilot", "pilot", `Flies the disrupted flight${focus ? ` ${icao(focus)}` : ""} only: its fuel, ETA and connections. Slows down, takes a ground delay, asks to divert or accepts.`],
       ["Ground", "ground", "Sees gates, stands and crews. Reassigns a gate, sends a flight to a remote stand, swaps gates."],
-      ["Engine", "engine", "Deterministic code, not a model. Checks 12 safety rules on every plan and vetoes any that breaks one."],
+      ["Engine", "engine", `Deterministic code, not a model. Checks ${rulesCount(ruleIds)} on every plan and vetoes any that breaks one.`],
     ];
     return (
       <div>
