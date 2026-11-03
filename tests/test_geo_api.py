@@ -213,3 +213,28 @@ def test_replay_load_falls_back_to_result_engine_version(tmp_path, monkeypatch):
 def test_include_trajectories_must_be_bool():
     r = c.post("/api/evaluate", json={"wave_id": ORD, "assignments": _sq(), "include_trajectories": "yes"})
     assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request"
+
+
+def test_replays_are_current_engine_and_show_laps():
+    from backend.wave.edit import plan_from_dicts
+    files = sorted(glob.glob("data/replay/*.json")); assert len(files) == 5
+    with_lap = 0
+    for f in files:
+        d = json.load(open(f)); assert d["engine_version"] == ENGINE_VERSION   # stays valid after the M2a/M2/M3 re-records
+        w = build.build_wave(d["result"]["wave_id"])
+        plans = [d["result"]["final_plan"], d["result"]["baseline"]["plan"]]   # agreed plan or status quo (spec §6.2)
+        with_lap += any(any(t.laps >= 1 for t in trajectory.build(w, plan_from_dicts(p["assignments"])).air if t.wave)
+                        for p in plans if p)
+    assert with_lap >= 3
+
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the stored replays carry the current engine_version
+def test_replays_in_pg_are_current_engine(live_db_url):
+    from backend.datastore.pg import PgStore
+    st = PgStore(live_db_url); st.open()
+    try:
+        for f in sorted(glob.glob("data/replay/*.json")):
+            wid = json.load(open(f))["result"]["wave_id"]
+            assert (st.replay(wid) or {}).get("engine_version") == ENGINE_VERSION
+    finally:
+        st.close()

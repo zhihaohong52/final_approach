@@ -6,6 +6,7 @@ from pathlib import Path
 
 from backend.datastore import get_store
 from backend.wave.loader import _load
+from backend.wave.version import ENGINE_VERSION
 
 WB = _load("build")
 GR = _load("graph")
@@ -23,10 +24,10 @@ def record(wave_ids: list[str], mode: str = "decision", out_dir: str | Path = RE
                                 on_message=msgs.append)
         res = {k: v for k, v in res.items() if k != "log"}
         p = out / f"{wid}.json"
-        body = {"messages": msgs, "result": res}
+        body = {"engine_version": ENGINE_VERSION, "messages": msgs, "result": res}
         p.write_text(json.dumps(body))
         store = get_store()
-        store.put_replay(wid, body, engine_version=body.get("engine_version"))   # None: the store's current version
+        store.put_replay(wid, body, engine_version=ENGINE_VERSION)
         paths.append(str(p))
         _report_degraded(store, f"replay {wid}")
     return paths
