@@ -537,6 +537,7 @@ the blob/text column) for `PgStore`.
   exhaustion looks the same (connection refused or an error at connect) and is handled the same way.
 - **The pool opens in the background** in the FastAPI lifespan (replacing the `on_event("startup")` warmer).
   No query runs at startup unless a request needs one.
+  Clarification (T30): under PgStore the replay warm-up (`server._kick_warm`, one-shot, daemon thread, `ATM_WARM=0` off) starts on the first API request, normally Render's first health check, never at startup.
 - **URL form:** `DATABASE_URL` is the Neon **pooled** string (`…-pooler.<region>.aws.neon.tech/…`) for the app
   role, with `sslmode=require` (`channel_binding=require` if the Console offers it). `DATABASE_OWNER_URL` is
   the **direct** string for the owner role. It is used only by `db_migrate.py` and `db_seed.py` on the developer

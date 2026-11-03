@@ -33,3 +33,29 @@ def test_startup_returns_at_once_and_warms_replay_waves(monkeypatch):
 def test_warm_is_off_with_atm_warm_0(monkeypatch):
     monkeypatch.setenv("ATM_WARM", "0")
     assert server._warm() is None
+
+
+def test_non_file_store_warms_once_on_first_request(monkeypatch):
+    from backend.datastore import get_store
+    files = get_store()
+
+    class PgLike:                                         # not a FileStore: startup must not query (design 8.3)
+        def __getattr__(self, name):
+            return getattr(files, name)
+
+    monkeypatch.setenv("ATM_WARM", "1")
+    monkeypatch.setattr(server, "get_store", lambda: PgLike())
+    monkeypatch.setattr(server, "_WARM_THREAD", None)
+    monkeypatch.setattr(server, "_WARM_KICKED", False)
+    monkeypatch.setattr(server, "_replay_summaries", lambda: [])
+    monkeypatch.setattr(server, "_bts_waves", lambda *a: [])
+    real, calls = server._warm, []
+    monkeypatch.setattr(server, "_warm", lambda: calls.append(1) or real())
+    with TestClient(server.app) as c:
+        assert calls == [] and server._WARM_THREAD is None   # startup did not warm
+        assert c.get("/api/config").status_code == 200
+        assert len(calls) == 1 and server._WARM_THREAD is not None
+        first = server._WARM_THREAD
+        c.get("/api/config"); c.get("/api/waves?limit=1")
+        assert len(calls) == 1 and server._WARM_THREAD is first   # one-shot
+        first.join(timeout=60)

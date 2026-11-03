@@ -45,6 +45,8 @@ log = logging.getLogger(__name__)
 
 
 _WARM_THREAD: threading.Thread | None = None
+_WARM_KICKED = False
+_WARM_LOCK = threading.Lock()
 
 
 def _warm() -> threading.Thread | None:
@@ -67,6 +69,21 @@ def _warm() -> threading.Thread | None:
     _WARM_THREAD = threading.Thread(target=run, name="warm-replays", daemon=True)
     _WARM_THREAD.start()
     return _WARM_THREAD
+
+
+def _kick_warm() -> None:
+    """One-shot, thread-safe: start the warm-up on the first API request when startup did not (any store but
+    FileStore: design 8.3, no query at startup). Render's health check (/api/config) normally triggers it seconds
+    after boot. A no-op once a warm-up thread exists, and with ATM_WARM=0."""
+    global _WARM_KICKED
+    if _WARM_KICKED or os.environ.get("ATM_WARM", "1") == "0":
+        return
+    with _WARM_LOCK:
+        if _WARM_KICKED:
+            return
+        _WARM_KICKED = True
+        if _WARM_THREAD is None:
+            _warm()
 
 
 @asynccontextmanager
@@ -94,7 +111,9 @@ def _summary(fid: int) -> dict:
 @app.get("/api/config")
 def config():
     # v1 keys (web/index.html) merged with the v2 Config contract. Unless the store is a FileStore this calls
-    # no store method except status(): the Render health check must never wake the database (design 8.3, 11).
+    # no store method except status(): the Render health check itself never waits on the database (design 8.3,
+    # 11). It does kick the one-shot replay warm-up thread (_kick_warm), once per process.
+    _kick_warm()
     v1 = {"jev_available": jev.available(), "model": negotiation.MODEL,
           "policies": ["rule", "jev", "jev+claude", "llm"], "n_disruptions": _n_disruptions()}
     models, default_model = _models()
@@ -439,6 +458,7 @@ def _sse(event: str, data) -> str:
 
 @app.get("/api/waves")
 def waves(airport: str | None = None, q: str | None = None, limit: int = 50):
+    _kick_warm()
     limit = max(0, min(limit, 500))
     head = [] if (airport or q) else _replay_summaries()  # recorded flights.csv rows first: the challenge input
     return (head + _bts_waves(airport, q, limit))[:limit]
@@ -531,6 +551,7 @@ def _waves_random(airport: str | None, source: str):
 
 @app.get("/api/wave/{wave_id}")
 def get_wave(wave_id: str):
+    _kick_warm()
     try:
         w = WB.build_wave(wave_id)
     except KeyError:
