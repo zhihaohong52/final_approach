@@ -1,0 +1,2724 @@
+{
+  "engine_version": "v3-air",
+  "procedures": {
+    "cycle": "2611",
+    "source": "FAA CIFP",
+    "status": "real",
+    "fixes": [
+      {
+        "id": "ADAME",
+        "lat": 41.969139,
+        "lon": -87.652361,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "AHSTN",
+        "lat": 41.712661,
+        "lon": -88.357336,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BAMBB",
+        "lat": 42.090972,
+        "lon": -88.275372,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BASHH",
+        "lat": 41.983483,
+        "lon": -87.582333,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "BENKY",
+        "lat": 41.511831,
+        "lon": -88.709017,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "BENNR",
+        "lat": 42.526467,
+        "lon": -90.820661,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BFORD",
+        "lat": 41.160092,
+        "lon": -89.587411,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "BHAWK",
+        "lat": 42.518469,
+        "lon": -89.776892,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BONNT",
+        "lat": 40.49365,
+        "lon": -85.679375,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "BONZO",
+        "lat": 42.0025,
+        "lon": -87.652344,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BRIBE",
+        "lat": 42.798333,
+        "lon": -89.940361,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BUGSE",
+        "lat": 41.968742,
+        "lon": -88.041825,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "BULLZ",
+        "lat": 42.457572,
+        "lon": -88.771297,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BYLAW",
+        "lat": 41.28635,
+        "lon": -89.275844,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "CABIJ",
+        "lat": 41.888342,
+        "lon": -87.610236,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CARLE",
+        "lat": 41.968347,
+        "lon": -88.161317,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CASHN",
+        "lat": 39.958889,
+        "lon": -90.259444,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "CENAK",
+        "lat": 41.996111,
+        "lon": -86.975278,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CHILR",
+        "lat": 41.983397,
+        "lon": -88.231369,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "CHMPN",
+        "lat": 42.429875,
+        "lon": -89.058803,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CLSBY",
+        "lat": 42.409111,
+        "lon": -88.893742,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "COGSS",
+        "lat": 42.344272,
+        "lon": -88.394903,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CUUPP",
+        "lat": 42.437906,
+        "lon": -89.121506,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "DEVON",
+        "lat": 41.983583,
+        "lon": -88.161214,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "DOOGY",
+        "lat": 42.002594,
+        "lon": -88.161269,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "DWEEB",
+        "lat": 41.865833,
+        "lon": -86.829444,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "EBENS",
+        "lat": 41.983653,
+        "lon": -87.652506,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "ESSPO",
+        "lat": 41.581736,
+        "lon": -87.244083,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "EZZRA",
+        "lat": 41.261861,
+        "lon": -89.456439,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "FNBAR",
+        "lat": 41.284722,
+        "lon": -89.241111,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "FRIDG",
+        "lat": 40.762167,
+        "lon": -85.783667,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "FYTTE",
+        "lat": 42.380061,
+        "lon": -88.667792,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "HAREE",
+        "lat": 42.002383,
+        "lon": -87.582047,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "HAUPO",
+        "lat": 41.342575,
+        "lon": -86.5431,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "HAZIL",
+        "lat": 41.965861,
+        "lon": -87.652353,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "HIMGO",
+        "lat": 42.091067,
+        "lon": -87.508858,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "HULLS",
+        "lat": 41.656667,
+        "lon": -86.793333,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "IZARD",
+        "lat": 41.786961,
+        "lon": -87.497692,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "JBAGS",
+        "lat": 42.522969,
+        "lon": -90.316825,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "JIBOR",
+        "lat": 42.840403,
+        "lon": -90.091806,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "JLOWW",
+        "lat": 41.983853,
+        "lon": -87.785375,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "JORJO",
+        "lat": 41.884483,
+        "lon": -87.98855,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "JUMPN",
+        "lat": 41.817283,
+        "lon": -89.058003,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "JVL",
+        "lat": 42.558008,
+        "lon": -89.105258,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "KELTS",
+        "lat": 41.124231,
+        "lon": -89.269506,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "KENIL",
+        "lat": 42.114483,
+        "lon": -87.707758,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "KRENA",
+        "lat": 42.374881,
+        "lon": -88.499456,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "KURKK",
+        "lat": 42.091836,
+        "lon": -88.0272,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "LAACY",
+        "lat": 41.699728,
+        "lon": -87.400103,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "LAIKE",
+        "lat": 42.040089,
+        "lon": -87.796403,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "LARVA",
+        "lat": 42.882269,
+        "lon": -90.551656,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MADII",
+        "lat": 42.300964,
+        "lon": -88.313814,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MAROC",
+        "lat": 40.737011,
+        "lon": -89.374636,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MCW",
+        "lat": 43.094758,
+        "lon": -93.329872,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "MEOWW",
+        "lat": 41.983803,
+        "lon": -88.042039,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "MKITA",
+        "lat": 41.4,
+        "lon": -86.692778,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MONKZ",
+        "lat": 41.884331,
+        "lon": -87.801797,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MOTRR",
+        "lat": 42.358492,
+        "lon": -88.502875,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "MYRRS",
+        "lat": 42.523894,
+        "lon": -92.059925,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "MYTCH",
+        "lat": 42.740289,
+        "lon": -89.736231,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "NEWRK",
+        "lat": 41.566125,
+        "lon": -88.571119,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "NOLEN",
+        "lat": 42.191331,
+        "lon": -87.681253,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "NUNWS",
+        "lat": 41.918611,
+        "lon": -88.960839,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "PETAH",
+        "lat": 41.885517,
+        "lon": -88.150058,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "POSSM",
+        "lat": 41.874661,
+        "lon": -88.275175,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "PRATT",
+        "lat": 41.968058,
+        "lon": -88.231458,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "PRISE",
+        "lat": 41.535556,
+        "lon": -86.781389,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "RAGSS",
+        "lat": 41.724453,
+        "lon": -89.106761,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "RAYYY",
+        "lat": 41.965447,
+        "lon": -88.042053,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "RIDGE",
+        "lat": 42.058239,
+        "lon": -87.829206,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "RRUDA",
+        "lat": 41.965053,
+        "lon": -88.161306,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "RZUKO",
+        "lat": 41.965794,
+        "lon": -87.582203,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "SAAYY",
+        "lat": 42.527067,
+        "lon": -91.429047,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "SEIKA",
+        "lat": 41.965872,
+        "lon": -87.779925,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "SHAIN",
+        "lat": 41.643611,
+        "lon": -89.135833,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "SHARN",
+        "lat": 41.964764,
+        "lon": -88.231447,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "SIBLY",
+        "lat": 42.002756,
+        "lon": -87.795081,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "SOOLU",
+        "lat": 42.196375,
+        "lon": -88.147694,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "STNLE",
+        "lat": 42.472789,
+        "lon": -89.404039,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "STYLE",
+        "lat": 41.773972,
+        "lon": -86.808383,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "SUZYQ",
+        "lat": 43.014736,
+        "lon": -92.174436,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "TEDDY",
+        "lat": 42.419656,
+        "lon": -88.646278,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "TONIE",
+        "lat": 41.883714,
+        "lon": -87.490764,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "TRICH",
+        "lat": 41.209428,
+        "lon": -88.807553,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "TRIDE",
+        "lat": 41.466508,
+        "lon": -89.199353,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "TRYXI",
+        "lat": 42.002431,
+        "lon": -88.231569,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "VIKNG",
+        "lat": 42.966019,
+        "lon": -91.54325,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "VINCA",
+        "lat": 40.345347,
+        "lon": -89.823519,
+        "kind": "entry",
+        "src": "cifp"
+      },
+      {
+        "id": "VULCN",
+        "lat": 42.091761,
+        "lon": -87.794172,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "WATSN",
+        "lat": 41.283453,
+        "lon": -86.035336,
+        "kind": "hold",
+        "src": "cifp"
+      },
+      {
+        "id": "WAVIE",
+        "lat": 41.969067,
+        "lon": -87.582211,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
+        "id": "WILLT",
+        "lat": 41.969158,
+        "lon": -87.778833,
+        "kind": "faf",
+        "src": "cifp"
+      },
+      {
+        "id": "ZENAH",
+        "lat": 42.002778,
+        "lon": -88.037375,
+        "kind": "faf",
+        "src": "cifp"
+      }
+    ],
+    "routes": [
+      {
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I09L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I09R",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I10C",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I10L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "14L",
+        "star": "SHAIN2",
+        "transition": "BFORD",
+        "fixes": [
+          "BFORD",
+          "EZZRA",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "BFORD",
+        "fixes": [
+          "BFORD",
+          "EZZRA",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "22L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I22L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "KENIL",
+          "LAIKE"
+        ]
+      },
+      {
+        "runway": "22R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I22R",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "NOLEN",
+          "RIDGE"
+        ]
+      },
+      {
+        "runway": "27L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I27L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "BASHH",
+          "EBENS",
+          "JLOWW"
+        ]
+      },
+      {
+        "runway": "27R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I27R",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "HAREE",
+          "BONZO",
+          "SIBLY"
+        ]
+      },
+      {
+        "runway": "28C",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I28C",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "RZUKO",
+          "HAZIL",
+          "SEIKA"
+        ]
+      },
+      {
+        "runway": "28R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I28R",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "WAVIE",
+          "ADAME",
+          "WILLT"
+        ]
+      },
+      {
+        "runway": "32R",
+        "star": "SHAIN2",
+        "transition": "BFORD",
+        "fixes": [
+          "BFORD",
+          "EZZRA",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I09L",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I09R",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I10C",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I10L",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "14L",
+        "star": "SHAIN2",
+        "transition": "CASHN",
+        "fixes": [
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "CASHN",
+        "fixes": [
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "22L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I22L",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "KENIL",
+          "LAIKE"
+        ]
+      },
+      {
+        "runway": "22R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I22R",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "NOLEN",
+          "RIDGE"
+        ]
+      },
+      {
+        "runway": "27L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I27L",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "BASHH",
+          "EBENS",
+          "JLOWW"
+        ]
+      },
+      {
+        "runway": "27R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I27R",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "HAREE",
+          "BONZO",
+          "SIBLY"
+        ]
+      },
+      {
+        "runway": "28C",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I28C",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "RZUKO",
+          "HAZIL",
+          "SEIKA"
+        ]
+      },
+      {
+        "runway": "28R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I28R",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "WAVIE",
+          "ADAME",
+          "WILLT"
+        ]
+      },
+      {
+        "runway": "32R",
+        "star": "SHAIN2",
+        "transition": "CASHN",
+        "fixes": [
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I09L",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I09R",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I10C",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I10L",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "14L",
+        "star": "JVL1",
+        "transition": "MCW",
+        "fixes": [
+          "MCW",
+          "SUZYQ",
+          "VIKNG",
+          "LARVA",
+          "JIBOR",
+          "BRIBE",
+          "MYTCH",
+          "JVL",
+          "BULLZ",
+          "TEDDY",
+          "KRENA"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "JVL1",
+        "transition": "MCW",
+        "fixes": [
+          "MCW",
+          "SUZYQ",
+          "VIKNG",
+          "LARVA",
+          "JIBOR",
+          "BRIBE",
+          "MYTCH",
+          "JVL",
+          "BULLZ",
+          "TEDDY",
+          "KRENA"
+        ]
+      },
+      {
+        "runway": "22L",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I22L",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "KENIL",
+          "LAIKE"
+        ]
+      },
+      {
+        "runway": "22R",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I22R",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "NOLEN",
+          "RIDGE"
+        ]
+      },
+      {
+        "runway": "27L",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I27L",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "BASHH",
+          "EBENS",
+          "JLOWW"
+        ]
+      },
+      {
+        "runway": "27R",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I27R",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "HAREE",
+          "BONZO",
+          "SIBLY"
+        ]
+      },
+      {
+        "runway": "28C",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I28C",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "RZUKO",
+          "HAZIL",
+          "SEIKA"
+        ]
+      },
+      {
+        "runway": "28R",
+        "star": "FYTTE7",
+        "transition": "MYRRS",
+        "approach": "I28R",
+        "fixes": [
+          "MYRRS",
+          "SAAYY",
+          "BENNR",
+          "JBAGS",
+          "BHAWK",
+          "STNLE",
+          "CUUPP",
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "WAVIE",
+          "ADAME",
+          "WILLT"
+        ]
+      },
+      {
+        "runway": "32R",
+        "star": "JVL1",
+        "transition": "MCW",
+        "fixes": [
+          "MCW",
+          "SUZYQ",
+          "VIKNG",
+          "LARVA",
+          "JIBOR",
+          "BRIBE",
+          "MYTCH",
+          "JVL",
+          "BULLZ",
+          "TEDDY",
+          "KRENA"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I09L",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "VULCN",
+          "KURKK",
+          "BAMBB",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I09R",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I10C",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I10L",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "14L",
+        "star": "WATSN4",
+        "transition": "BONNT",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "HAUPO",
+          "MKITA",
+          "PRISE",
+          "HULLS",
+          "STYLE",
+          "DWEEB",
+          "CENAK"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "WATSN4",
+        "transition": "BONNT",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "HAUPO",
+          "MKITA",
+          "PRISE",
+          "HULLS",
+          "STYLE",
+          "DWEEB",
+          "CENAK"
+        ]
+      },
+      {
+        "runway": "22L",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I22L",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "KENIL",
+          "LAIKE"
+        ]
+      },
+      {
+        "runway": "22R",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I22R",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "NOLEN",
+          "RIDGE"
+        ]
+      },
+      {
+        "runway": "27L",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I27L",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "BASHH",
+          "EBENS",
+          "JLOWW"
+        ]
+      },
+      {
+        "runway": "27R",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I27R",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "HAREE",
+          "BONZO",
+          "SIBLY"
+        ]
+      },
+      {
+        "runway": "28C",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I28C",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "RZUKO",
+          "HAZIL",
+          "SEIKA"
+        ]
+      },
+      {
+        "runway": "28R",
+        "star": "ESSPO5",
+        "transition": "BONNT",
+        "approach": "I28R",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "WAVIE",
+          "ADAME",
+          "WILLT"
+        ]
+      },
+      {
+        "runway": "32R",
+        "star": "WATSN4",
+        "transition": "BONNT",
+        "fixes": [
+          "BONNT",
+          "FRIDG",
+          "WATSN",
+          "HAUPO",
+          "MKITA",
+          "PRISE",
+          "HULLS",
+          "STYLE",
+          "DWEEB",
+          "CENAK"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I09L",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I09R",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I10C",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I10L",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "14L",
+        "star": "SHAIN2",
+        "transition": "VINCA",
+        "fixes": [
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "VINCA",
+        "fixes": [
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "22L",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I22L",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "KENIL",
+          "LAIKE"
+        ]
+      },
+      {
+        "runway": "22R",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I22R",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "NOLEN",
+          "RIDGE"
+        ]
+      },
+      {
+        "runway": "27L",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I27L",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "BASHH",
+          "EBENS",
+          "JLOWW"
+        ]
+      },
+      {
+        "runway": "27R",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I27R",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "HAREE",
+          "BONZO",
+          "SIBLY"
+        ]
+      },
+      {
+        "runway": "28C",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I28C",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "RZUKO",
+          "HAZIL",
+          "SEIKA"
+        ]
+      },
+      {
+        "runway": "28R",
+        "star": "BENKY6",
+        "transition": "TRICH",
+        "approach": "I28R",
+        "fixes": [
+          "TRICH",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "WAVIE",
+          "ADAME",
+          "WILLT"
+        ]
+      },
+      {
+        "runway": "32R",
+        "star": "SHAIN2",
+        "transition": "VINCA",
+        "fixes": [
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      }
+    ],
+    "holds": [
+      {
+        "fix": "BENKY",
+        "inbound_true": 61.87552247406054,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 12000,
+        "levels_ft": [
+          12000,
+          13000,
+          14000,
+          15000,
+          16000
+        ],
+        "lap_min": 5.359877142506221,
+        "src": "synth",
+        "polygon": [
+          [
+            41.474486,
+            -88.802321
+          ],
+          [
+            41.511831,
+            -88.709017
+          ],
+          [
+            41.515726,
+            -88.695195
+          ],
+          [
+            41.51681,
+            -88.680497
+          ],
+          [
+            41.515008,
+            -88.665926
+          ],
+          [
+            41.510444,
+            -88.652473
+          ],
+          [
+            41.503428,
+            -88.641057
+          ],
+          [
+            41.494439,
+            -88.632455
+          ],
+          [
+            41.484089,
+            -88.627253
+          ],
+          [
+            41.473083,
+            -88.625805
+          ],
+          [
+            41.462171,
+            -88.628211
+          ],
+          [
+            41.452098,
+            -88.634306
+          ],
+          [
+            41.443549,
+            -88.643676
+          ],
+          [
+            41.437108,
+            -88.65568
+          ],
+          [
+            41.395868,
+            -88.762807
+          ],
+          [
+            41.394784,
+            -88.777504
+          ],
+          [
+            41.396586,
+            -88.792076
+          ],
+          [
+            41.40115,
+            -88.805528
+          ],
+          [
+            41.408166,
+            -88.816944
+          ],
+          [
+            41.417155,
+            -88.825547
+          ],
+          [
+            41.427505,
+            -88.830749
+          ],
+          [
+            41.438511,
+            -88.832196
+          ],
+          [
+            41.449423,
+            -88.82979
+          ],
+          [
+            41.459496,
+            -88.823695
+          ],
+          [
+            41.468045,
+            -88.814326
+          ],
+          [
+            41.474486,
+            -88.802321
+          ]
+        ]
+      },
+      {
+        "fix": "ESSPO",
+        "inbound_true": 293.93577697766995,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 10000,
+        "levels_ft": [
+          10000,
+          11000,
+          12000,
+          13000,
+          14000
+        ],
+        "lap_min": 5.251494008876987,
+        "src": "synth",
+        "polygon": [
+          [
+            41.550631,
+            -87.150404
+          ],
+          [
+            41.581736,
+            -87.244083
+          ],
+          [
+            41.587138,
+            -87.255897
+          ],
+          [
+            41.594643,
+            -87.26544
+          ],
+          [
+            41.603739,
+            -87.27206
+          ],
+          [
+            41.613807,
+            -87.275307
+          ],
+          [
+            41.624161,
+            -87.274961
+          ],
+          [
+            41.634095,
+            -87.271043
+          ],
+          [
+            41.642932,
+            -87.263822
+          ],
+          [
+            41.65007,
+            -87.253789
+          ],
+          [
+            41.655022,
+            -87.241628
+          ],
+          [
+            41.657451,
+            -87.228168
+          ],
+          [
+            41.657191,
+            -87.214326
+          ],
+          [
+            41.654261,
+            -87.201045
+          ],
+          [
+            41.617755,
+            -87.095552
+          ],
+          [
+            41.61025,
+            -87.086009
+          ],
+          [
+            41.601153,
+            -87.079389
+          ],
+          [
+            41.591085,
+            -87.076142
+          ],
+          [
+            41.580731,
+            -87.076488
+          ],
+          [
+            41.570797,
+            -87.080406
+          ],
+          [
+            41.561961,
+            -87.087627
+          ],
+          [
+            41.554823,
+            -87.09766
+          ],
+          [
+            41.549871,
+            -87.109821
+          ],
+          [
+            41.547442,
+            -87.123281
+          ],
+          [
+            41.547701,
+            -87.137123
+          ],
+          [
+            41.550631,
+            -87.150404
+          ]
+        ]
+      },
+      {
+        "fix": "FYTTE",
+        "inbound_true": 99.79942497920796,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 11000,
+        "levels_ft": [
+          11000,
+          12000,
+          13000,
+          14000,
+          15000
+        ],
+        "lap_min": 5.305685575691603,
+        "src": "synth",
+        "polygon": [
+          [
+            42.393327,
+            -88.771769
+          ],
+          [
+            42.380061,
+            -88.667792
+          ],
+          [
+            42.376878,
+            -88.653955
+          ],
+          [
+            42.371158,
+            -88.641705
+          ],
+          [
+            42.36329,
+            -88.631877
+          ],
+          [
+            42.353812,
+            -88.625141
+          ],
+          [
+            42.343369,
+            -88.621954
+          ],
+          [
+            42.332672,
+            -88.622536
+          ],
+          [
+            42.322451,
+            -88.626845
+          ],
+          [
+            42.313402,
+            -88.634589
+          ],
+          [
+            42.306142,
+            -88.645239
+          ],
+          [
+            42.301166,
+            -88.658071
+          ],
+          [
+            42.298813,
+            -88.672208
+          ],
+          [
+            42.299242,
+            -88.686689
+          ],
+          [
+            42.315692,
+            -88.804503
+          ],
+          [
+            42.321412,
+            -88.816753
+          ],
+          [
+            42.329279,
+            -88.826581
+          ],
+          [
+            42.338757,
+            -88.833317
+          ],
+          [
+            42.349201,
+            -88.836504
+          ],
+          [
+            42.359897,
+            -88.835922
+          ],
+          [
+            42.370118,
+            -88.831613
+          ],
+          [
+            42.379167,
+            -88.823869
+          ],
+          [
+            42.386427,
+            -88.813218
+          ],
+          [
+            42.391403,
+            -88.800387
+          ],
+          [
+            42.393757,
+            -88.78625
+          ],
+          [
+            42.393327,
+            -88.771769
+          ]
+        ]
+      },
+      {
+        "fix": "JVL",
+        "inbound_true": 111.22944022651265,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 12000,
+        "levels_ft": [
+          12000,
+          13000,
+          14000,
+          15000,
+          16000
+        ],
+        "lap_min": 5.359877142506221,
+        "src": "synth",
+        "polygon": [
+          [
+            42.586695,
+            -89.205512
+          ],
+          [
+            42.558008,
+            -89.105258
+          ],
+          [
+            42.552693,
+            -89.092093
+          ],
+          [
+            42.545048,
+            -89.081244
+          ],
+          [
+            42.535595,
+            -89.07345
+          ],
+          [
+            42.524979,
+            -89.069244
+          ],
+          [
+            42.513923,
+            -89.068911
+          ],
+          [
+            42.50318,
+            -89.072474
+          ],
+          [
+            42.493482,
+            -89.079691
+          ],
+          [
+            42.485491,
+            -89.090069
+          ],
+          [
+            42.47975,
+            -89.102902
+          ],
+          [
+            42.476652,
+            -89.117314
+          ],
+          [
+            42.476407,
+            -89.132325
+          ],
+          [
+            42.479031,
+            -89.146909
+          ],
+          [
+            42.513034,
+            -89.260328
+          ],
+          [
+            42.520678,
+            -89.271178
+          ],
+          [
+            42.530131,
+            -89.278971
+          ],
+          [
+            42.540747,
+            -89.283177
+          ],
+          [
+            42.551803,
+            -89.28351
+          ],
+          [
+            42.562546,
+            -89.279947
+          ],
+          [
+            42.572244,
+            -89.27273
+          ],
+          [
+            42.580235,
+            -89.262352
+          ],
+          [
+            42.585976,
+            -89.249519
+          ],
+          [
+            42.589074,
+            -89.235107
+          ],
+          [
+            42.58932,
+            -89.220097
+          ],
+          [
+            42.586695,
+            -89.205512
+          ]
+        ]
+      },
+      {
+        "fix": "SHAIN",
+        "inbound_true": 15.002552377240624,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 12000,
+        "levels_ft": [
+          12000,
+          13000,
+          14000,
+          15000,
+          16000
+        ],
+        "lap_min": 5.359877142506221,
+        "src": "synth",
+        "polygon": [
+          [
+            41.567089,
+            -89.163276
+          ],
+          [
+            41.643611,
+            -89.135833
+          ],
+          [
+            41.653828,
+            -89.130169
+          ],
+          [
+            41.662602,
+            -89.12116
+          ],
+          [
+            41.669334,
+            -89.109419
+          ],
+          [
+            41.673565,
+            -89.095746
+          ],
+          [
+            41.675008,
+            -89.081074
+          ],
+          [
+            41.673564,
+            -89.066402
+          ],
+          [
+            41.669332,
+            -89.05273
+          ],
+          [
+            41.662599,
+            -89.040989
+          ],
+          [
+            41.653825,
+            -89.031981
+          ],
+          [
+            41.643607,
+            -89.026318
+          ],
+          [
+            41.632643,
+            -89.024387
+          ],
+          [
+            41.621679,
+            -89.02632
+          ],
+          [
+            41.53494,
+            -89.059426
+          ],
+          [
+            41.526166,
+            -89.068436
+          ],
+          [
+            41.519434,
+            -89.080177
+          ],
+          [
+            41.515203,
+            -89.093849
+          ],
+          [
+            41.51376,
+            -89.108522
+          ],
+          [
+            41.515204,
+            -89.123194
+          ],
+          [
+            41.519436,
+            -89.136866
+          ],
+          [
+            41.526169,
+            -89.148606
+          ],
+          [
+            41.534943,
+            -89.157615
+          ],
+          [
+            41.54516,
+            -89.163277
+          ],
+          [
+            41.556125,
+            -89.165208
+          ],
+          [
+            41.567089,
+            -89.163276
+          ]
+        ]
+      },
+      {
+        "fix": "WATSN",
+        "inbound_true": 340.06901430562317,
+        "turn": "R",
+        "leg_min": 1.0,
+        "base_ft": 13000,
+        "levels_ft": [
+          13000,
+          14000,
+          15000,
+          16000,
+          17000
+        ],
+        "lap_min": 5.414068709320837,
+        "src": "synth",
+        "polygon": [
+          [
+            41.207774,
+            -85.998818
+          ],
+          [
+            41.283453,
+            -86.035336
+          ],
+          [
+            41.294604,
+            -86.038607
+          ],
+          [
+            41.306011,
+            -86.037926
+          ],
+          [
+            41.316897,
+            -86.033339
+          ],
+          [
+            41.32652,
+            -86.025159
+          ],
+          [
+            41.334224,
+            -86.013944
+          ],
+          [
+            41.339485,
+            -86.000457
+          ],
+          [
+            41.341943,
+            -85.985618
+          ],
+          [
+            41.341431,
+            -85.970437
+          ],
+          [
+            41.337984,
+            -85.955951
+          ],
+          [
+            41.331837,
+            -85.943145
+          ],
+          [
+            41.323409,
+            -85.932893
+          ],
+          [
+            41.313274,
+            -85.925892
+          ],
+          [
+            41.226445,
+            -85.886103
+          ],
+          [
+            41.215038,
+            -85.886785
+          ],
+          [
+            41.204152,
+            -85.891371
+          ],
+          [
+            41.194529,
+            -85.899551
+          ],
+          [
+            41.186824,
+            -85.910767
+          ],
+          [
+            41.181564,
+            -85.924254
+          ],
+          [
+            41.179106,
+            -85.939093
+          ],
+          [
+            41.179618,
+            -85.954273
+          ],
+          [
+            41.183065,
+            -85.96876
+          ],
+          [
+            41.189212,
+            -85.981566
+          ],
+          [
+            41.19764,
+            -85.991818
+          ],
+          [
+            41.207774,
+            -85.998818
+          ]
+        ]
+      }
+    ]
+  },
+  "surface": null
+}

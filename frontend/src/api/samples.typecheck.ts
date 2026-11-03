@@ -1,13 +1,18 @@
 // Spec §12: v2.1 sample JSON must stay valid under the v2.2 types. Compiled by `npx tsc --noEmit`.
 // Checked by assignability (no casts), so a missing or retyped field anywhere in the tree is an error.
-import type { WaveScenario, NegotiationResult, BenchmarkReport } from "./types";
+import type { WaveScenario, NegotiationResult, BenchmarkReport, WaveGeo, TrajectorySet, EvaluateResponse } from "./types";
 import wave from "./samples/v2.1/wave.json";
 import result from "./samples/v2.1/result.json";
 import benchmark from "./samples/v2.1/benchmark.json";
+import geo from "./samples/geo.json";                    // v2.2 part 2
+import trajectories from "./samples/trajectories.json";
+import result22 from "./samples/result.json";
 
 // JSON imports infer `string` for string unions, and `evidence` objects with `undefined` members.
-// Widen exactly that; optionality and everything else is kept as declared.
+// Widen exactly that (and `[lat, lon]` tuples, which JSON infers as number[]); optionality and everything
+// else is kept as declared.
 type Widen<T> = T extends string ? string
+  : T extends [number, number] ? number[]
   : T extends object
     ? (string extends keyof T ? Record<string, string | number | undefined> : { [K in keyof T]: Widen<T[K]> })
     : T;
@@ -16,6 +21,10 @@ const chk = <X,>(_: X): void => {};
 chk<Widen<WaveScenario>>(wave);
 chk<Widen<NegotiationResult>>(result);
 chk<Widen<BenchmarkReport>>(benchmark);
+chk<Widen<WaveGeo>>(geo);
+chk<Widen<TrajectorySet>>(trajectories);
+chk<Widen<NegotiationResult>>(result22);
+chk<Widen<EvaluateResponse>>({ plan: result22.final_plan, evaluation: result22.evaluation, suggestions: {}, trajectories });
 
 // Negative controls: each deliberately broken copy must be rejected.
 const { flights: _f, ...noFlights } = wave;

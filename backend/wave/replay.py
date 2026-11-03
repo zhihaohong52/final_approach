@@ -41,8 +41,10 @@ def _report_degraded(store, what: str) -> None:
 
 
 def load(wave_id: str) -> dict:
-    """Raises FileNotFoundError if the wave has no recording."""
+    """The recording {engine_version, messages, result}; `engine_version` is the body's top-level field,
+    "v2" when absent (recordings made before engine versions). Raises FileNotFoundError if the wave has no
+    recording."""
     rec = get_store().replay(wave_id)
     if rec is None:
         raise FileNotFoundError(wave_id)
-    return rec
+    return {**rec, "engine_version": rec.get("engine_version") or "v2"}

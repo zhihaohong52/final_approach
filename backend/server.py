@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import gzip
+import hashlib
 import json
 import logging
 import os
@@ -19,7 +21,7 @@ from pathlib import Path
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -28,6 +30,7 @@ from . import baseline, decide, jev, negotiation, scenario
 from .datastore import FileStore, get_store
 from .mcp_server import mcp_asgi_app
 from .wave import replay
+from .wave.version import ENGINE_VERSION
 
 from .wave.loader import _load
 
@@ -195,7 +198,8 @@ RUNS_MAX = 200
 RUNS: OrderedDict[str, dict] = OrderedDict()  # LRU; older runs are served from disk
 
 
-V2_PREFIXES = ("/api/waves", "/api/flights", "/api/wave/", "/api/negotiate-wave", "/api/runs", "/api/benchmark")
+V2_PREFIXES = ("/api/waves", "/api/flights", "/api/wave/", "/api/negotiate-wave", "/api/runs", "/api/benchmark",
+               "/api/trajectories")
 
 
 @app.exception_handler(RequestValidationError)
@@ -528,12 +532,59 @@ def get_wave(wave_id: str):
     return {**w.to_dict(), "status_quo": {"plan": plan.to_dict(), "evaluation": ev}}
 
 
-@app.get("/api/runs/{run_id}")
-def get_run(run_id: str):
+GEO_CACHE_MAX = 32
+_GEO: OrderedDict[str, bytes] = OrderedDict()   # wave content key -> WaveGeo JSON bytes
+_GEO_LOCK = threading.Lock()
+
+
+def _geo_body(wave) -> bytes:
+    from .wave import route, wavegeo
+    k = route.wave_key(wave)
+    with _GEO_LOCK:
+        hit = _GEO.get(k)
+        if hit is not None:
+            _GEO.move_to_end(k)
+            return hit
+    body = json.dumps(wavegeo.wave_geo(wave), separators=(",", ":")).encode()
+    with _GEO_LOCK:
+        _GEO[k] = body
+        while len(_GEO) > GEO_CACHE_MAX:
+            _GEO.popitem(last=False)
+    return body
+
+
+@app.get("/api/wave/{wave_id}/geo")
+def get_wave_geo(wave_id: str, request: Request):
+    """v2.2 WaveGeo: the procedures the engine flies at this wave (surface null in M1). Static per wave and
+    engine version: ETag = sha1(engine_version + wave_id). Gzipped here when the client accepts it (no
+    app-wide GZipMiddleware: it would buffer the SSE streams)."""
+    etag = '"' + hashlib.sha1((ENGINE_VERSION + wave_id).encode()).hexdigest() + '"'
+    headers = {"ETag": etag, "Vary": "Accept-Encoding", "Cache-Control": "no-cache"}
+    try:
+        w = WB.build_wave(wave_id)
+    except KeyError:
+        return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    if not w.geo_available():
+        return _err(404, "geo_unavailable", f"wave {wave_id!r} has no airport or runway coordinates")
+    if etag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
+        return Response(status_code=304, headers=headers)
+    body = _geo_body(w)
+    if "gzip" in request.headers.get("accept-encoding", "").lower():
+        return Response(gzip.compress(body, compresslevel=6), media_type="application/json",
+                        headers={**headers, "Content-Encoding": "gzip"})
+    return Response(body, media_type="application/json", headers=headers)
+
+
+def _find_run(run_id: str) -> dict | None:
     if run_id in RUNS:
         RUNS.move_to_end(run_id)
         return RUNS[run_id]
-    run = get_store().get_run(run_id)
+    return get_store().get_run(run_id)
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    run = _find_run(run_id)
     if run is not None:
         return run
     return _err(404, "unknown_run", f"unknown run id {run_id!r}")
@@ -588,6 +639,11 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
         def finish_replay() -> dict:
             res = {**rec["result"], "run_id": run_id, "wave_id": wave_id, "log": rec["messages"],
                    "model": _model_id(rec["result"].get("model") or "formula")}
+            recorded = rec.get("engine_version") or "v2"
+            if recorded != ENGINE_VERSION:   # anti-goal guard: never draw paths another engine did not fly
+                res.pop("trajectories", None)
+                res["engine_version"] = recorded
+                res["paths_unavailable"] = True
             _save_run(res)
             return res
 
@@ -690,7 +746,41 @@ async def evaluate_plan(body: dict = Body(...)):
         wave = await asyncio.to_thread(WB.build_wave, wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
-    return await asyncio.to_thread(edit.check_edit, wave, plan)
+    return await asyncio.to_thread(edit.check_edit, wave, plan, body.get("include_trajectories") is True)
+
+
+@app.post("/api/trajectories")
+async def trajectories(body: dict = Body(...)):
+    """v2.2 TrajectorySet, deterministic and model-free: either {wave_id, assignments} (any plan, e.g. an
+    intermediate proposal or a duty-manager edit) or {run_id} (that run's agreed plan, as embedded in it)."""
+    from .wave import edit, trajectory
+    if "run_id" in body:
+        run_id = body.get("run_id")
+        if not isinstance(run_id, str) or not run_id:
+            return _err(422, "invalid_request", "run_id must be a non-empty string")
+        run = await asyncio.to_thread(_find_run, run_id)
+        if run is None:
+            return _err(404, "unknown_run", f"unknown run id {run_id!r}")
+        final = (run.get("trajectories") or {}).get("final")
+        if run.get("paths_unavailable") or run.get("engine_version") != ENGINE_VERSION or final is None:
+            return _err(409, "engine_mismatch",
+                        f"run {run_id!r} was recorded on engine {run.get('engine_version') or 'v2'}; "
+                        f"paths are not available on {ENGINE_VERSION}")
+        return final
+    wave_id, rows = body.get("wave_id"), body.get("assignments")
+    if not isinstance(wave_id, str) or not wave_id:
+        return _err(422, "invalid_request", "wave_id (with assignments) or run_id is required")
+    if not isinstance(rows, list) or not rows:
+        return _err(422, "invalid_request", "assignments must be a non-empty list")
+    try:
+        plan = edit.plan_from_dicts(rows)
+    except (ValueError, TypeError) as e:
+        return _err(422, "invalid_request", str(e))
+    try:
+        wave = await asyncio.to_thread(WB.build_wave, wave_id)
+    except KeyError:
+        return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    return await asyncio.to_thread(lambda: trajectory.build(wave, plan).to_dict())
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")

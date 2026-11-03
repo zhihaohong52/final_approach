@@ -5,7 +5,7 @@ one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). v2.2 part 2 (3 Nov 2026, additive): `GET /api/wave/{id}/geo` (`WaveGeo`, procedures; `surface: null` until the surface milestone), `POST /api/trajectories` (`{wave_id, assignments}` or `{run_id}`), `EvaluateRequest.include_trajectories?` / `EvaluateResponse.trajectories?`, `NegotiationResult.paths_unavailable?` (replay engine-version guard), and `alt_src?` on `TrajectorySet` air points. Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -48,6 +48,9 @@ interface Provenance {
 | GET | `/api/waves/random?airport=ATL` | `WaveSummary` |
 | GET | `/api/flights?airport=ATL&q=DL123&limit=50&offset=0` | `{ flights: FlightRow[]; total: number }` (rows of the 2015 challenge flights.csv) |
 | GET | `/api/wave/{wave_id}` | `WaveScenario` (`wave_id` may be a BTS wave id or `"F2015-<row_id>"`) |
+| GET | `/api/wave/{wave_id}/geo` | `WaveGeo` (v2.2; gzip, `ETag`; 404 `geo_unavailable` / `unknown_wave`) |
+| POST | `/api/trajectories` | `TrajectorySet` (v2.2; body `{wave_id, assignments}` or `{run_id}`; 409 `engine_mismatch`) |
+| POST | `/api/evaluate` | `EvaluateResponse` (duty-manager edit re-check) |
 | POST | `/api/negotiate-wave` | SSE stream of `NegotiationEvent` (or `NegotiationResult` with `stream:false`) |
 | GET | `/api/runs?wave_id=ATL-2024-07-15-16&limit=20` | `{ runs: RunListItem[] }` (v2.1.1; newest first, `limit` 1..100, 422 `invalid_request` without `wave_id`) |
 | GET | `/api/runs/{run_id}` | `NegotiationResult` (with full `log`) |
@@ -392,7 +395,9 @@ interface NegotiationResult {
   stats: { model_calls: number; fallbacks: number; elapsed_ms: number };
   log?: NegotiationMessage[];          // included when stream=false and in GET /api/runs/{id}
   engine_version?: string;             // v2.2
-  trajectories?: { final: TrajectorySet; baseline: TrajectorySet };   // v2.2
+  trajectories?: { final: TrajectorySet; baseline: TrajectorySet };   // v2.2; absent when paths_unavailable
+  paths_unavailable?: boolean;         // v2.2: true on a replay recorded on another engine version
+                                       // (engine_version then names that version, "v2" if unversioned)
 }
 
 interface Revision {
@@ -453,14 +458,48 @@ interface DecisionRequest { run_id: string; decision: "APPROVE" | "OVERRIDE"; no
 The duty manager's edit: re-check a whole plan against the same 12 rules and scores the negotiation uses.
 
 ```ts
-interface EvaluateRequest { wave_id: string; assignments: Assignment[] }   // metrics ignored
+interface EvaluateRequest { wave_id: string; assignments: Assignment[];   // metrics ignored
+  include_trajectories?: boolean }     // v2.2
 interface EvaluateResponse {
   plan: JointPlan;                     // label "edited by the duty manager"
   evaluation: PlanEvaluation;
-  suggestions: Record<string, number>; // callsign -> nearest slot_min (same runway, ±30 min) that makes the plan pass
+  suggestions: Record<string, number>; // callsign -> nearest slot_min (same runway, ±30 min) that makes the plan pass;
+                                       // v2.2: never before the flight's earliest touchdown on that runway (its route)
+  trajectories?: TrajectorySet;        // v2.2: the edited plan's paths, when include_trajectories is true
 }
 ```
 Errors: 422 `invalid_request` (empty or malformed assignments), 404 `unknown_wave`.
+
+### GET /api/wave/{wave_id}/geo (v2.2)
+
+`WaveGeo` (see "v2.2 types"): the procedures the engine flies for this wave, built from its own routes, so
+the map never shows a path the engine did not use. `procedures.routes` are the distinct
+(runway, STAR, transition, approach, named fixes) over every wave and queue flight and every open runway end;
+`procedures.fixes` are their named fixes plus every hold fix (kind by priority
+hold > corner > faf > if > iaf > entry > star; `star` also covers uncoded approach step-down fixes);
+`procedures.holds` are the wave's shared holds, one per physical fix, with the racetrack `polygon`
+(`[lat, lon]` pairs) the laps are drawn on. `cycle`/`source` come from the CIFP header (`"2611"`,
+`"FAA CIFP"`), `""`/`"synthetic"` when the airport has no procedures; `status` is `"real"` when some route
+flies a CIFP STAR and approach. `surface` is `null` until the surface milestone.
+
+Static per wave and engine version: `ETag: "sha1(engine_version + wave_id)"` (`If-None-Match` → 304). The
+body is gzipped when the request's `Accept-Encoding` has `gzip` (`Content-Encoding: gzip`,
+`Vary: Accept-Encoding`). Errors: 404 `unknown_wave`; 404 `geo_unavailable` when the wave's
+`geo_available` is false.
+
+### POST /api/trajectories (v2.2)
+
+Deterministic and model-free. Two request forms:
+
+```ts
+type TrajectoriesRequest =
+  | { wave_id: string; assignments: Assignment[] }   // any plan: an intermediate proposal or a duty-manager edit
+  | { run_id: string };                               // that run's agreed plan (= result.trajectories.final)
+// response: TrajectorySet
+```
+Errors: 422 `invalid_request` (neither form, empty or malformed assignments), 404 `unknown_wave`,
+404 `unknown_run`, 409 `engine_mismatch` (the run has `paths_unavailable`, or was recorded on another engine
+version, or carries no trajectories).
 
 ### GET /api/benchmark
 
@@ -527,7 +566,8 @@ export interface WaveGeo {
 export interface TrajectorySet {
   plan_id: string; engine_version: string;
   air: { callsign: string; wave: boolean; runway: string; appears_min: number;
-    points: { t_min: number; lat: number; lon: number; alt_ft: number; kind: "entry" | "fix" | "hold" | "vector" | "final" | "threshold"; fix?: string; src: "cifp" | "synth" }[];
+    points: { t_min: number; lat: number; lon: number; alt_ft: number; kind: "entry" | "fix" | "hold" | "vector" | "final" | "threshold"; fix?: string; src: "cifp" | "synth";
+      alt_src?: "constraint" | "interp" }[];   // v2.2 part 2: published altitude, or interpolated/capped
     hold?: { fix: string; laps: number; level_ft: number; entry_min: number; exit_min: number; lap_min: number } }[];
   ground: { callsign: string; kind: "arrival" | "departure"; wave: boolean; exit?: string; stand: string; route_names: string[];
     points: { t_min: number; lat: number; lon: number; node?: string }[];

@@ -78,13 +78,16 @@ class AirTrack:
     notes: list[str] = field(default_factory=list)   # drawing caveats (clip, stack), not serialised
 
     def to_dict(self) -> dict:
-        """Contract `TrajectorySet.air[]` entry (`fix` and `hold` omitted when None; `alt_src` is internal)."""
+        """Contract `TrajectorySet.air[]` entry (`fix` and `hold` omitted when None; `alt_src` is "constraint"
+        for a published altitude, "interp" for an interpolated or capped one)."""
         pts = []
         for p in self.points:
             q = {k: p[k] for k in ("t_min", "lat", "lon", "alt_ft", "kind")}
             if p.get("fix"):
                 q["fix"] = p["fix"]
             q["src"] = p["src"]
+            if p.get("alt_src"):
+                q["alt_src"] = p["alt_src"]
             pts.append(q)
         d = {"callsign": self.callsign, "wave": self.wave, "runway": self.runway,
              "appears_min": self.appears_min, "points": pts}

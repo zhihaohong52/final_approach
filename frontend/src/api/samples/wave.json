@@ -367,7 +367,7 @@
       "wake": "LARGE",
       "runway": "22R",
       "slot_min": -43.0,
-      "origin": null
+      "origin": "OKC"
     }
   ],
   "flights": [

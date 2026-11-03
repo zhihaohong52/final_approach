@@ -789,6 +789,11 @@ def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None,
         "log": run.log,
     }
     result["baseline"]["plan"] = base.to_dict()
+    from backend.wave import trajectory                 # v2.2: the paths the metrics were computed from
+    from backend.wave.version import ENGINE_VERSION
+    result["engine_version"] = ENGINE_VERSION
+    result["trajectories"] = {"final": trajectory.build(wave, plan).to_dict(),
+                              "baseline": trajectory.build(wave, base).to_dict()}
     if mode == "decision+claude" or narrate:
         from backend.wave.narrate import brief
         nar = brief(result)

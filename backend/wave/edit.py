@@ -32,20 +32,35 @@ def _failures(ev: dict) -> set[tuple[str, str | None]]:
     return {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]}
 
 
+def _floor(wave: Wave, a: Assignment) -> float | None:
+    """Earliest touchdown of `a` on its runway along the engine's route (`trajectory.earliest`), or None for
+    a callsign that is not a wave flight."""
+    from backend.wave import trajectory
+    try:
+        return trajectory.earliest(wave, a.callsign, a.runway, a.speed_reduction_min, a.ground_delay_min)
+    except ValueError:
+        return None
+
+
 def _nearest_legal(wave: Wave, plan: JointPlan, a: Assignment, others: set) -> float | None:
-    """Nearest slot where this flight breaks nothing and no breach is added to anyone else's."""
+    """Nearest slot where this flight breaks nothing and no breach is added to anyone else's. Slots before
+    the flight's earliest touchdown on that runway (its route there) are never suggested."""
     if a.action != "land" or a.slot_min is None:
         return None
+    floor = _floor(wave, a)
     for d in range(1, SEARCH_MIN + 1):
         for s in (a.slot_min + d, a.slot_min - d):
+            if floor is not None and s < floor - 1e-9:
+                continue
             trial = plan.with_assignment(Assignment(**{**{k: getattr(a, k) for k in _FIELDS}, "slot_min": s}))
             if _failures(evaluate(wave, trial)) <= others:
                 return s
     return None
 
 
-def check_edit(wave: Wave, plan: JointPlan) -> dict:
-    """{plan, evaluation, suggestions: {callsign: slot_min}} for an edited plan."""
+def check_edit(wave: Wave, plan: JointPlan, include_trajectories: bool = False) -> dict:
+    """{plan, evaluation, suggestions: {callsign: slot_min}} for an edited plan, plus `trajectories` (the
+    plan's `TrajectorySet`) when asked."""
     ev = evaluate(wave, plan)
     suggestions: dict[str, float] = {}
     if ev["checks"] and not ev["feasible"]:
@@ -57,4 +72,8 @@ def check_edit(wave: Wave, plan: JointPlan) -> dict:
                 continue
             if s is not None:
                 suggestions[cs] = s
-    return {"plan": plan.to_dict(), "evaluation": ev, "suggestions": suggestions}
+    out = {"plan": plan.to_dict(), "evaluation": ev, "suggestions": suggestions}
+    if include_trajectories:
+        from backend.wave import trajectory
+        out["trajectories"] = trajectory.build(wave, plan).to_dict()
+    return out

@@ -190,12 +190,18 @@ export interface PlanEvaluation {
   totals: { delay_min: number; fuel_kg: number; hold_min: number; pax_protected_pct: number;
             overtime_min: number; diversions: number };
 }
-export interface EvaluateRequest { wave_id: string; assignments: Assignment[] }
+export interface EvaluateRequest { wave_id: string; assignments: Assignment[];
+  include_trajectories?: boolean }     // v2.2
 export interface EvaluateResponse {
   plan: JointPlan;
   evaluation: PlanEvaluation;
-  suggestions: Record<string, number>; // callsign -> nearest legal slot_min on the same runway
+  suggestions: Record<string, number>; // callsign -> nearest legal slot_min on the same runway (never before its route-earliest)
+  trajectories?: TrajectorySet;        // v2.2: when include_trajectories is true
 }
+// v2.2: POST /api/trajectories -> TrajectorySet (409 engine_mismatch for a run without paths)
+export type TrajectoriesRequest =
+  | { wave_id: string; assignments: Assignment[] }
+  | { run_id: string };
 export interface Move {
   id: string;
   agent: AgentId;
@@ -306,7 +312,8 @@ export interface NegotiationResult {
   stats: { model_calls: number; fallbacks: number; elapsed_ms: number };
   log?: NegotiationMessage[];          // included when stream=false and in GET /api/runs/{id}
   engine_version?: string;             // v2.2
-  trajectories?: { final: TrajectorySet; baseline: TrajectorySet };   // v2.2
+  trajectories?: { final: TrajectorySet; baseline: TrajectorySet };   // v2.2; absent when paths_unavailable
+  paths_unavailable?: boolean;         // v2.2: replay recorded on another engine version (engine_version names it)
 }
 
 export interface Revision {
@@ -385,7 +392,8 @@ export interface WaveGeo {
 export interface TrajectorySet {
   plan_id: string; engine_version: string;
   air: { callsign: string; wave: boolean; runway: string; appears_min: number;
-    points: { t_min: number; lat: number; lon: number; alt_ft: number; kind: "entry" | "fix" | "hold" | "vector" | "final" | "threshold"; fix?: string; src: "cifp" | "synth" }[];
+    points: { t_min: number; lat: number; lon: number; alt_ft: number; kind: "entry" | "fix" | "hold" | "vector" | "final" | "threshold"; fix?: string; src: "cifp" | "synth";
+      alt_src?: "constraint" | "interp" }[];   // v2.2 part 2: published altitude, or interpolated/capped
     hold?: { fix: string; laps: number; level_ft: number; entry_min: number; exit_min: number; lap_min: number } }[];
   ground: { callsign: string; kind: "arrival" | "departure"; wave: boolean; exit?: string; stand: string; route_names: string[];
     points: { t_min: number; lat: number; lon: number; node?: string }[];

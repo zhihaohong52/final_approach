@@ -1,5 +1,5 @@
 {
-  "run_id": "0220f7eb0034",
+  "run_id": "1f26fb881701",
   "wave_id": "F2015-270287",
   "mode": "decision",
   "model": "typesafe/jev-1.14",
@@ -3191,5 +3191,7 @@
       },
       "rationale": "Turn 1: all 3 agents accept 78d3066646; max-min utility 0.463 among 1 unanimous plan(s)"
     }
-  ]
+  ],
+  "engine_version": "v2",
+  "paths_unavailable": true
 }

@@ -1,0 +1,881 @@
+{
+  "plan_id": "78d3066646",
+  "engine_version": "v3-air",
+  "air": [
+    {
+      "callsign": "MQ3327",
+      "wave": true,
+      "runway": "09L",
+      "appears_min": 256.8256167526787,
+      "points": [
+        {
+          "t_min": 256.8256167526787,
+          "lat": 42.52683882360853,
+          "lon": -91.19801963541957,
+          "alt_ft": 23500.0,
+          "kind": "entry",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 259.25960460718096,
+          "lat": 42.526466666666664,
+          "lon": -90.82066111111111,
+          "alt_ft": 23500.0,
+          "kind": "fix",
+          "fix": "BENNR",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 262.5096313905762,
+          "lat": 42.52296944444444,
+          "lon": -90.316825,
+          "alt_ft": 23500.0,
+          "kind": "fix",
+          "fix": "JBAGS",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 265.99279594898513,
+          "lat": 42.51846944444444,
+          "lon": -89.77689166666667,
+          "alt_ft": 23500.0,
+          "kind": "fix",
+          "fix": "BHAWK",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 268.5089357258508,
+          "lat": 42.47278888888889,
+          "lon": -89.40403888888889,
+          "alt_ft": 19000.0,
+          "kind": "fix",
+          "fix": "STNLE",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 270.5197029857739,
+          "lat": 42.43790555555555,
+          "lon": -89.12150555555554,
+          "alt_ft": 16233.106289361327,
+          "kind": "fix",
+          "fix": "CUUPP",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 270.97802559297304,
+          "lat": 42.429874999999996,
+          "lon": -89.05880277777777,
+          "alt_ft": 15618.207851794063,
+          "kind": "fix",
+          "fix": "CHMPN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 272.20495801960976,
+          "lat": 42.40911111111111,
+          "lon": -88.89374166666667,
+          "alt_ft": 14000.0,
+          "kind": "fix",
+          "fix": "CLSBY",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 274.0128760754104,
+          "lat": 42.38006111111111,
+          "lon": -88.66779166666667,
+          "alt_ft": 11000.0,
+          "kind": "fix",
+          "fix": "FYTTE",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 275.4796337503009,
+          "lat": 42.358491666666666,
+          "lon": -88.502875,
+          "alt_ft": 10562.242632626137,
+          "kind": "fix",
+          "fix": "MOTRR",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 276.4461597299683,
+          "lat": 42.34427222222222,
+          "lon": -88.39490277777779,
+          "alt_ft": 10275.49982972309,
+          "kind": "fix",
+          "fix": "COGSS",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 277.33214593169,
+          "lat": 42.30096388888889,
+          "lon": -88.31381388888889,
+          "alt_ft": 10013.843946006227,
+          "kind": "fix",
+          "fix": "MADII",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 279.2794345337139,
+          "lat": 42.196374999999996,
+          "lon": -88.14769444444445,
+          "alt_ft": 9442.737849487636,
+          "kind": "fix",
+          "fix": "SOOLU",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 280.9530540759531,
+          "lat": 42.091836111111114,
+          "lon": -88.0272,
+          "alt_ft": 8956.239824216846,
+          "kind": "fix",
+          "fix": "KURKK",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 283.07731632004845,
+          "lat": 42.09176111111111,
+          "lon": -87.79417222222222,
+          "alt_ft": 8344.474049963253,
+          "kind": "fix",
+          "fix": "VULCN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 285.70877113511557,
+          "lat": 42.09106666666667,
+          "lon": -87.50885833333334,
+          "alt_ft": 7595.43362234256,
+          "kind": "fix",
+          "fix": "HIMGO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 289.62528292588576,
+          "lat": 42.08616383870443,
+          "lon": -87.92667388916016,
+          "alt_ft": 6498.354803563149,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 294.1973192040939,
+          "lat": 42.08616383870443,
+          "lon": -88.32868644179992,
+          "alt_ft": 5442.861779355965,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 294.84277546252747,
+          "lat": 42.04449717203776,
+          "lon": -88.32868644179992,
+          "alt_ft": 5295.453998815794,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 296.14167805184576,
+          "lat": 42.002430555555556,
+          "lon": -88.23156944444445,
+          "alt_ft": 5000.0,
+          "kind": "final",
+          "fix": "TRYXI",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 297.1573035763556,
+          "lat": 42.00259444444445,
+          "lon": -88.16126944444446,
+          "alt_ft": 4000.0,
+          "kind": "final",
+          "fix": "DOOGY",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 298.9926618806932,
+          "lat": 42.00277777777778,
+          "lon": -88.037375,
+          "alt_ft": 2300.0,
+          "kind": "final",
+          "fix": "ZENAH",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 301.0,
+          "lat": 42.002830505371094,
+          "lon": -87.92667388916016,
+          "alt_ft": 723.0,
+          "kind": "threshold",
+          "fix": "RW09L",
+          "src": "cifp",
+          "alt_src": "constraint"
+        }
+      ]
+    },
+    {
+      "callsign": "MQ3318",
+      "wave": true,
+      "runway": "09R",
+      "appears_min": -15.491437198712426,
+      "points": [
+        {
+          "t_min": -15.491437198712426,
+          "lat": 40.14567977811084,
+          "lon": -90.15494110309157,
+          "alt_ft": 22000.0,
+          "kind": "entry",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -5.643438650597766,
+          "lat": 41.160091666666666,
+          "lon": -89.58741111111111,
+          "alt_ft": 22000.0,
+          "kind": "fix",
+          "fix": "BFORD",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": -3.256833751614227,
+          "lat": 41.28635,
+          "lon": -89.27584444444445,
+          "alt_ft": 21500.0,
+          "kind": "fix",
+          "fix": "BYLAW",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 1.381371630631378,
+          "lat": 41.511830555555555,
+          "lon": -88.70901666666667,
+          "alt_ft": 12000.0,
+          "kind": "fix",
+          "fix": "BENKY",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 2.5958708427203945,
+          "lat": 41.566125,
+          "lon": -88.57111944444443,
+          "alt_ft": 11547.680669626216,
+          "kind": "fix",
+          "fix": "NEWRK",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 4.87734871151865,
+          "lat": 41.71266111111112,
+          "lon": -88.35733611111111,
+          "alt_ft": 10706.876933845797,
+          "kind": "fix",
+          "fix": "AHSTN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 7.352560452499489,
+          "lat": 41.88551666666667,
+          "lon": -88.15005833333333,
+          "alt_ft": 9807.658705565696,
+          "kind": "fix",
+          "fix": "PETAH",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 8.80678895388441,
+          "lat": 41.884483333333336,
+          "lon": -87.98855,
+          "alt_ft": 9341.302025509201,
+          "kind": "fix",
+          "fix": "JORJO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 10.502586222959437,
+          "lat": 41.88433055555556,
+          "lon": -87.80179722222222,
+          "alt_ft": 8802.066406285505,
+          "kind": "fix",
+          "fix": "MONKZ",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 13.361713969129557,
+          "lat": 41.88371388888889,
+          "lon": -87.49076388888889,
+          "alt_ft": 7903.971616077366,
+          "kind": "fix",
+          "fix": "TONIE",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 17.37055484457204,
+          "lat": 41.90056366666666,
+          "lon": -87.918352,
+          "alt_ft": 6667.763474895695,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 22.03947409908207,
+          "lat": 41.90056366666666,
+          "lon": -88.32845755660297,
+          "alt_ft": 5483.913383811426,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 22.6845347654424,
+          "lat": 41.942230333333335,
+          "lon": -88.32845755660297,
+          "alt_ft": 5322.314146228853,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 23.976769547763034,
+          "lat": 41.98339722222222,
+          "lon": -88.23136944444444,
+          "alt_ft": 5000.0,
+          "kind": "final",
+          "fix": "CHILR",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 24.990612700482743,
+          "lat": 41.983583333333335,
+          "lon": -88.1612138888889,
+          "alt_ft": 4000.0,
+          "kind": "final",
+          "fix": "DEVON",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 26.756586512520713,
+          "lat": 41.983802777777775,
+          "lon": -88.04203888888888,
+          "alt_ft": 2300.0,
+          "kind": "final",
+          "fix": "MEOWW",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 29.0,
+          "lat": 41.983897,
+          "lon": -87.918352,
+          "alt_ft": 726.0,
+          "kind": "threshold",
+          "fix": "RW09R",
+          "src": "cifp",
+          "alt_src": "constraint"
+        }
+      ]
+    },
+    {
+      "callsign": "OO5559",
+      "wave": true,
+      "runway": "22R",
+      "appears_min": 17.580126342499256,
+      "points": [
+        {
+          "t_min": 17.580126342499256,
+          "lat": 40.49365,
+          "lon": -85.67937500000001,
+          "alt_ft": 18000.0,
+          "kind": "entry",
+          "fix": "BONNT",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 20.249239328340852,
+          "lat": 40.762166666666666,
+          "lon": -85.78366666666666,
+          "alt_ft": 16938.20856640346,
+          "kind": "fix",
+          "fix": "FRIDG",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 25.66601162780385,
+          "lat": 41.283452777777775,
+          "lon": -86.0353361111111,
+          "alt_ft": 14833.938291956794,
+          "kind": "fix",
+          "fix": "WATSN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 30.773971792026508,
+          "lat": 41.4,
+          "lon": -86.69277777777778,
+          "alt_ft": 12910.28809634594,
+          "kind": "fix",
+          "fix": "MKITA",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 35.451148590413574,
+          "lat": 41.58173611111111,
+          "lon": -87.24408333333334,
+          "alt_ft": 11198.991214041098,
+          "kind": "fix",
+          "fix": "ESSPO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 37.20382376078946,
+          "lat": 41.699727777777774,
+          "lon": -87.40010277777779,
+          "alt_ft": 10569.81138882014,
+          "kind": "fix",
+          "fix": "LAACY",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 38.41494844243523,
+          "lat": 41.78696111111111,
+          "lon": -87.49769166666667,
+          "alt_ft": 10138.824048081764,
+          "kind": "fix",
+          "fix": "IZARD",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 39.99768812844073,
+          "lat": 41.88834166666667,
+          "lon": -87.6102361111111,
+          "alt_ft": 9639.815295148157,
+          "kind": "fix",
+          "fix": "CABIJ",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 41.72905987979223,
+          "lat": 41.88433055555556,
+          "lon": -87.80179722222222,
+          "alt_ft": 9098.685825730456,
+          "kind": "fix",
+          "fix": "MONKZ",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 43.43167883261796,
+          "lat": 41.884483333333336,
+          "lon": -87.98855,
+          "alt_ft": 8571.331422379315,
+          "kind": "fix",
+          "fix": "JORJO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 46.0778729141929,
+          "lat": 41.87466111111111,
+          "lon": -88.275175,
+          "alt_ft": 7761.039389414753,
+          "kind": "fix",
+          "fix": "POSSM",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 49.58808334360617,
+          "lat": 42.04994473921184,
+          "lon": -87.98354311678773,
+          "alt_ft": 6703.435187958818,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 54.52830758279116,
+          "lat": 42.30129375120347,
+          "lon": -87.70966591537399,
+          "alt_ft": 5478.0672951467495,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 55.17163001688783,
+          "lat": 42.275072068243055,
+          "lon": -87.6660945828102,
+          "alt_ft": 5320.465453565415,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 56.48542183055274,
+          "lat": 42.19133055555555,
+          "lon": -87.68125277777779,
+          "alt_ft": 5000.0,
+          "kind": "final",
+          "fix": "NOLEN",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 59.89524384040402,
+          "lat": 42.05823888888889,
+          "lon": -87.82920555555555,
+          "alt_ft": 2200.0,
+          "kind": "final",
+          "fix": "RIDGE",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 62.0,
+          "lat": 41.997501373291016,
+          "lon": -87.89640045166016,
+          "alt_ft": 697.0,
+          "kind": "threshold",
+          "fix": "RW22R",
+          "src": "cifp",
+          "alt_src": "constraint"
+        }
+      ]
+    },
+    {
+      "callsign": "OO5570",
+      "wave": true,
+      "runway": "22R",
+      "appears_min": 77.15777676036247,
+      "points": [
+        {
+          "t_min": 77.15777676036247,
+          "lat": 41.20942777777778,
+          "lon": -88.80755277777777,
+          "alt_ft": 14500.0,
+          "kind": "entry",
+          "fix": "TRICH",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 80.32404008412324,
+          "lat": 41.511830555555555,
+          "lon": -88.70901666666667,
+          "alt_ft": 12000.0,
+          "kind": "fix",
+          "fix": "BENKY",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 81.53903376048365,
+          "lat": 41.566125,
+          "lon": -88.57111944444443,
+          "alt_ft": 11497.400643405832,
+          "kind": "fix",
+          "fix": "NEWRK",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 83.82413820596344,
+          "lat": 41.71266111111112,
+          "lon": -88.35733611111111,
+          "alt_ft": 10563.13277500411,
+          "kind": "fix",
+          "fix": "AHSTN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 86.30733324592158,
+          "lat": 41.88551666666667,
+          "lon": -88.15005833333333,
+          "alt_ft": 9563.95703206637,
+          "kind": "fix",
+          "fix": "PETAH",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 87.76817320951909,
+          "lat": 41.884483333333336,
+          "lon": -87.98855,
+          "alt_ft": 9045.759927498471,
+          "kind": "fix",
+          "fix": "JORJO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 89.47336690291063,
+          "lat": 41.88433055555556,
+          "lon": -87.80179722222222,
+          "alt_ft": 8446.582627137408,
+          "kind": "fix",
+          "fix": "MONKZ",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 92.3524970354275,
+          "lat": 41.88371388888889,
+          "lon": -87.49076388888889,
+          "alt_ft": 7448.655204167944,
+          "kind": "fix",
+          "fix": "TONIE",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 95.1682870669898,
+          "lat": 42.02377086922158,
+          "lon": -87.72348996055902,
+          "alt_ft": 6489.1656578106895,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 98.56765514281058,
+          "lat": 42.19640701936183,
+          "lon": -87.53538058511883,
+          "alt_ft": 5532.518803537484,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 99.21095387726054,
+          "lat": 42.22262870232224,
+          "lon": -87.57895191768262,
+          "alt_ft": 5353.317925873582,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": 100.48542183055274,
+          "lat": 42.19133055555555,
+          "lon": -87.68125277777779,
+          "alt_ft": 5000.0,
+          "kind": "final",
+          "fix": "NOLEN",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 103.89524384040402,
+          "lat": 42.05823888888889,
+          "lon": -87.82920555555555,
+          "alt_ft": 2200.0,
+          "kind": "final",
+          "fix": "RIDGE",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": 106.0,
+          "lat": 41.997501373291016,
+          "lon": -87.89640045166016,
+          "alt_ft": 697.0,
+          "kind": "threshold",
+          "fix": "RW22R",
+          "src": "cifp",
+          "alt_src": "constraint"
+        }
+      ]
+    },
+    {
+      "callsign": "MQ3309",
+      "wave": false,
+      "runway": "22R",
+      "appears_min": -73.31416529812238,
+      "points": [
+        {
+          "t_min": -73.31416529812238,
+          "lat": 41.28635,
+          "lon": -89.27584444444445,
+          "alt_ft": 21500.0,
+          "kind": "entry",
+          "fix": "BYLAW",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": -68.67595991587677,
+          "lat": 41.511830555555555,
+          "lon": -88.70901666666667,
+          "alt_ft": 12000.0,
+          "kind": "fix",
+          "fix": "BENKY",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": -67.46096623951635,
+          "lat": 41.566125,
+          "lon": -88.57111944444443,
+          "alt_ft": 11497.400643405832,
+          "kind": "fix",
+          "fix": "NEWRK",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -65.17586179403656,
+          "lat": 41.71266111111112,
+          "lon": -88.35733611111111,
+          "alt_ft": 10563.13277500411,
+          "kind": "fix",
+          "fix": "AHSTN",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -62.69266675407842,
+          "lat": 41.88551666666667,
+          "lon": -88.15005833333333,
+          "alt_ft": 9563.95703206637,
+          "kind": "fix",
+          "fix": "PETAH",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -61.23182679048091,
+          "lat": 41.884483333333336,
+          "lon": -87.98855,
+          "alt_ft": 9045.759927498471,
+          "kind": "fix",
+          "fix": "JORJO",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -59.52663309708938,
+          "lat": 41.88433055555556,
+          "lon": -87.80179722222222,
+          "alt_ft": 8446.582627137408,
+          "kind": "fix",
+          "fix": "MONKZ",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -56.647502964572496,
+          "lat": 41.88371388888889,
+          "lon": -87.49076388888889,
+          "alt_ft": 7448.655204167943,
+          "kind": "fix",
+          "fix": "TONIE",
+          "src": "cifp",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -53.83171293301021,
+          "lat": 42.02377086922158,
+          "lon": -87.72348996055902,
+          "alt_ft": 6489.1656578106895,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -50.432344857189435,
+          "lat": 42.19640701936183,
+          "lon": -87.53538058511883,
+          "alt_ft": 5532.518803537483,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -49.78904612273948,
+          "lat": 42.22262870232224,
+          "lon": -87.57895191768262,
+          "alt_ft": 5353.317925873582,
+          "kind": "vector",
+          "src": "synth",
+          "alt_src": "interp"
+        },
+        {
+          "t_min": -48.51457816944726,
+          "lat": 42.19133055555555,
+          "lon": -87.68125277777779,
+          "alt_ft": 5000.0,
+          "kind": "final",
+          "fix": "NOLEN",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": -45.10475615959598,
+          "lat": 42.05823888888889,
+          "lon": -87.82920555555555,
+          "alt_ft": 2200.0,
+          "kind": "final",
+          "fix": "RIDGE",
+          "src": "cifp",
+          "alt_src": "constraint"
+        },
+        {
+          "t_min": -43.0,
+          "lat": 41.997501373291016,
+          "lon": -87.89640045166016,
+          "alt_ft": 697.0,
+          "kind": "threshold",
+          "fix": "RW22R",
+          "src": "cifp",
+          "alt_src": "constraint"
+        }
+      ]
+    }
+  ],
+  "ground": [],
+  "conflicts": []
+}
