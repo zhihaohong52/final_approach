@@ -11,6 +11,7 @@ import { Strips } from "./components/Strips";
 import { Surface, type RejectedGround } from "./components/Surface";
 import { agentName, clock, clockSec, dateLabel, signed } from "./format";
 import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
+import { vetoConflicts } from "./veto";
 
 const SCAN_S = SCAN_MIN * 60;       // the radar picture updates once per antenna revolution
 const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side from this width
@@ -328,16 +329,21 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
     }, 150);
     return () => { clearTimeout(timer); ctl.abort(); };
   }, [wantFetch, shownKey, wave?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // a rejected move: one /api/trajectories request (the engine applies the move to the plan it was tried on) for the
-  // failing ground conflicts it would have caused; the surface shows them briefly, as the timeline flashes the slot
+  // a move the engine vetoed for ATC-TAXI-CONFLICT: one /api/trajectories request (the engine applies the move) for
+  // the failing ground conflicts behind that veto; the surface shows them briefly, as the timeline flashes the slot.
+  // Only a taxi-conflict veto is drawn, and only the conflicts of the flights that veto names: the map never blames
+  // the ground for a veto the engine made on another rule.
+  // The base is an approximation: the table on screen when the rejection arrived. The engine tried the move on its
+  // own working plan, which in turn 1 is that table, but from turn 2 starts from the incumbent (not the last
+  // AGENT_TURN proposal shown here), and also includes the moves the agent applied earlier in the same turn.
   const canRejectPaths = !!geo?.surface && !!wave && !noPaths;
   useEffect(() => {
     const base = rejectBase.current;
-    if (!rejection || !canRejectPaths || !base) { setRejectGround(null); return; }
+    if (!rejection || !canRejectPaths || !base || !vetoConflicts(rejection.violations)) { setRejectGround(null); return; }
     const ctl = new AbortController();
-    const { seq, move } = rejection;
+    const { seq, move, violations } = rejection;
     api.postTrajectories(wave!.id, base, ctl.signal, move)
-      .then((set) => setRejectGround(set ? { seq, label: move.label, conflicts: set.conflicts.filter((c) => !c.kind) } : null))
+      .then((set) => setRejectGround(set ? { seq, label: move.label, rule: RULE_NAME["ATC-TAXI-CONFLICT"], conflicts: vetoConflicts(violations, set.conflicts) ?? [] } : null))
       .catch((e) => { if ((e as Error).name !== "AbortError") { console.warn("rejection paths: request failed", e); setRejectGround(null); } });
     return () => ctl.abort();
   }, [rejection?.seq, canRejectPaths]); // eslint-disable-line react-hooks/exhaustive-deps

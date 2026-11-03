@@ -50,7 +50,7 @@ interface Props {
 
 /** The failing ATC-TAXI-CONFLICT entries of the plan a rejected move would have produced (POST /api/trajectories
  *  with that move), keyed by the stream message that carried the rejection. */
-export interface RejectedGround { seq: number; label: string; conflicts: TrajectorySet["conflicts"] }
+export interface RejectedGround { seq: number; label: string; rule: string; conflicts: TrajectorySet["conflicts"] }
 
 /** Everything static about the surface, in metres around the field's centre. Computed once per wave. */
 function prepare(s: Surf) {
@@ -147,8 +147,8 @@ const rwEndBox = (x: number, y: number, id: string): Box => [x - id.length * 3.4
 
 /** Runway-end labels on screen: each designator beyond the end it is landed from, 14 px out along the runway;
  *  one that would overlap a label already placed (close parallels: 18R/18L) steps further out, 16 px at a time,
- *  and is dropped after three tries, as is a second label of the same name next to the first (a runway OSM maps
- *  twice). Labels off the map or under the key (right of keyX, above top) are left out.
+ *  and is dropped after three tries, as is a second label of a designator already placed (a runway OSM maps
+ *  twice). Labels off the map, in the bottom key band or under the key (right of keyX, above top) are left out.
  *  `xy` is the text's centre; shared by the airfield layer and the data-block placement, so they agree. */
 function runwayEnds(g: Prepared, P: (q: XY) => XY, W: number, H: number, top: number, keyX: number) {
   const out: { key: string; id: string; xy: XY; box: Box }[] = [];
@@ -160,8 +160,8 @@ function runwayEnds(g: Prepared, P: (q: XY) => XY, W: number, H: number, top: nu
       const a = P(end), b = P(other), L = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
       for (const off of [14, 30, 46]) {
         const xy: XY = [a[0] + ((a[0] - b[0]) / L) * off, a[1] + ((a[1] - b[1]) / L) * off];
-        if (xy[0] < -40 || xy[0] > W + 40 || xy[1] < -40 || xy[1] > H + 40 || (xy[0] + 16 > keyX && xy[1] < top)) break;
-        if (out.some((o) => o.id === id && Math.hypot(o.xy[0] - xy[0], o.xy[1] - xy[1]) < 40)) break;   // OSM maps some runways twice
+        if (xy[0] < -40 || xy[0] > W + 40 || xy[1] < -40 || xy[1] + 8 > H - BOTTOM || (xy[0] + 16 > keyX && xy[1] < top)) break;
+        if (out.some((o) => o.id === id)) break;   // a designator is unique on an airport: OSM maps some runways twice
         const box = rwEndBox(xy[0], xy[1] + 4, id);
         if (out.some((o) => overlap(o.box, box) > 0)) continue;
         out.push({ key: `${i}-${id}`, id, xy, box });
@@ -270,12 +270,13 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
     return {
       waits: new Map(ground.map((x) => [x.callsign, waitsWithDir(g.pj, x.points, x.waits)])),
       crossings: crossingsOf(g, ground.filter((x) => x.src !== "synth"), false),   // a synthesized straight line crosses nothing real (spec §6.4)
-      conflicts: traj.conflicts.map((c) => ({ ...c, xy: g.pj(c.lat, c.lon) })),
+      conflicts: atOnce(traj.conflicts).map((c) => ({ ...c, xy: g.pj(c.lat, c.lon) })),
     };
   }, [g, traj]);
   // every crossing, the plan's and the fixed traffic's, in time order: a tick finds its window by binary search
   const crossings = useMemo(() => [...(traffic?.crossings ?? []), ...(plan?.crossings ?? [])].sort((a, b) => a.t - b.t), [traffic, plan]);
   const [hover, setHover] = useState<Hover>(null);
+  const [faded, setFaded] = useState<number | null>(null);   // the rejection whose flash has run its course
   const attribution = surf?.attribution || "© OpenStreetMap contributors";
 
   if (!surf) return <div ref={box} className="surface-map empty-surface"><p className="empty">Surface not available for this wave.</p></div>;
@@ -400,10 +401,15 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   const view: Box = [0, top, W, H - BOTTOM];
   const taken: Box[] = runwayEnds(g, P, W, H, top, keyX).map((e) => e.box);
   // only the selected and focus flights' stands are labelled; the others show their label on hover
-  const standLabels = new Map(usedStands.filter(({ x }) => x.callsign === selected || x.callsign === focus).map(({ st, x }) => {
+  // (the selected flight's first; one that would overlap a label already placed is left to hover)
+  const standLabels = new Map<string, { cs: string; box: Box }>();
+  for (const { st, x } of usedStands.filter(({ x }) => x.callsign === selected || x.callsign === focus)
+    .sort((p, q) => Number(q.x.callsign === selected) - Number(p.x.callsign === selected))) {
     const [px, py] = P(st.xy), name = st.gate ?? st.id;
-    return [st.id, { cs: x.callsign, box: [px + sr + 2, py - 6, px + sr + 4 + name.length * 6.6, py + 8] as Box }];
-  }));
+    const box: Box = [px + sr + 2, py - 6, px + sr + 4 + name.length * 6.6, py + 8];
+    if ([...standLabels.values()].some((l) => overlap(l.box, box) > 0) || taken.some((b) => overlap(b, box) > 0)) continue;
+    standLabels.set(st.id, { cs: x.callsign, box });
+  }
   taken.push(...[...standLabels.values()].map((l) => l.box));
   // data blocks in priority order: selected, focus, then the rest; each takes the first free corner
   const rank = (cs: string) => (cs === selected ? 0 : cs === focus ? 1 : 2);
@@ -522,10 +528,10 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
         </g>
         {/* a vetoed move's ground conflicts flash red and fade, like the timeline's rejection flash (keyed on the
             message, so each rejection replays it) */}
-        {rejected && rejected.conflicts.length > 0 && (
-          <g key={rejected.seq} className="sf-conflict sf-reject">
-            {rejected.conflicts.map((c) => <ConflictMark key={hoverKey(c)} c={{ ...c, xy: g.pj(c.lat, c.lon) }} P={P} info={false} onHover={() => {}} />)}
-            <text className="sf-reject-note" x={16} y={top - 8}>{`Vetoed: ${icaoText(rejected.label)} · taxi conflict`}</text>
+        {rejected && rejected.seq !== faded && rejected.conflicts.length > 0 && (
+          <g key={rejected.seq} className="sf-conflict sf-reject" onAnimationEnd={() => setFaded(rejected.seq)}>
+            {atOnce(rejected.conflicts).map((c) => <ConflictMark key={hoverKey(c)} c={{ ...c, xy: g.pj(c.lat, c.lon) }} P={P} info={false} onHover={() => {}} />)}
+            <text className="sf-reject-note" x={16} y={top - 8}>{`Vetoed: ${icaoText(rejected.label)} · ${rejected.rule}`}</text>
           </g>
         )}
         {hover && shownKeys.has(hover.key) && (() => {
@@ -574,6 +580,18 @@ function headingAt(pj: Prepared["pj"], points: TrackPoint[], seg: number): numbe
 }
 
 const waitText = (cs: string, w: Wait) => `${icao(cs)} · ${w.reason} · ${(w.to_min - w.from_min).toFixed(1)} min`;
+
+/** One mark per spot: failing conflicts at the same place (to ~1 m) are merged, their details joined. */
+function atOnce(cs: Conflict[]): Conflict[] {
+  const out: Conflict[] = [], at = new Map<string, number>();
+  for (const c of cs) {
+    const k = c.kind ? null : `${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
+    const i = k == null ? undefined : at.get(k);
+    if (i === undefined) { if (k != null) at.set(k, out.length); out.push(c); continue; }
+    if (!out[i].detail.includes(c.detail)) out[i] = { ...out[i], detail: `${out[i].detail} · ${c.detail}` };
+  }
+  return out;
+}
 
 const hoverKey = (c: Conflict) => `c-${c.kind ?? "fail"}-${c.callsign}-${c.fixed ?? ""}-${c.at_min}`;
 
