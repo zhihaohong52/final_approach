@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from backend.wave import surface
+from backend.wave import airlines, surface
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Wave, WaveFlight
 
 # ---------------------------------------------------------------- physical constants
@@ -35,6 +35,9 @@ DIVERT_FUEL_TERM = 0.5       # PILOT: fuel term for a diversion (fuel is safe bu
 W_ATC = {"holding": 0.45, "runway_load": 0.25, "taxi": 0.15, "diversions": 0.15}
 W_PILOT = {"fuel": 0.35, "delay": 0.25, "connections": 0.30, "divert": 0.10}
 W_GROUND = {"overtime": 0.35, "turnaround": 0.35, "reassignment": 0.20, "bussing": 0.10}
+# AIRLINE: the PILOT terms plus next departure, averaged over the airline's own flights (spec §3.2)
+W_AIRLINE = {"fuel": 0.30, "delay": 0.25, "connections": 0.25, "next_departure": 0.10, "divert": 0.10}
+FOCUS_WEIGHT = 1.0   # no extra weight for the disrupted flight (spec §7): the fairness floor protects each flight
 
 
 def fuel_info(f: WaveFlight) -> tuple[float, str | None, float | None, float]:
@@ -79,6 +82,16 @@ def focus_callsign(wave: Wave) -> str:
 def negotiators(wave: Wave) -> list[str]:
     """Exactly three negotiating agents (rules_of_play): ATC, the disruption flight's Pilot, Ground."""
     return ["ATC", f"PILOT:{focus_callsign(wave)}", "GROUND"]
+
+
+def voters(wave: Wave) -> list[str]:
+    """Voting agents: ATC, one AIRLINE agent per airline in the wave (codes sorted), GROUND."""
+    return ["ATC", *(f"AIRLINE:{c}" for c in airlines.groups(wave)), "GROUND"]
+
+
+def pilots(wave: Wave) -> list[str]:
+    """One PILOT per wave flight, in wave order (they never vote; spec §3.3)."""
+    return [f"PILOT:{f.callsign}" for f in wave.flights]
 
 
 def taxi_in_ref(wave: Wave, callsign: str) -> float:
@@ -255,6 +268,28 @@ def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
                 "turnaround": -W_GROUND["turnaround"] * _clip(nxt / NEXT_DEP_CAP_MIN),
                 "reassignment": -W_GROUND["reassignment"] * _clip(reassign / n),
                 "bussing": -W_GROUND["bussing"] * _clip(bus / n)}
+    if agent_id.startswith("AIRLINE:"):
+        code = agent_id.split(":", 1)[1]
+        own = airlines.groups(wave).get(code)
+        if not own:
+            raise ValueError(f"unknown agent {agent_id!r}")
+        focus = focus_callsign(wave)
+        acc = dict.fromkeys(W_AIRLINE, 0.0)
+        wsum = 0.0
+        for cs in own:
+            a, f, m = plan.get(cs), wave.flight(cs), mm[cs]
+            wt = FOCUS_WEIGHT if cs == focus else 1.0
+            if a.action == "divert":
+                fuel_pen = DIVERT_FUEL_TERM
+            else:
+                fuel_pen = _clip(m.fuel_kg / (max(fuel_info(f)[0], 1.0) * hold_burn(f)))
+            acc["fuel"] += wt * fuel_pen
+            acc["delay"] += wt * _clip(m.delay_min / DELAY_CAP_MIN)
+            acc["connections"] += wt * (_clip(1 - m.pax_protected / m.pax_total) if m.pax_total else 0.0)
+            acc["next_departure"] += wt * _clip(m.next_dep_delay_min / NEXT_DEP_CAP_MIN)
+            acc["divert"] += wt * (1.0 if a.action == "divert" else 0.0)
+            wsum += wt
+        return {k: -W_AIRLINE[k] * acc[k] / wsum for k in W_AIRLINE}
     if agent_id.startswith("PILOT:"):
         cs = agent_id.split(":", 1)[1]
         a = plan.get(cs)
