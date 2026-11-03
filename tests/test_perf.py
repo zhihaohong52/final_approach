@@ -12,6 +12,15 @@ def test_coverage_rows_and_totals():
         "JFK", "LAS", "LAX", "LGA", "MCO", "MDW", "MIA", "MSP", "ORD", "PHL", "PHX", "SAN", "SEA", "SFO", "SLC", "TPA"}
 
 
+def test_surface_tier():
+    from scripts.geo_coverage import _surface_tier
+    stands = [{"id": "s1"}]
+    assert _surface_tier(None) == "none"
+    assert _surface_tier({"stands": stands, "quality": {"reach_pct": {}}}) == "generic"
+    assert _surface_tier({"stands": stands, "quality": {"reach_pct": {"10": 0.99, "28": 0.79}}}) == "generic"
+    assert _surface_tier({"stands": stands, "quality": {"reach_pct": {"10": 0.99, "28": 0.8}}}) == "real"
+
+
 def test_ord_surface_rss_under_60mb():
     # fresh interpreter: ru_maxrss is a high-water mark, so an in-process delta can read 0
     import subprocess, sys

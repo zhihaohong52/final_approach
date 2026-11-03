@@ -3,13 +3,14 @@
 
 Usage: python3 scripts/geo_coverage.py        (writes data/ref/GEO_COVERAGE.md)
 """
+import gzip
+import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from atm import datastore  # noqa: E402
-from atm.datastore import FileStore, set_store  # noqa: E402
+from atm.datastore import FileStore  # noqa: E402
 from atm.geo import store  # noqa: E402
 from atm.wave.icao import iata_for  # noqa: E402
 from scripts.fetch_cifp import airports  # noqa: E402
@@ -27,24 +28,18 @@ def _surface_tier(doc: dict | None) -> str:
     return "generic"
 
 
+def _doc(blob: bytes | None) -> dict | None:
+    return None if blob is None else json.loads(gzip.decompress(blob))
+
+
 def coverage() -> list[dict]:
     """Always reads the derived files (FileStore), never a database, so the report is the same on every machine."""
-    prev = datastore._store   # not get_store(): that would open the database pool when one is configured
-    set_store(FileStore())
-    try:
-        return _coverage()
-    finally:
-        set_store(prev)
-        store.load_procedures.cache_clear()
-        store.load_surface.cache_clear()
-
-
-def _coverage() -> list[dict]:
+    fs = FileStore()
     rows = []
     for icao in airports():
         iata = iata_for(icao)
-        proc = store.load_procedures(icao)
-        surf = store.load_surface(icao)
+        proc = _doc(fs.procedures(icao))
+        surf = _doc(fs.surface(icao))
         rows.append({
             "iata": iata, "icao": icao,
             "procedures_tier": "none" if proc is None else proc["header"].get("tier", "none"),
@@ -53,8 +48,6 @@ def _coverage() -> list[dict]:
             # database-only dataset: the constant, not file presence, so the report is identical on every machine
             "movements": iata in store.MOVEMENT_AIRPORTS,
         })
-        store.load_procedures.cache_clear()
-        store.load_surface.cache_clear()
     return sorted(rows, key=lambda r: r["iata"])
 
 
