@@ -44,7 +44,7 @@ def test_benchmark_wave_builds_and_negotiates(wid):
     w = build.build_wave(wid)
     _invariants(w, fcfs_plan(w))
     r = graph.negotiate_wave(w, "formulas")
-    if r["outcome"] == "agreed":
+    if r["outcome"] == "consensus":                             # the engine's word for an agreed plan
         assert r["evaluation"]["feasible"]                      # no failed hard rule in an agreed plan
     _invariants(w, plan_from_dicts(r["final_plan"]["assignments"], w))
 
