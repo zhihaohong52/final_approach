@@ -119,6 +119,7 @@ def _replay_files() -> list[Path]:
 def _load_replays(conn) -> int:
     from psycopg.types.json import Jsonb
     files = _replay_files()
+    keys: list[tuple[str, str]] = []
     with conn.cursor() as cur:
         for f in files:
             body = json.loads(f.read_text())
@@ -126,6 +127,11 @@ def _load_replays(conn) -> int:
                 "insert into eval.replays (wave_id, engine_version, body) values (%s, %s, %s) "
                 "on conflict (wave_id, engine_version) do update set body = excluded.body, recorded_at = now()",
                 (f.stem, body.get("engine_version", "v2"), Jsonb(body)))
+            keys.append((f.stem, body.get("engine_version", "v2")))
+        # only the recorded files stay: older engine versions and dropped waves take storage and are never served
+        cur.execute("delete from eval.replays where (wave_id, engine_version) not in "
+                    "(select * from unnest(%s::text[], %s::text[]))",
+                    ([k[0] for k in keys], [k[1] for k in keys]))
     return len(files)
 
 
@@ -775,6 +781,8 @@ SEEDERS: dict[str, Seeder] = {s.name: s for s in [
     Seeder("coverage", _files_coverage, _load_coverage),
     Seeder("raw", _files_raw, _load_raw, budget_aware=True),
 ]}
+# raw.* (about 120 MB) is never read by the app; it loads only when named
+DEFAULT_SEEDERS = [n for n in SEEDERS if n != "raw"]
 
 
 # ------------------------------------------------------------------ driver
@@ -851,7 +859,7 @@ def _drop_raw(conn) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("datasets", nargs="*", help=f"default: all of {', '.join(SEEDERS)}")
+    ap.add_argument("datasets", nargs="*", help=f"default: {', '.join(DEFAULT_SEEDERS)} (raw only when named)")
     ap.add_argument("--check", action="store_true", help="report stale datasets without loading; exit 1 if any")
     ap.add_argument("--budget-mb", type=int, default=750, help="stop when pg_database_size exceeds this")
     ap.add_argument("--drop", choices=["raw"], help="drop the raw.* tables and exit")
@@ -872,7 +880,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.drop:
                 _drop_raw(conn)
                 return 0
-            return run(conn, args.datasets or list(SEEDERS), args.check, args.budget_mb)
+            return run(conn, args.datasets or DEFAULT_SEEDERS, args.check, args.budget_mb)
     except psycopg.Error as e:   # never echo the URL
         print(f"database error ({e.sqlstate or 'no sqlstate'}): {str(e).splitlines()[0] if str(e) else type(e).__name__}",
               file=sys.stderr)

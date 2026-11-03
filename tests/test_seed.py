@@ -4,6 +4,7 @@ from scripts import db_seed
 def test_default_order_puts_raw_last():
     names = list(db_seed.SEEDERS)
     assert names[-1] == "raw" and names.index("replays") < names.index("raw")
+    assert "raw" not in db_seed.DEFAULT_SEEDERS and len(db_seed.DEFAULT_SEEDERS) == len(names) - 1
 
 def test_no_url_exits_2(capsys):
     assert db_seed.main(["--check"]) == 2
@@ -125,14 +126,19 @@ def test_replays_seeded_with_their_engine_version(tmp_path, monkeypatch):
     (tmp_path / "A.json").write_text(json.dumps({"messages": [], "result": {}}))
     (tmp_path / "B.json").write_text(json.dumps({"engine_version": "v3-air", "messages": [], "result": {}}))
     monkeypatch.setattr(db_seed, "_replay_files", lambda: sorted(tmp_path.glob("*.json")))
-    seen = []
+    seen, pruned = [], []
 
     class Cur:
         def __enter__(self): return self
         def __exit__(self, *a): pass
-        def execute(self, sql, params): seen.append(params[:2])
+        def execute(self, sql, params):
+            if sql.startswith("delete"):
+                pruned.append(params)
+            else:
+                seen.append(params[:2])
 
     class Conn:
         def cursor(self): return Cur()
     assert db_seed._load_replays(Conn()) == 2
     assert seen == [("A", "v2"), ("B", "v3-air")]
+    assert pruned == [(["A", "B"], ["v2", "v3-air"])]   # every other (wave, version) row is deleted
