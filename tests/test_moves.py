@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from backend.wave import rules
+from backend.wave.rules import strip_of
 from backend.wave.model import Move, QueueArrival
 from backend.wave.moves import _move, apply, fcfs_plan, legal_moves
 from backend.wave.utility import evaluate
@@ -352,3 +353,43 @@ def test_unknown_airline_rejected():
     p = fcfs_plan(w)
     with pytest.raises(ValueError):
         legal_moves(w, p, "AIRLINE:ZZ")
+
+
+def _edit(p, **per_cs):
+    for cs, kw in per_cs.items():
+        p = p.with_assignment(replace(p.get(cs), **kw))
+    return p
+
+
+def _dl_swaps(w, p):
+    return [m for m in legal_moves(w, p, "AIRLINE:DL") if m.kind == "swap_own"]
+
+
+def test_swap_own_rejects_non_adjacent_own_pair():
+    w = make_wave()
+    p = _edit(fcfs_plan(w), DL201={"slot_min": 9.0})     # AA302 (foreign wave flight, 8.5) now sits between
+    assert not _dl_swaps(w, p)
+    with pytest.raises(ValueError, match="adjacent"):
+        apply(w, p, _move("AIRLINE:DL", "swap_own", ["DL100", "DL201"], {"runway": "26R"}, "x"))
+
+
+def test_swap_own_with_foreign_callsign_rejected():
+    w = make_wave()
+    p = fcfs_plan(w)
+    with pytest.raises(ValueError, match="own flights"):
+        apply(w, p, _move("AIRLINE:DL", "swap_own", ["DL201", "AA302"], {"runway": "26R"}, "x"))
+
+
+def test_swap_own_not_offered_across_opposite_ends():
+    w = make_wave()
+    p = _edit(fcfs_plan(w), DL201={"runway": "08L"})      # same strip, other end
+    assert strip_of("08L") == strip_of("26R")
+    assert not _dl_swaps(w, p)
+
+
+def test_swap_own_offered_across_queue_flight():
+    w = make_wave()
+    p = _edit(fcfs_plan(w), DL201={"slot_min": 11.0}, AA302={"runway": "27L"})   # queue F99 at 10.0 between
+    sw = _dl_swaps(w, p)
+    assert [m.callsigns for m in sw] == [["DL100", "DL201"]]
+    apply(w, p, sw[0])

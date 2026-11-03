@@ -276,6 +276,22 @@ def _own_flights(wave: Wave, agent_id: str) -> list[str]:
     return list(airlines.groups(wave).get(agent_id.split(":", 1)[1], []))
 
 
+def _own_adjacent_pairs(wave: Wave, plan: JointPlan, own: set[str]) -> list[tuple[str, str, str]]:
+    """(c1, c2, end) for each pair of `own` flights adjacent among the wave flights of a strip's landing sequence
+    (queue flights are skipped, as for `swap_order`) and landing on the same runway end. The one adjacency rule
+    behind both the `swap_own` offer and its validation."""
+    out, seen = [], set()
+    for a in plan.assignments:
+        if a.action != "land" or not a.runway or strip_of(a.runway) in seen:
+            continue
+        seen.add(strip_of(a.runway))
+        seq = [x for x in strip_sequence(wave, plan, a.runway) if x[3]]
+        for (_, c1, _, _, e1), (_, c2, _, _, e2) in zip(seq, seq[1:]):
+            if e1 == e2 and c1 in own and c2 in own:
+                out.append((c1, c2, e1))
+    return out
+
+
 def _check_agent(wave: Wave, plan: JointPlan, agent_id: str) -> str:
     """Return the agent role (ATC|GROUND|PILOT|AIRLINE); ValueError for an unknown agent id."""
     if agent_id in ("ATC", "GROUND"):
@@ -411,17 +427,9 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
         if role == "PILOT":
             mv.append(_move(agent_id, "accept", own, {}, f"{own[0]} accepts current plan"))
         else:
-            mine = set(own)
-            seen = set()
-            for a in landing:
-                if not a.runway or strip_of(a.runway) in seen:
-                    continue
-                seen.add(strip_of(a.runway))
-                seq = [x for x in strip_sequence(wave, plan, a.runway) if x[3]]
-                for (_, c1, _, _, e1), (_, c2, _, _, e2) in zip(seq, seq[1:]):
-                    if e1 == e2 and c1 in mine and c2 in mine:
-                        mv.append(_move(agent_id, "swap_own", [c1, c2], {"runway": e1},
-                                        f"Slot swap {c1} ↔ {c2} on {e1} (airline substitution)"))
+            for c1, c2, e in _own_adjacent_pairs(wave, plan, set(own)):
+                mv.append(_move(agent_id, "swap_own", [c1, c2], {"runway": e},
+                                f"Slot swap {c1} ↔ {c2} on {e} (airline substitution)"))
             mv.append(_move(agent_id, "accept", own, {}, f"{agent_id} accepts current plan"))
     return mv
 
@@ -500,6 +508,9 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
     if k in ("swap_order", "swap_own") and asg[0].runway != asg[1].runway:
         raise ValueError(f"{k} needs both flights on the same runway: "
                          f"{cs[0]} on {asg[0].runway}, {cs[1]} on {asg[1].runway}")
+    if k == "swap_own" and not any(sorted(cs) == sorted(pr[:2]) for pr in
+                                   _own_adjacent_pairs(wave, plan, set(cs))):
+        raise ValueError(f"swap_own needs {cs[0]} and {cs[1]} adjacent in the wave landing order on one runway end")
     if k == "change_runway" and not move.params.get("runway"):
         raise ValueError("change_runway needs params.runway")
     if k == "hold":
@@ -529,6 +540,8 @@ def apply(wave: Wave, plan: JointPlan, move: Move) -> JointPlan:
     if k == "accept":
         return new
     if k in ("swap_order", "swap_own"):
+        # swap_own: re-slotting can shift later wave flights, so effects are not limited to the airline's own
+        # flights; the other agents' votes and the floors judge that, not this function.
         c1, c2 = cs
         a1, a2 = new.get(c1), new.get(c2)
         seq = [x[1] for x in strip_sequence(wave, new, a1.runway) if x[3]]
