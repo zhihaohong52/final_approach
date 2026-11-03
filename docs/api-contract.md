@@ -1,6 +1,6 @@
 # API contract: Disruption Negotiator v2 (wave mode)
 
-Status: **v2.0, 31 Oct 2026 13:40** (challenge rules_of_play: exactly 3 agents ATC / PILOT:<focus> / GROUND,
+Status: **v2.2 final, 4 Nov 2026** (additive over v2.1; engine `v3-traffic`; all v2.2 parts below are shipped and the samples in `frontend/src/api/samples/` are regenerated from them). Earlier history: **v2.0, 31 Oct 2026 13:40** (challenge rules_of_play: exactly 3 agents ATC / PILOT:<focus> / GROUND,
 one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`/`COUNTER`/`VOTE` superseded;
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;

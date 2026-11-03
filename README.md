@@ -183,6 +183,21 @@ Every change and assumption is returned in `result.limits`. Summary:
 | Taxi-in time (engine `v3-taxi`) | In-block = landing slot + runway occupancy time (roll to the first forward exit past the required roll) + unimpeded taxi on the OpenStreetMap taxiway graph from that exit to the gate's stand (gates bound to OSM stands; 20 kt, 10 kt on taxilanes and turns > 30°, + 30 s to park). Tiers: real (OSM route); generic (runway end missing from today's OSM, a wave below the 80 % surface quality gate, or an unbound gate: straight line runway midpoint to gate x1.4 at 15 kt); no geometry (no runway coordinates: 6 min near / 10 min far). Remote stand + 10 min bus; no taxiway closures. The time is unimpeded: no ramp, gate or queue waits until `ATC-TAXI-CONFLICT` schedules hold-shorts, so it sits below BTS `TAXI_IN`. Validation without fitting (benchmark focus flights on the real surface tier with a real `TAXI_IN`, ROT + routed taxi vs `TAXI_IN`): n 42, MAE 3.37 min, bias -2.78 min, per-airport table in `eval/BENCHMARK.md` (Taxi-in validation). Figures quoted here earlier were FCFS medians over all flights of the replay waves, not this validation | real data (OSM, ODbL); speeds, generic tier and 6/10 min fallback are assumptions |
 | Time base (engine `v3-time`) | BTS scheduled arrival (STA) is a gate (in-block) time. Earliest landing = STA + attributed BTS delays (late aircraft, carrier, weather, NAS) - taxi-in reference (the row's real `TAXI_IN`, else the airport's 2015 median over the challenge's delayed-flight rows, else 6 min). For a 2015 row that is the real wheels-on whenever the attributed delays sum to `ARRIVAL_DELAY` (security delay is not attributed). Delay = max(0, in-block - STA), also for `delay_vs_schedule_min`. Fixed-traffic arrivals land at their real wheels-on (STA + `ARRIVAL_DELAY` - `TAXI_IN`) but are still picked by scheduled time, so a late one can land hours after the window. Crew floors and `PLT-CREW-DUTY`'s "unavoidable" test use ROT + unimpeded routed taxi to the gate, minimised over the open runways. In-block uses that unimpeded routed taxi (see Taxi-in time), so the FCFS delay of a flight sits below its real BTS delay by (taxi-in reference - ROT - unimpeded taxi) when that is positive | real data (BTS `ARRIVAL_DELAY`, `WHEELS_ON`, `TAXI_IN`); 6 min fallback is an assumption |
 
+### Flight paths and the airport surface (engine `v3-traffic`)
+
+The plan is no longer only a table of slots. Every landing now has a flown path, and the same plan drives the radar and the surface map on one replay clock.
+
+- **Air.** Each flight flies a published route: the FAA CIFP 2611 STAR and approach (or a synthetic corner-post and downwind route where the airport has none, drawn dashed), at the terminal speed profile. Flights that lap enter a holding stack (1,000 ft levels, bottom-first exit) at the hold fix of its STAR (the first fix of the common route, else the last enroute-transition fix). The slot, the fuel burned in the hold and the lap count all come from that same path, so the radar draws what the engine used and nothing else.
+- **Ground.** After touchdown the flight rolls to the first forward exit past the required roll and taxis the fastest route on the OpenStreetMap taxiway graph to its bound stand. The real 2015 movements of the same hour (queue arrivals and departures) are scheduled once as fixed traffic, and each wave flight waits at a node or a runway hold until the headway, crossing gap and runway-vacate rules are met. Those waits are the amber bars on the surface map and they add to in-block time.
+- **Legality stays in the rule engine.** `ATC-HOLD-STACK` and `ATC-TAXI-CONFLICT` are deterministic rules like the other twelve (14 in all); no model decides whether a path is legal. Every point and segment carries `src: "cifp" | "osm" | "synth"` and synthesized parts are drawn dashed.
+- **Offline.** Procedures, surface and movements are derived files in `data/ref/` (and seeded into Postgres); the runtime never fetches CIFP, OSM or BTS.
+
+Screenshots (replay mode, no keys): the status-quo plan of `F2015-7053` with ASQ4125 (EV4125) in its hold at WATSN, and `F2015-75` at DFW with AAL2441 waiting to give way to AA2498.
+
+![Radar: ASQ4125 holding at WATSN, ORD F2015-7053](docs/screens/radar-holding.png)
+
+![Surface map: AAL2441 holds short (amber bar), DFW F2015-75](docs/screens/surface-hold-short.png)
+
 ## 4. Data and provenance
 
 | Layer | Source | Status |
@@ -194,13 +209,16 @@ Every change and assumption is returned in `result.limits`. Summary:
 | Airport capacity, turnaround, wake table, fuel and crew rules | challenge workbook (synthetic planning numbers) | given by the challenge |
 | Tail to aircraft type, wake category, gate size | FAA aircraft registry | real (US-registered tails) |
 | Gates and wide-body gates | OpenStreetMap, 10 hubs | real |
+| Arrival procedures (STARs, approaches, hold fixes) | FAA CIFP, cycle 2611, pinned (`scripts/fetch_cifp.py`) | real; **Procedures: FAA CIFP 2611, not for navigation** |
+| Airport surface (taxiways, runways, stands, holding positions) | OpenStreetMap via Overpass (`scripts/fetch_surface.py`), ODbL | real; **© OpenStreetMap contributors**, not for navigation |
+| Real ground traffic of the wave hour (arrivals, departures, taxi times) | BTS On-Time 2015 (`flights.csv` movements, `data/ref/movements2015`) | real |
 | Gate occupancy | seeded simulation | simulated, badged |
 | Fuel on board | seeded simulation | simulated, badged |
 | Crew shifts | seeded simulation, anchored to the flight's actual delayed ETA | simulated, badged |
 | Passenger connections | seeded simulation | simulated, badged |
 | Two wide gates per hub where OSM has none | simulated | simulated, badged |
 
-Layers missing for a flight fall back to a generic model and are badged in the UI.
+Layers missing for a flight fall back to a generic model and are badged in the UI. Procedures: FAA CIFP 2611, not for navigation. The derived procedure and surface files are for this simulation only and are not for navigation. Map data © OpenStreetMap contributors (ODbL).
 
 ### Data: Postgres (Neon) with file fallback
 
@@ -228,7 +246,7 @@ python3 scripts/db_timings.py            # p50/p95 per path against the design b
 First production seed, in order:
 
 1. `python3 scripts/db_migrate.py`
-2. `python3 scripts/db_seed.py`. Careful: the default dataset list includes `runs_import`, which loads every run in your local `eval/runs/` folder into the production `live.runs`. Review or clean that folder first, or name the datasets explicitly and leave `runs_import` out (`python3 scripts/db_seed.py small workbook waves bts_arrivals metar_2024 iem_cache flights2015 disruptions_v1 replays benchmark v1_eval`).
+2. `python3 scripts/db_seed.py`. Careful: the default dataset list includes `runs_import`, which loads every run in your local `eval/runs/` folder into the production `live.runs`. Review or clean that folder first, or name the datasets explicitly and leave `runs_import` out (`python3 scripts/db_seed.py small workbook waves bts_arrivals metar_2024 iem_cache flights2015 disruptions_v1 replays benchmark v1_eval procedures surface movements2015`).
 3. `python3 scripts/db_seed.py --check` (must report no mismatches)
 4. In the Render dashboard set `DATABASE_URL_POOLED` (the pooler URL). Never set `DATABASE_URL` there.
 5. Redeploy.
@@ -241,11 +259,17 @@ Rollback: unset `DATABASE_URL_POOLED` in the Render dashboard and redeploy. The 
 
 `DATABASE_TEST_URL` is a separate `atm_test` database in the same Neon project (a Neon `test` branch also works); the live tests never touch the production database.
 
-Measured sizes (1 GB free limit): `atm_test` with all reference data 152 MB; the raw datasets add an estimated ~158 MB. When the build is finished, free that space: from the owner connection to the production database (`DATABASE_URL`), run `drop database atm_test;`.
+Measured sizes (1 GB free limit): `atm_test` with all reference data 152 MB; the raw datasets add an estimated ~158 MB (they load only when named). When the build is finished, free that space: from the owner connection to the production database (`DATABASE_URL`), run `drop database atm_test;`.
 
 Statement timeout: migration `0006` sets `statement_timeout = '5s'` on the role that runs it (the owner, which `DATABASE_URL_POOLED` uses for now), in that database only, so a runaway query from the app is cancelled after 5 s. It is a role setting because `SET` does not survive the pooler. `db_seed.py`, `db_migrate.py` and `db_dump_live.py` lift it to 0 on their own connections so long loads and exports finish. The limit also applies to your own sessions as the owner (Neon SQL editor, psql): run `set statement_timeout = 0;` first for manual maintenance. Apply `0006` to `atm_test` too (`python3 scripts/db_migrate.py --url-env DATABASE_TEST_URL`).
 
 Fallback behaviour: every read and write goes through `FallbackStore`. A failed or timed-out call is retried (except `record_decision` and `put_benchmark`, which are not idempotent), then served from files; three consecutive failures open a breaker for 60 s. `GET /api/config` never queries the database. Read its `store` object: `"backend": "postgres"` with `"degraded": false` is healthy. `"backend": "files"` with `"degraded": true` (and a `reason`) is the fallback: a database is configured but unreachable, and runs saved then are not persistent. `"backend": "files"` with `"degraded": false` means no database is configured. A write the database rejects (a constraint, bad data, a missing table or privilege) is kept in the files and shows as degraded, without opening the breaker; an empty (unseeded) table is served from files the same way.
+
+What changed in the v3 build:
+
+- **`raw.*` only when named.** The raw challenge tables (about 120 MB, never read by the app) are no longer in the default dataset list: `python3 scripts/db_seed.py raw` loads them, `--drop raw` removes them.
+- **`replays` prunes.** Seeding `replays` deletes the `eval.replays` rows whose `(wave_id, engine_version)` is not in `data/replay/`, so only the recorded files stay.
+- **Geometry is documents, not points.** The app reads one gzipped document per airport from `geo.procedures` and `geo.surface` (and `geo.movements2015_day` for the fixed traffic), seeded by the `procedures`, `surface` and `movements2015` datasets. Migration `0007` dropped the point tables (`geo.fixes`, `geo.stands`, `geo.osm_gates`, `geo.holding_positions`), `geo.coverage` and the PostGIS extension; nothing queries by location. The coverage report is the file `data/ref/GEO_COVERAGE.md` (`scripts/geo_coverage.py`).
 
 Compute hours: the free plan gives 100 CU-hours a month, which is 400 active hours at 0.25 CU. Compute suspends 5 minutes after the last query. Do not add a keep-alive, a timer query or a database call to the health check: a database that is never idle uses about 183 CU-hours a month and the budget is gone in about 16 days. If the budget runs out, the site keeps running on files (degraded).
 
@@ -316,7 +340,7 @@ Measured on 31 Oct 2026 from the OpenRouter key's usage counter before and after
 | Formulas mode | $0 | $0 | no model calls |
 | **Total, decision mode with brief** | **about $0.002** | **about $2** | |
 
-For scale: everything this key spent during the hackathon, including every benchmark arm, the 1,000-row and 100-row runs and the outage tests, came to about $6. Replays cost nothing (no model calls).
+For scale: everything this key spent during the hackathon, including every benchmark arm, the 1,000-row and 100-row runs and the outage tests, came to about $6. Replays cost nothing (no model calls). The path and surface layers add no model calls either: trajectories, taxi routes and the hold-short schedule are deterministic code, and `GET /api/wave/{id}/geo` and `POST /api/trajectories` are pure computation. The v3 benchmark records no cost (`cost_usd_per_wave` is 0.0, output tokens free, input cost not measured), so the figures above come from the 31 Oct measurement on the v2 call pattern.
 
 ### Demo replays
 
@@ -355,6 +379,8 @@ Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan
 - Alternate airports may be small airports.
 - p95 model latency is above the 1 s target.
 - Utility weights are design judgements, not calibrated to airline cost data. Wake separation is a time-based simplification.
+- Taxi validation bias: our taxi-in time (rollout + unimpeded routed taxi) is compared with BTS 2015 `TAXI_IN` on the focus flights (`eval/BENCHMARK.md`, 42 flights, mean bias -2.78 min). It runs low, on purpose and not corrected: BTS `TAXI_IN` includes ramp and gate waits that the model does not have (`rules.LIMITS` "taxi route": no ramp or gate waits, so it can sit below BTS TAXI_IN), and the 2015 stands are bound to today's OSM. The waits against fixed traffic are not in that comparison, and where a fixed route meets a departure stream head-on (DFW) the modelled time is above BTS, because the arrival cannot reroute.
+- Paths: ground traffic is fixed once per wave and not re-timed per plan; some runway ends open in 2015 are missing from today's OSM and use a straight-line generic taxi (`src: "synth"`).
 - Render free tier sleeps when idle.
 
 ## 8. Repo map and tests
@@ -365,23 +391,27 @@ backend/             backend
   decide.py        decision layer: model chain, timeout, breaker
   jev.py           Jev (TypeSafe) client
   mcp_server.py    read-only MCP tools
+  geo/             CIFP and OSM surface parsers, gate binding, loaders (via the datastore)
+  datastore/       Postgres (Neon) store, file fallback, seed datasets
   wave/            build, flights2015 (flights.csv waves), constraints (workbook limits), rules, moves, utility,
-                   graph, fallback, baseline, benchmark, narrate, replay
+                   graph, fallback, baseline, benchmark, narrate, replay,
+                   route, trajectory, holding, surface, ground_traffic, wavegeo (paths and taxi)
   (negotiation.py, plans.py, scenario.py, baseline.py, evaluate.py: earlier single-flight mode, kept for back-compat)
 frontend/        React dashboard (owned by the frontend teammate)
 data/            challenge2/ (flights.csv, workbook), waves index, replay/ demo runs
 eval/            benchmark outputs (BENCHMARK.md, benchmark.json)
 scripts/         data fetch/extract; split_flights2015.py, split_arrivals.py; make_samples.py (API samples);
                  db_migrate.py, db_seed.py, db_dump_live.py, db_timings.py (Postgres)
-docs/            design spec, API contract, graph.mmd
+docs/            design spec, API contract, graph.mmd, screens/ (README screenshots)
 tests/           pytest suite
 Dockerfile, render.yaml   deployment
 ```
 
-Tests (121):
+Tests (621 offline, plus the opt-in `live_db` ones):
 
 ```bash
-python3 -m pytest -q
+python3 -m pytest -q -m "not live_db"
+cd frontend && npm test && npx tsc --noEmit && npm run build
 ```
 
 ## License

@@ -3,6 +3,8 @@ Generated 2026-11-03T15:31:27+00:00
 
 Outcome means (delay, fuel, pax, overtime, rounds, agreement) are over waves that succeeded in every arm (50 of 50).
 
+Engine v3-traffic. Veto counts (failed checks in proposals the engine rejected, see "Engine veto counts"): `ATC-HOLD-STACK` 0 and `ATC-TAXI-CONFLICT` 0 in every arm; only `PLT-FUEL-RESERVE` vetoes remain (jev-1.14 8, d1-ultra 6, elephant-1 5, formula 10). The new rules still fire in evaluation: 6 status-quo waves are infeasible only on `ATC-TAXI-CONFLICT`, and every agreed plan passes it (0 rule violations in every arm). Zero vetoes means no agent proposed a plan with a stack or taxi conflict in this run, not that the rules are idle.
+
 ## Arms vs status quo
 
 | arm | ok waves | consensus % | rounds | fallback % | violations | delay min | fuel kg | pax prot % | overtime min | agree w/ formula % | Brier | p50 ms | p95 ms | error % |

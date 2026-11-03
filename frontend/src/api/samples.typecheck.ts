@@ -37,3 +37,7 @@ chk<Widen<WaveScenario>>({ ...wave, flights: [noCallsign, ...wave.flights.slice(
 
 // @ts-expect-error a flight with `callsign: 1`
 chk<Widen<WaveScenario>>({ ...wave, flights: [{ ...wave.flights[0], callsign: 1 }, ...wave.flights.slice(1)] });
+
+// A tuple element retyped: a hold polygon point is `[lat, lon]`, so a string coordinate must be rejected.
+// @ts-expect-error a `[lat, lon]` point whose latitude is a string
+chk<Widen<WaveGeo>>({ ...geo, procedures: { ...geo.procedures, holds: [{ ...geo.procedures.holds[0], polygon: [["41.5", -88.8]] }, ...geo.procedures.holds.slice(1)] } });

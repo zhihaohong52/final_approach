@@ -194,3 +194,10 @@ def test_xff_rightmost(client):
         assert client.post("/api/negotiate-wave", json=body, headers=h).status_code == 200
     assert client.post("/api/negotiate-wave", json=body, headers={"x-forwarded-for": "2.2.2.2, 9.9.9.9"}).status_code == 429
     assert client.post("/api/negotiate-wave", json=body, headers={"x-forwarded-for": "9.9.9.8"}).status_code == 200
+
+
+def test_readme_attributions():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    assert "Procedures: FAA CIFP 2611, not for navigation" in text
+    assert "© OpenStreetMap contributors" in text
