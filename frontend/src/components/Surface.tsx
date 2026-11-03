@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { TrajectorySet, WaveGeo } from "../api/types";
 import { icao } from "../callsign";
-import { endOfLine, bearing, positionAt, projector, secondFloor } from "../geo/track";
+import { activeWait, endOfLine, bearing, positionAt, projector, runwayCrossings, secondFloor, type TrackPoint, type Wait } from "../geo/track";
 import type { Tone } from "./Radar";
 
 // The airport surface, as on a ground-movement display: runways, taxiways and taxilanes, stands and runway
@@ -9,6 +9,10 @@ import type { Tone } from "./Radar";
 // place on the engine's taxi track at the replay clock. The picture refreshes once a second, like surface
 // movement radar (an assumption, see spec §9). Taxi tracks are the engine's own routes; a synthesized one
 // (no usable OSM graph for that runway end) is dashed. Positions are replayed from the plan, not surveillance.
+// The fixed 2015 traffic (WaveGeo.ground_traffic, the same for every plan) moves in grey. A taxiing aircraft that
+// is waiting shows an amber bar across its taxiway with the reason on hover (the fixed traffic's own waits are
+// dim); a runway flashes while someone crosses it; the shown plan's failing ATC-TAXI-CONFLICT checks are red
+// markers, and the informational ones (a fixed crosser or departure holding for a plan landing) are grey rings.
 const ZOOMS = [1, 2, 4];
 const TAXIWAY_M = 23;              // drawn width of a taxiway (ICAO code E/F), metres
 const TAXILANE_M = 12;             // apron taxilanes are narrower
@@ -18,10 +22,18 @@ const SNAP_M = 60;                 // a holding position takes its orientation f
 const LEAD = 18;                   // leader line, px
 const PAD = 22;
 const TOP = 84, BOTTOM = 64;       // bands kept clear of the field at the fitted zoom
+const WAIT_BAR_M = 50;             // a hold-short / give-way wait is drawn as a bar across the taxiway, metres
+const WAIT_AHEAD_M = 30;           // ... at the line the aircraft holds at, just ahead of its nose
+const FLASH_BEFORE = 0.1, FLASH_AFTER = 0.15;   // a crossed runway flashes from 6 s before to 9 s after the centreline, min
+const INFO_PAD = 1;                // an informational conflict shows from 1 min before to 1 min after its hold, min
+const AIRFRAME = "M0 -6L1.2 -1.5L6 1.5L6 2.6L1.2 1.6L0.9 4.6L2.4 5.8L2.4 6.6L0 6L-2.4 6.6L-2.4 5.8L-0.9 4.6L-1.2 1.6L-6 2.6L-6 1.5L-1.2 -1.5Z";
 
 type XY = [number, number];
 type Surf = NonNullable<WaveGeo["surface"]>;
 type Ground = TrajectorySet["ground"][number];
+type Traffic = NonNullable<WaveGeo["ground_traffic"]>;
+type Conflict = TrajectorySet["conflicts"][number];
+type Hover = { key: string; text: string; at: XY } | null;
 
 interface Props {
   geo: WaveGeo;
@@ -71,6 +83,48 @@ function prepare(s: Surf) {
 
 type Prepared = ReturnType<typeof prepare>;
 
+/** A wait with the direction of the track where it stands (unit vector in metres, east/north), so its bar can
+ *  be drawn across the taxiway. */
+type DirWait = Wait & { xy: XY; dir: XY | null };
+
+/** The track's direction at a wait: along the first segment of non-zero length at or after the wait starts
+ *  (the stop itself repeats a point), else the last one before it. */
+function waitsWithDir(pj: Prepared["pj"], points: TrackPoint[], waits: Wait[]): DirWait[] {
+  const xy = points.map((q) => pj(q.lat, q.lon));
+  return waits.map((w) => {
+    let i = 0;
+    while (i < points.length - 1 && points[i + 1].t_min <= w.from_min) i++;
+    const seg = (j: number): XY | null => {
+      const a = xy[j], b = xy[j + 1];
+      if (!a || !b) return null;
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      return L > 1 ? [(b[0] - a[0]) / L, (b[1] - a[1]) / L] : null;
+    };
+    let dir: XY | null = null;
+    for (let j = i; j < xy.length - 1 && !dir; j++) dir = seg(j);
+    for (let j = i - 1; j >= 0 && !dir; j--) dir = seg(j);
+    return { ...w, xy: pj(w.lat, w.lon), dir };
+  });
+}
+
+/** Runway crossings of a set of tracks, flattened in time order. */
+function crossingsOf(g: Prepared, tracks: { callsign: string; points: TrackPoint[] }[], fixed: boolean) {
+  const rws = g.runways.map((r) => r.xy);
+  return tracks.flatMap((x) => runwayCrossings(x.points.map((q): [number, number, number] => { const [e, n] = g.pj(q.lat, q.lon); return [q.t_min, e, n]; }), rws)
+    .map((c) => ({ ...c, cs: x.callsign, fixed })));
+}
+
+/** The fixed 2015 traffic, once per wave: tuples become track points and waits (with their direction), and its
+ *  runway crossings are found. Per tick only the tracks whose time span covers the clock are sampled. */
+function prepareTraffic(gt: Traffic, g: Prepared) {
+  const tracks = gt.tracks.filter((x) => x.points.length > 0).map((x) => {
+    const points: TrackPoint[] = x.points.map(([t_min, lat, lon]) => ({ t_min, lat, lon }));
+    const waits = waitsWithDir(g.pj, points, x.waits.map(([from_min, to_min, lat, lon, reason]) => ({ from_min, to_min, lat, lon, reason })));
+    return { callsign: x.callsign, kind: x.kind, runway: x.runway, stand: x.stand, points, waits, t0: points[0].t_min, t1: points[points.length - 1].t_min };
+  });
+  return { tracks, crossings: crossingsOf(g, tracks, true) };
+}
+
 /** Screen position of a point in metres: the view is the scale (px per metre) and the centre (metres). */
 const screen = (W: number, H: number, S: number, cx: number, cy: number) => (q: XY): XY =>
   [W / 2 + (q[0] - cx) * S, TOP + (H - TOP - BOTTOM) / 2 - (q[1] - cy) * S];
@@ -109,7 +163,7 @@ const Airfield = memo(function Airfield({ g, W, H, S, cx, cy }: { g: Prepared; W
             {(rw.width_m ?? RUNWAY_M) * S >= 5 && <polyline className="cl" points={polyline(P, rw.xy)} />}
           </g>
         ))}
-        {ends.filter((e) => inView(P(e.xy))).map((e) => { const [x, y] = P(e.xy); return <text key={e.id} className="rw-end" x={x} y={y + 4} textAnchor="middle">{e.id}</text>; })}
+        {ends.map((e, i) => ({ ...e, i })).filter((e) => inView(P(e.xy))).map((e) => { const [x, y] = P(e.xy); return <text key={`${e.i}-${e.id}`} className="rw-end" x={x} y={y + 4} textAnchor="middle">{e.id}</text>; })}
       </g>
       <g className="sf-hold">
         {g.holds.map((h) => {
@@ -153,6 +207,19 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   }, []);
   const surf = geo.surface;
   const g = useMemo(() => (surf && surf.status === "real" ? prepare(surf) : null), [surf]);
+  const gt = geo.ground_traffic ?? null;
+  const traffic = useMemo(() => (g && gt ? prepareTraffic(gt, g) : null), [g, gt]);
+  // the plan's own tracks: waits with their direction and runway crossings, once per trajectory set
+  const plan = useMemo(() => {
+    if (!g || !traj) return null;
+    const ground = traj.ground.filter((x) => x.points.length > 0);
+    return {
+      waits: new Map(ground.map((x) => [x.callsign, waitsWithDir(g.pj, x.points, x.waits)])),
+      crossings: crossingsOf(g, ground, false),
+      conflicts: traj.conflicts.map((c) => ({ ...c, xy: g.pj(c.lat, c.lon) })),
+    };
+  }, [g, traj]);
+  const [hover, setHover] = useState<Hover>(null);
   const attribution = surf?.attribution || "© OpenStreetMap contributors";
 
   if (!surf) return <div ref={box} className="surface-map empty-surface"><p className="empty">Surface not available for this wave.</p></div>;
@@ -175,13 +242,34 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   for (const x of tracks) {
     const now = positionAt(x.points, ts);
     if (!now) continue;                               // still airborne, or on blocks
-    const p = g.pj(now.lat, now.lon);
-    // heading: along the segment it is on; at the last point, along the one before
-    const i = Math.min(now.seg, x.points.length - 2);
-    const a = x.points[Math.max(0, i)], b = x.points[Math.max(0, i) + 1] ?? a;
-    const hdg = bearing(g.pj(a.lat, a.lon), g.pj(b.lat, b.lon));
-    acs.push({ x, p, hdg, seg: now.seg, tone: toneOf(x) });
+    acs.push({ x, p: g.pj(now.lat, now.lon), hdg: headingAt(g.pj, x.points, now.seg), seg: now.seg, tone: toneOf(x) });
   }
+  // the fixed 2015 traffic at this second: only the tracks whose span covers it are sampled
+  type Fx = { x: NonNullable<typeof traffic>["tracks"][number]; p: XY; hdg: number; wait: DirWait | null };
+  const fixedNow: Fx[] = [];
+  for (const x of traffic?.tracks ?? []) {
+    if (ts < x.t0 || ts > x.t1) continue;
+    const now = positionAt(x.points, ts);
+    if (now) fixedNow.push({ x, p: g.pj(now.lat, now.lon), hdg: headingAt(g.pj, x.points, now.seg), wait: activeWait(x.waits, ts) });
+  }
+  // waits in progress: the plan's (amber) and the fixed traffic's (dim)
+  const waitsNow = [
+    ...fixedNow.flatMap((f) => (f.wait ? [{ w: f.wait, cs: f.x.callsign, fixed: true }] : [])),
+    ...acs.flatMap((a) => { const w = a.tone === "fixed" ? null : activeWait(plan?.waits.get(a.x.callsign) ?? [], ts); return w ? [{ w, cs: a.x.callsign, fixed: false }] : []; }),
+  ];
+  // runways being crossed now: one flash per runway, the plan's crossers outrank the fixed traffic
+  const flashing = new Map<number, { fixed: boolean; who: string[] }>();
+  for (const c of [...(traffic?.crossings ?? []), ...(plan?.crossings ?? [])]) {
+    if (ts < c.t - FLASH_BEFORE || ts > c.t + FLASH_AFTER) continue;
+    const f = flashing.get(c.rw);
+    flashing.set(c.rw, { fixed: (f?.fixed ?? true) && c.fixed, who: [...(f?.who ?? []), c.cs] });
+  }
+  const blinkOn = Math.round(ts * 60) % 2 === 0;           // whole-second ticks: the flash alternates each second
+  // the plan's ATC-TAXI-CONFLICT entries: failing ones always (they are why it was rejected), informational near their time
+  const failing = (plan?.conflicts ?? []).filter((c) => !c.kind);
+  const info = (plan?.conflicts ?? []).filter((c) => c.kind && ts >= c.at_min - INFO_PAD && ts <= c.at_min + (c.hold_min ?? 0) + INFO_PAD);
+  // a hover label stays only while what it describes is on the map
+  const shownKeys = new Set([...waitsNow.map(({ w, cs }) => `w-${cs}-${w.from_min}`), ...failing.map(hoverKey), ...info.map(hoverKey)]);
 
   // ---------- view: fit the field, or zoom on the selected (else the disrupted) aircraft ----------
   const bw = Math.max(200, g.box.x1 - g.box.x0), bh = Math.max(200, g.box.y1 - g.box.y0);
@@ -235,6 +323,12 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   // a scale bar: the largest of 100/250/500/1000 m that fits in ~120 px
   const bar = [1000, 500, 250, 100].find((mm) => mm * S <= 130) ?? 100;
   const nOnGround = acs.filter((a) => a.tone !== "fixed").length;
+  // the key, top right: only what is on the map
+  const keys = [
+    anySynth && { id: "synth", text: "dashed = synthesized taxi route" },
+    [...(plan?.waits.values() ?? [])].some((ws) => ws.length > 0) && { id: "wait", text: "amber bar = waiting, reason on hover" },
+    failing.length > 0 && { id: "conflict", text: "red = taxi conflict, plan rejected" },
+  ].filter((k): k is { id: string; text: string } => !!k).map((k) => ({ ...k, w: k.text.length * 6.6 + 8 }));
   const sr = Math.max(1.5, Math.min(4, 9 * S));
 
   return (
@@ -243,7 +337,7 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
         {ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => setZoom(z)} title={z === 1 ? "The whole field" : `×${z}, centred on ${who ? icao(who) : "the field"}`}>{z === 1 ? "Field" : `×${z}`}</button>)}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" onClick={() => onSelect(null)}
-        aria-label={`Airport surface: ${nOnGround} negotiated aircraft taxiing`}>
+        aria-label={`Airport surface: ${nOnGround} negotiated aircraft taxiing, ${fixedNow.length} other aircraft moving${failing.length ? `, ${failing.length} taxi conflict${failing.length > 1 ? "s" : ""}` : ""}`}>
         <rect width={W} height={H} fill="var(--scope)" />
         <Airfield g={g} W={W} H={H} S={S} cx={c[0]} cy={c[1]} />
         {/* the stands the plan's taxiing aircraft are bound for */}
@@ -259,25 +353,49 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
             );
           })}
         </g>
+        {/* a runway being crossed flashes (the fixed traffic's crossings more faintly) */}
+        <g className="sf-cross">
+          {[...flashing].map(([rw, f]) => (
+            <polyline key={rw} className={f.fixed ? "fixed" : undefined} points={line(g.runways[rw].xy)} strokeOpacity={blinkOn ? undefined : 0.35}
+              strokeWidth={Math.max(3, (g.runways[rw].width_m ?? RUNWAY_M) * S) + 4}>
+              <title>{`Runway ${g.runways[rw].ids.join("/")} crossed by ${f.who.map(icao).join(", ")}`}</title>
+            </polyline>
+          ))}
+        </g>
         {twLabels.map((l) => { const [x, y] = P(l.at); return <text key={l.name} className="tw-label" x={x} y={y - 5} textAnchor="middle">{l.name}</text>; })}
 
         <g className="sf-routes">
           {routes.map((r) => <polyline key={r.cs} className={`path blip ${r.tone}${selected === r.cs ? " sel" : ""}`} points={line(r.xy)} strokeDasharray={r.dashed ? "5 4" : undefined} />)}
         </g>
 
+        {/* the fixed 2015 traffic and departures (grey, no data block) */}
+        <g className="gnd-fixed">
+          {fixedNow.map((f) => {
+            const [x, y] = P(f.p);
+            const sc = Math.max(0.8, Math.min(1.6, 40 * S / 10));
+            return (
+              <path key={f.x.callsign} className="gnd blip fixed" transform={`translate(${x} ${y}) rotate(${f.hdg}) scale(${sc})`} d={AIRFRAME} fill="currentColor">
+                <title>{`${icao(f.x.callsign)} · 2015 ${f.x.kind}, runway ${f.x.runway}, stand ${f.x.stand}${f.wait ? ` · ${f.wait.reason}` : ""}`}</title>
+              </path>
+            );
+          })}
+        </g>
+
         {/* fixed traffic and departures first (grey, no data block), negotiated aircraft on top */}
         {[...acs].sort((a, b) => Number(a.tone !== "fixed") - Number(b.tone !== "fixed")).map((a) => {
           const [x, y] = P(a.p);
           const cs = a.x.callsign, fixed = a.tone === "fixed", sel = selected === cs;
+          const wt = fixed ? null : waitsNow.find((w) => w.cs === cs && !w.fixed)?.w ?? null;
           const sc = Math.max(0.8, Math.min(1.6, 40 * S / 10));           // a ~40 m airframe, never smaller than a glyph
           const l1 = icao(cs), l2 = `${a.x.exit ? `${a.x.exit} ` : ""}→ ${a.x.stand}`;
           const flip = x > W - 120;
           const lx = x + (flip ? -LEAD : LEAD), ly = y - LEAD;
           return (
-            <g key={cs} className={`gnd blip ${a.tone}${sel ? " sel" : ""}`} onClick={(e) => { e.stopPropagation(); if (!fixed) onSelect(cs); }} style={{ cursor: fixed ? "default" : "pointer" }}>
-              <title>{`${l1}${fixed ? ` · ${a.x.kind === "departure" ? "departure" : "other traffic"}` : ""} · ${a.x.kind === "arrival" ? `from ${a.x.exit ?? "the runway"} to ${a.x.stand}` : `from ${a.x.stand}`} via ${a.x.route_names.join(" ") || "—"} · ${a.x.taxi_min.toFixed(1)} min taxi (${a.x.unimpeded_min.toFixed(1)} unimpeded) · ${a.x.src === "osm" ? "OSM route" : "synthesized, straight line"}`}</title>
+            <g key={cs} className={`gnd blip ${a.tone}${sel ? " sel" : ""}`} onClick={(e) => { e.stopPropagation(); if (!fixed) onSelect(cs); }} style={{ cursor: fixed ? "default" : "pointer" }}
+              onMouseEnter={wt ? () => setHover({ key: `w-${cs}-${wt.from_min}`, text: waitText(cs, wt), at: [x, y] }) : undefined} onMouseLeave={wt ? () => setHover(null) : undefined}>
+              <title>{`${l1}${fixed ? ` · ${a.x.kind === "departure" ? "departure" : "other traffic"}` : ""} · ${a.x.kind === "arrival" ? `from ${a.x.exit ?? "the runway"} to ${a.x.stand}` : `from ${a.x.stand}`} via ${a.x.route_names.join(" ") || "—"} · ${a.x.taxi_min.toFixed(1)} min taxi (${a.x.unimpeded_min.toFixed(1)} unimpeded) · ${a.x.src === "osm" ? "OSM route" : "synthesized, straight line"}${wt ? ` · ${wt.reason}` : ""}`}</title>
               {sel && <circle cx={x} cy={y} r={10} fill="none" stroke="currentColor" strokeOpacity=".6" />}
-              <path transform={`translate(${x} ${y}) rotate(${a.hdg}) scale(${sc})`} d="M0 -6L1.2 -1.5L6 1.5L6 2.6L1.2 1.6L0.9 4.6L2.4 5.8L2.4 6.6L0 6L-2.4 6.6L-2.4 5.8L-0.9 4.6L-1.2 1.6L-6 2.6L-6 1.5L-1.2 -1.5Z"
+              <path transform={`translate(${x} ${y}) rotate(${a.hdg}) scale(${sc})`} d={AIRFRAME}
                 fill={fixed ? "currentColor" : a.tone === "focus" ? "currentColor" : "var(--scope)"} stroke="currentColor" strokeWidth={fixed ? 0 : 1.2 / sc} />
               {!fixed && <>
                 <line x1={x} y1={y} x2={lx} y2={ly} stroke="currentColor" strokeOpacity=".8" />
@@ -287,6 +405,35 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
             </g>
           );
         })}
+
+        {/* waits in progress: a bar across the taxiway where the aircraft holds, the reason on hover */}
+        <g className="sf-wait">
+          {waitsNow.map(({ w, cs, fixed }) => {
+            // the bar is the line it holds at, just ahead of the nose (screen y is flipped)
+            const ahead = Math.max(fixed ? 5 : 9, WAIT_AHEAD_M * S), f = w.dir ? [w.dir[0], -w.dir[1]] : [0, 0];
+            const [x, y] = P(w.xy).map((v, i) => v + f[i] * ahead);
+            const half = Math.max(fixed ? 3 : 6, (WAIT_BAR_M * S) / 2);
+            const d = w.dir ? [w.dir[1], w.dir[0]] : [1, 0];      // across the track
+            const text = waitText(cs, w);
+            return (
+              <g key={`${cs}-${w.from_min}`} className={fixed ? "fixed" : undefined} onMouseEnter={() => setHover({ key: `w-${cs}-${w.from_min}`, text, at: [x, y] })} onMouseLeave={() => setHover(null)}>
+                <title>{text}</title>
+                <line x1={x - d[0] * half} y1={y - d[1] * half} x2={x + d[0] * half} y2={y + d[1] * half} />
+                <line className="hit" x1={x - d[0] * half} y1={y - d[1] * half} x2={x + d[0] * half} y2={y + d[1] * half} />
+              </g>
+            );
+          })}
+        </g>
+
+        {/* the plan's ATC-TAXI-CONFLICT entries: informational ones grey (a fixed aircraft holds for a plan landing,
+            never a violation), failing ones red, the ground counterpart of the timeline's rejection flash */}
+        <g className="sf-conflict">
+          {info.map((c, i) => <ConflictMark key={`i${i}`} c={c} P={P} info onHover={setHover} />)}
+          {failing.map((c, i) => <ConflictMark key={`f${i}`} c={c} P={P} info={false} onHover={setHover} />)}
+        </g>
+        {hover && shownKeys.has(hover.key) && (
+          <text className="sf-hover" x={hover.at[0] + (hover.at[0] > W / 2 ? -10 : 10)} y={hover.at[1] - 10} textAnchor={hover.at[0] > W / 2 ? "end" : "start"}>{hover.text}</text>
+        )}
 
         {/* scrims keep the controls, key and notes legible over the map when zoomed in */}
         <defs>
@@ -300,16 +447,45 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
           <path d={`M0 -4V0H${bar * S}V-4`} />
           <text x={bar * S / 2} y={-7} textAnchor="middle">{bar >= 1000 ? `${bar / 1000} km` : `${bar} m`}</text>
         </g>
-        {anySynth && (
-          <g className="legend-synth" transform={`translate(${W - 16} 64)`}>
-            <line x1={-232} y1={-4} x2={-206} y2={-4} strokeDasharray="5 4" />
-            <text x={0} y={0} textAnchor="end">dashed = synthesized taxi route</text>
+        {keys.map((k, i) => (
+          <g key={k.id} className={`legend-synth ${k.id}`} transform={`translate(${W - 16} ${64 + 16 * i})`}>
+            <line x1={-k.w - 26} y1={-4} x2={-k.w} y2={-4} strokeDasharray={k.id === "synth" ? "5 4" : undefined} />
+            <text x={0} y={0} textAnchor="end">{k.text}</text>
           </g>
-        )}
+        ))}
         {/* notes bottom right: the colour key sits bottom left across the whole panel */}
         <text className="scope-note" x={W - 16} y={H - 26} textAnchor="end">{traj ? `the engine's taxi routes · updates every 1 s${updating ? " · updating…" : ""}` : "no taxi routes for this plan"}</text>
         <text className="scope-note attr" x={W - 16} y={H - 12} textAnchor="end">{attribution} · not for navigation</text>
       </svg>
     </div>
+  );
+}
+
+/** Heading, degrees true, of a track at segment `seg`: along the first segment of non-zero length at or before
+ *  it (a stopped aircraft keeps the heading it stopped with), else the first one after. */
+function headingAt(pj: Prepared["pj"], points: TrackPoint[], seg: number): number {
+  const at = (j: number) => { const a = points[j], b = points[j + 1]; if (!a || !b) return null; const p = pj(a.lat, a.lon), q = pj(b.lat, b.lon); return Math.hypot(q[0] - p[0], q[1] - p[1]) > 0.5 ? bearing(p, q) : null; };
+  const i = Math.min(seg, points.length - 2);
+  for (let j = i; j >= 0; j--) { const h = at(j); if (h != null) return h; }
+  for (let j = i + 1; j < points.length - 1; j++) { const h = at(j); if (h != null) return h; }
+  return 0;
+}
+
+const waitText = (cs: string, w: Wait) => `${icao(cs)} · ${w.reason} · ${(w.to_min - w.from_min).toFixed(1)} min`;
+
+const hoverKey = (c: Conflict) => `c-${c.kind ?? "fail"}-${c.callsign}-${c.fixed ?? ""}-${c.at_min}`;
+
+/** One ATC-TAXI-CONFLICT entry: a failing one is a red ring with a cross, an informational one a quiet grey ring. */
+function ConflictMark({ c, P, info, onHover }: { c: Conflict & { xy: XY }; P: (q: XY) => XY; info: boolean; onHover: (h: Hover) => void }) {
+  const [x, y] = P(c.xy);
+  const text = info
+    ? `${c.fixed ? icao(c.fixed) : "fixed traffic"} ${c.kind === "fixed_departure_holds" ? "holds for takeoff" : "holds short"}${c.strip ? ` of ${c.strip}` : ""}${c.hold_min != null ? ` ${c.hold_min.toFixed(1)} min` : ""} for landing ${icao(c.callsign)} · informational`
+    : `${c.rule} · ${c.detail}`;
+  return (
+    <g className={info ? "info" : "fail"} onMouseEnter={() => onHover({ key: hoverKey(c), text, at: [x, y] })} onMouseLeave={() => onHover(null)}>
+      <title>{info ? `${text} · ${c.detail}` : text}</title>
+      <circle cx={x} cy={y} r={info ? 6 : 9} />
+      {!info && <path d={`M${x - 4} ${y - 4}L${x + 4} ${y + 4}M${x + 4} ${y - 4}L${x - 4} ${y + 4}`} />}
+    </g>
   );
 }

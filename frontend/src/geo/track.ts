@@ -123,3 +123,40 @@ export function matchHold(
   const best = named.map((i) => ({ i, d: dist(i) })).sort((p, q) => p.d - q.d || p.i - q.i)[0];
   return best.d <= maxNm ? best.i : null;
 }
+
+export interface Wait { from_min: number; to_min: number; reason: string; lat: number; lon: number }
+
+/** The wait a taxiing aircraft is in at t (minutes vs T0), or null: a wait covers [from_min, to_min). */
+export function activeWait<W extends { from_min: number; to_min: number }>(waits: W[], t: number): W | null {
+  for (const w of waits) if (t >= w.from_min && t < w.to_min) return w;
+  return null;
+}
+
+/** Where a timed path on the plane (metres, `[t_min, x, y]`) crosses runway centrelines: the runway's index and
+ *  the time it is on the centreline, in time order. A runway the path starts or ends on (within `clearM` of its
+ *  centreline: the strip an arrival vacates, or a departure's line-up) is its own and is not a crossing. */
+export function runwayCrossings(path: [number, number, number][], runways: [number, number][][], clearM = 60): { rw: number; t: number }[] {
+  const out: { rw: number; t: number }[] = [];
+  if (path.length < 2) return out;
+  const near = (p: [number, number, number], xy: [number, number][]) => xy.slice(1).some((b, i) => {
+    const a = xy[i], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    const u = L2 ? Math.max(0, Math.min(1, ((p[1] - a[0]) * dx + (p[2] - a[1]) * dy) / L2)) : 0;
+    return Math.hypot(a[0] + u * dx - p[1], a[1] + u * dy - p[2]) <= clearM;
+  });
+  const first = path[0], last = path[path.length - 1];
+  runways.forEach((xy, rw) => {
+    if (xy.length < 2 || near(first, xy) || near(last, xy)) return;
+    for (let k = 1; k < path.length; k++) {
+      const [t0, x0, y0] = path[k - 1], [t1, x1, y1] = path[k];
+      for (let i = 1; i < xy.length; i++) {
+        const [ax, ay] = xy[i - 1], [bx, by] = xy[i];
+        const d = (x1 - x0) * (by - ay) - (y1 - y0) * (bx - ax);
+        if (!d) continue;
+        const u = ((ax - x0) * (by - ay) - (ay - y0) * (bx - ax)) / d;     // along the path segment
+        const v = ((ax - x0) * (y1 - y0) - (ay - y0) * (x1 - x0)) / d;     // along the runway segment
+        if (u >= 0 && u < 1 && v >= 0 && v <= 1) out.push({ rw, t: t0 + (t1 - t0) * u });
+      }
+    }
+  });
+  return out.sort((a, b) => a.t - b.t);
+}

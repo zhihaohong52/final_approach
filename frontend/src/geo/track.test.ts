@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, endOfLine, entryFix, matchHold, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
+import { activeWait, bearing, runwayCrossings, endOfLine, entryFix, matchHold, holdLap, levelLabel, nmProjector, positionAt, projector, secondFloor, scanFloor, scanTimes, segmentDashed, trend } from "./track";
 const pts = [{ t_min: 0, lat: 0, lon: 0 }, { t_min: 2, lat: 0, lon: 2 }, { t_min: 3, lat: 1, lon: 2 }];
 describe("positionAt", () => {
   it("interpolates linearly within a segment", () => expect(positionAt(pts, 1)).toMatchObject({ lat: 0, lon: 1, seg: 0 }));
@@ -125,5 +125,24 @@ describe("matchHold", () => {
   it("is no match farther than 5 NM, or for an unknown name", () => {
     expect(matchHold(holds, h, [pt(12, 41.5, -88)])).toBeNull();
     expect(matchHold(holds, { ...h, fix: "ZZZ" }, [pt(12, 41, -88)])).toBeNull();
+  });
+});
+it("activeWait picks the wait covering t", () => {
+  const w = [{ from_min: 1, to_min: 2, reason: "hold short 27L/09R for landing UA12", lat: 0, lon: 0 }];
+  expect(activeWait(w, 1.5)?.reason).toContain("hold short"); expect(activeWait(w, 2.1)).toBeNull();
+});
+it("activeWait is null between waits and with none", () => {
+  const w = [{ from_min: 1, to_min: 2, reason: "a", lat: 0, lon: 0 }, { from_min: 3, to_min: 4, reason: "give way to AA1", lat: 0, lon: 0 }];
+  expect(activeWait(w, 2.5)).toBeNull(); expect(activeWait(w, 3)?.reason).toBe("give way to AA1"); expect(activeWait([], 1)).toBeNull();
+});
+describe("runwayCrossings", () => {
+  const rwy: [number, number][][] = [[[-1000, 0], [1000, 0]], [[500, -2000], [500, 2000]]];
+  it("times the crossing of a runway centreline", () => {
+    const c = runwayCrossings([[10, 0, -200], [12, 0, 200]], rwy);
+    expect(c).toHaveLength(1); expect(c[0].rw).toBe(0); expect(c[0].t).toBeCloseTo(11, 9);
+  });
+  it("does not count the runway the path starts or ends on", () => {
+    expect(runwayCrossings([[0, 0, 0], [1, 0, -300], [2, 800, -300]], rwy).map((c) => c.rw)).toEqual([1]);
+    expect(runwayCrossings([[0, 300, -300], [1, 300, 20]], rwy)).toEqual([]);
   });
 });
