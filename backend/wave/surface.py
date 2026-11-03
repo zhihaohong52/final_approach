@@ -39,6 +39,12 @@ class TaxiGraph:
     holds: dict[int, str | None] = field(default_factory=dict)   # OSM holding_position node -> strip (or None)
     _trees: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
+    def __getstate__(self) -> dict:
+        """Pickle without the derived caches (trees, components, strip geometry): rebuilt lazily from the graph."""
+        d = self.__dict__.copy()
+        d["_trees"] = {}
+        return d
+
     def stand_components(self) -> set[int]:
         """Taxi-network component ids (over non-runway edges) that contain at least one stand; cached."""
         hit = self._trees.get("stand_comps")
@@ -104,7 +110,7 @@ def _from_doc(icao: str, doc: dict) -> TaxiGraph:
     return TaxiGraph(icao, nodes, adj, exits, stands, reach, holds)
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=16)   # waves of one airport share the graph object (and its cached trees)
 def load_graph(icao: str) -> TaxiGraph | None:
     doc = load_surface(icao)
     return None if doc is None else _from_doc(icao, doc)
@@ -192,17 +198,21 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     return out
 
 
-MAX_TREES = 12   # Dijkstra trees kept per graph (LRU): ~1.9 MB each at ORD (tracemalloc); all 54 ORD exit trees: ~100 MB
+MAX_TREES = 12   # Dijkstra trees kept in total, over every graph (FIFO): ~1.9 MB each at ORD (tracemalloc)
+_TREE_ORDER: list[tuple[TaxiGraph, tuple]] = []
+_TREE_LOCK = threading.Lock()
 
 
 def _keep_tree(g: TaxiGraph, key: tuple, tree: dict) -> None:
-    """Cache a Dijkstra tree on the graph, evicting the least recently built beyond MAX_TREES (the per-wave taxi
-    table holds the routes the hot path reads, so an evicted tree only costs a recompute at build time)."""
-    order = g._trees.setdefault("_tree_lru", [])
-    g._trees[key] = tree
-    order.append(key)
-    while len(order) > MAX_TREES:
-        g._trees.pop(order.pop(0), None)
+    """Cache a Dijkstra tree on its graph, evicting the oldest tree of ANY graph beyond MAX_TREES: graphs are pinned
+    on live waves (one object per load), so a per-graph cap would let tree memory grow with the number of waves. The
+    per-wave taxi table holds the routes the hot path reads, so an evicted tree only costs a recompute."""
+    with _TREE_LOCK:
+        g._trees[key] = tree
+        _TREE_ORDER.append((g, key))
+        while len(_TREE_ORDER) > MAX_TREES:
+            og, ok = _TREE_ORDER.pop(0)
+            og._trees.pop(ok, None)
 
 
 def unimpeded(g: TaxiGraph, exit_node: int, stand_node: int) -> TaxiPath:
