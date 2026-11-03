@@ -6,13 +6,6 @@
     "status": "real",
     "fixes": [
       {
-        "id": "ADAME",
-        "lat": 41.969139,
-        "lon": -87.652361,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "AHSTN",
         "lat": 41.712661,
         "lon": -88.357336,
@@ -24,13 +17,6 @@
         "lat": 42.090972,
         "lon": -88.275372,
         "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "BASHH",
-        "lat": 41.983483,
-        "lon": -87.582333,
-        "kind": "if",
         "src": "cifp"
       },
       {
@@ -51,20 +37,13 @@
         "id": "BFORD",
         "lat": 41.160092,
         "lon": -89.587411,
-        "kind": "star",
+        "kind": "entry",
         "src": "cifp"
       },
       {
         "id": "BHAWK",
         "lat": 42.518469,
         "lon": -89.776892,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "BITTR",
-        "lat": 43.121578,
-        "lon": -85.943939,
         "kind": "star",
         "src": "cifp"
       },
@@ -76,24 +55,17 @@
         "src": "cifp"
       },
       {
-        "id": "BONZO",
-        "lat": 42.0025,
-        "lon": -87.652344,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "BOWNN",
-        "lat": 43.585686,
-        "lon": -88.678053,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "BRIBE",
         "lat": 42.798333,
         "lon": -89.940361,
         "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "BUGSE",
+        "lat": 41.968742,
+        "lon": -88.041825,
+        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -107,13 +79,20 @@
         "id": "BYLAW",
         "lat": 41.28635,
         "lon": -89.275844,
-        "kind": "star",
+        "kind": "entry",
         "src": "cifp"
       },
       {
         "id": "CABIJ",
         "lat": 41.888342,
         "lon": -87.610236,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CARLE",
+        "lat": 41.968347,
+        "lon": -88.161317,
         "kind": "star",
         "src": "cifp"
       },
@@ -132,10 +111,17 @@
         "src": "cifp"
       },
       {
-        "id": "CHDRR",
-        "lat": 43.336358,
-        "lon": -87.872067,
-        "kind": "entry",
+        "id": "CFLCC",
+        "lat": 41.957494,
+        "lon": -87.927881,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "CHILR",
+        "lat": 41.983397,
+        "lon": -88.231369,
+        "kind": "if",
         "src": "cifp"
       },
       {
@@ -160,13 +146,6 @@
         "src": "cifp"
       },
       {
-        "id": "CSTLO",
-        "lat": 43.180656,
-        "lon": -85.375742,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "CUUPP",
         "lat": 42.437906,
         "lon": -89.121506,
@@ -181,9 +160,16 @@
         "src": "cifp"
       },
       {
-        "id": "DITCA",
-        "lat": 42.746158,
-        "lon": -85.723297,
+        "id": "DEVON",
+        "lat": 41.983583,
+        "lon": -88.161214,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "DOOGY",
+        "lat": 42.002594,
+        "lon": -88.161269,
         "kind": "star",
         "src": "cifp"
       },
@@ -202,20 +188,6 @@
         "src": "cifp"
       },
       {
-        "id": "EBENS",
-        "lat": 41.983653,
-        "lon": -87.652506,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "ERNNY",
-        "lat": 42.338719,
-        "lon": -87.534183,
-        "kind": "hold",
-        "src": "cifp"
-      },
-      {
         "id": "ESSPO",
         "lat": 41.581736,
         "lon": -87.244083,
@@ -230,10 +202,10 @@
         "src": "cifp"
       },
       {
-        "id": "FIYER",
-        "lat": 42.397769,
-        "lon": -87.321169,
-        "kind": "star",
+        "id": "FLLYN",
+        "lat": 41.953667,
+        "lon": -88.037536,
+        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -265,6 +237,13 @@
         "src": "cifp"
       },
       {
+        "id": "GOOZY",
+        "lat": 41.946644,
+        "lon": -88.231447,
+        "kind": "if",
+        "src": "cifp"
+      },
+      {
         "id": "GROOV",
         "lat": 39.431308,
         "lon": -90.569083,
@@ -272,30 +251,9 @@
         "src": "cifp"
       },
       {
-        "id": "HAREE",
-        "lat": 42.002383,
-        "lon": -87.582047,
-        "kind": "if",
-        "src": "cifp"
-      },
-      {
-        "id": "HARRL",
-        "lat": 41.784864,
-        "lon": -88.098342,
-        "kind": "if",
-        "src": "cifp"
-      },
-      {
         "id": "HAUPO",
         "lat": 41.342575,
         "lon": -86.5431,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "HAZIL",
-        "lat": 41.965861,
-        "lon": -87.652353,
         "kind": "star",
         "src": "cifp"
       },
@@ -314,13 +272,6 @@
         "src": "cifp"
       },
       {
-        "id": "HYYDE",
-        "lat": 43.186361,
-        "lon": -88.852917,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "IRK",
         "lat": 40.135017,
         "lon": -92.591714,
@@ -331,13 +282,6 @@
         "id": "IZARD",
         "lat": 41.786961,
         "lon": -87.497692,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "JAKSA",
-        "lat": 42.843903,
-        "lon": -89.045186,
         "kind": "star",
         "src": "cifp"
       },
@@ -353,13 +297,6 @@
         "lat": 42.840403,
         "lon": -90.091806,
         "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "JLOWW",
-        "lat": 41.983853,
-        "lon": -87.785375,
-        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -391,13 +328,6 @@
         "src": "cifp"
       },
       {
-        "id": "KENIL",
-        "lat": 42.114483,
-        "lon": -87.707758,
-        "kind": "if",
-        "src": "cifp"
-      },
-      {
         "id": "KEOKK",
         "lat": 40.553403,
         "lon": -91.403667,
@@ -419,17 +349,17 @@
         "src": "cifp"
       },
       {
-        "id": "LAACY",
-        "lat": 41.699728,
-        "lon": -87.400103,
+        "id": "KVENN",
+        "lat": 41.949225,
+        "lon": -88.161306,
         "kind": "star",
         "src": "cifp"
       },
       {
-        "id": "LAIKE",
-        "lat": 42.040089,
-        "lon": -87.796403,
-        "kind": "faf",
+        "id": "LAACY",
+        "lat": 41.699728,
+        "lon": -87.400103,
+        "kind": "star",
         "src": "cifp"
       },
       {
@@ -447,13 +377,6 @@
         "src": "cifp"
       },
       {
-        "id": "LYNNI",
-        "lat": 42.834603,
-        "lon": -87.581444,
-        "kind": "entry",
-        "src": "cifp"
-      },
-      {
         "id": "MADII",
         "lat": 42.300964,
         "lon": -88.313814,
@@ -468,6 +391,13 @@
         "src": "cifp"
       },
       {
+        "id": "MCDEE",
+        "lat": 39.551667,
+        "lon": -90.915556,
+        "kind": "star",
+        "src": "cifp"
+      },
+      {
         "id": "MCW",
         "lat": 43.094758,
         "lon": -93.329872,
@@ -475,10 +405,10 @@
         "src": "cifp"
       },
       {
-        "id": "MINCE",
-        "lat": 42.162325,
-        "lon": -87.064189,
-        "kind": "star",
+        "id": "MEOWW",
+        "lat": 41.983803,
+        "lon": -88.042039,
+        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -496,23 +426,9 @@
         "src": "cifp"
       },
       {
-        "id": "MOOPS",
-        "lat": 42.657478,
-        "lon": -88.892517,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "MOTRR",
         "lat": 42.358492,
         "lon": -88.502875,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "MUSKY",
-        "lat": 42.153286,
-        "lon": -86.937125,
         "kind": "star",
         "src": "cifp"
       },
@@ -531,24 +447,10 @@
         "src": "cifp"
       },
       {
-        "id": "NAPER",
-        "lat": 41.824219,
-        "lon": -88.052028,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "NEWRK",
         "lat": 41.566125,
         "lon": -88.571119,
         "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "NOLEN",
-        "lat": 42.191331,
-        "lon": -87.681253,
-        "kind": "if",
         "src": "cifp"
       },
       {
@@ -559,44 +461,9 @@
         "src": "cifp"
       },
       {
-        "id": "OBSTR",
-        "lat": 43.695056,
-        "lon": -85.214869,
-        "kind": "entry",
-        "src": "cifp"
-      },
-      {
-        "id": "PAITN",
-        "lat": 42.561031,
-        "lon": -86.722606,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "PAPPI",
-        "lat": 42.269972,
-        "lon": -87.607203,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "PECOK",
-        "lat": 44.007686,
-        "lon": -85.720753,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "PETAH",
         "lat": 41.885517,
         "lon": -88.150058,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "PHRLY",
-        "lat": 42.724161,
-        "lon": -87.523811,
         "kind": "star",
         "src": "cifp"
       },
@@ -612,6 +479,13 @@
         "lat": 41.874661,
         "lon": -88.275175,
         "kind": "star",
+        "src": "cifp"
+      },
+      {
+        "id": "PRATT",
+        "lat": 41.968058,
+        "lon": -88.231458,
+        "kind": "if",
         "src": "cifp"
       },
       {
@@ -636,24 +510,17 @@
         "src": "cifp"
       },
       {
-        "id": "REKKS",
-        "lat": 41.898506,
-        "lon": -87.964317,
+        "id": "RAYYY",
+        "lat": 41.965447,
+        "lon": -88.042053,
         "kind": "faf",
         "src": "cifp"
       },
       {
-        "id": "RHIVR",
-        "lat": 42.645956,
-        "lon": -86.270597,
+        "id": "RRUDA",
+        "lat": 41.965053,
+        "lon": -88.161306,
         "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "RIDGE",
-        "lat": 42.058239,
-        "lon": -87.829206,
-        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -664,24 +531,10 @@
         "src": "cifp"
       },
       {
-        "id": "RZUKO",
-        "lat": 41.965794,
-        "lon": -87.582203,
-        "kind": "if",
-        "src": "cifp"
-      },
-      {
         "id": "SAAYY",
         "lat": 42.527067,
         "lon": -91.429047,
         "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "SEIKA",
-        "lat": 41.965872,
-        "lon": -87.779925,
-        "kind": "faf",
         "src": "cifp"
       },
       {
@@ -692,17 +545,10 @@
         "src": "cifp"
       },
       {
-        "id": "SHIKY",
-        "lat": 44.194444,
-        "lon": -88.418056,
-        "kind": "entry",
-        "src": "cifp"
-      },
-      {
-        "id": "SIBLY",
-        "lat": 42.002756,
-        "lon": -87.795081,
-        "kind": "faf",
+        "id": "SHARN",
+        "lat": 41.964764,
+        "lon": -88.231447,
+        "kind": "if",
         "src": "cifp"
       },
       {
@@ -741,13 +587,6 @@
         "src": "cifp"
       },
       {
-        "id": "SWIIS",
-        "lat": 42.525058,
-        "lon": -87.5095,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
         "id": "TEDDY",
         "lat": 42.419656,
         "lon": -88.646278,
@@ -772,28 +611,14 @@
         "id": "TRIDE",
         "lat": 41.466508,
         "lon": -89.199353,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "TUBEZ",
-        "lat": 42.180919,
-        "lon": -87.700803,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "TVC",
-        "lat": 44.667917,
-        "lon": -85.550011,
         "kind": "entry",
         "src": "cifp"
       },
       {
-        "id": "UFDUH",
-        "lat": 43.709975,
-        "lon": -85.796381,
-        "kind": "star",
+        "id": "TRYXI",
+        "lat": 42.002431,
+        "lon": -88.231569,
+        "kind": "if",
         "src": "cifp"
       },
       {
@@ -807,13 +632,6 @@
         "id": "VINCA",
         "lat": 40.345347,
         "lon": -89.823519,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "VIO",
-        "lat": 42.786717,
-        "lon": -85.497072,
         "kind": "star",
         "src": "cifp"
       },
@@ -832,53 +650,883 @@
         "src": "cifp"
       },
       {
-        "id": "WAVIE",
-        "lat": 41.969067,
-        "lon": -87.582211,
-        "kind": "if",
+        "id": "WELTS",
+        "lat": 39.006378,
+        "lon": -91.772819,
+        "kind": "entry",
         "src": "cifp"
       },
       {
-        "id": "WILLT",
-        "lat": 41.969158,
-        "lon": -87.778833,
+        "id": "ZENAH",
+        "lat": 42.002778,
+        "lon": -88.037375,
         "kind": "faf",
-        "src": "cifp"
-      },
-      {
-        "id": "WLTER",
-        "lat": 42.686497,
-        "lon": -86.051094,
-        "kind": "star",
-        "src": "cifp"
-      },
-      {
-        "id": "WYNDE",
-        "lat": 42.455758,
-        "lon": -87.110175,
-        "kind": "hold",
-        "src": "cifp"
-      },
-      {
-        "id": "YOLUR",
-        "lat": 42.150536,
-        "lon": -86.62345,
-        "kind": "entry",
-        "src": "cifp"
-      },
-      {
-        "id": "ZANLA",
-        "lat": 41.189722,
-        "lon": -84.846389,
-        "kind": "entry",
         "src": "cifp"
       }
     ],
     "routes": [
       {
-        "runway": "04L",
+        "runway": "09L",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "approach": "I09L",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "approach": "I09R",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "approach": "I10C",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "approach": "I10L",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "approach": "I10RY",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "STL",
+        "fixes": [
+          "STL",
+          "GROOV",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "IRK",
+        "approach": "I09L",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "IRK",
+        "approach": "I09R",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "IRK",
+        "approach": "I10C",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "IRK",
+        "approach": "I10L",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "BENKY6",
+        "transition": "IRK",
+        "approach": "I10RY",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "IRK",
+        "fixes": [
+          "IRK",
+          "LOAMY",
+          "KEOKK",
+          "DRAMS",
+          "RYELY",
+          "BFORD",
+          "EZZRA",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "approach": "I09L",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "approach": "I09R",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "approach": "I10C",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "approach": "I10L",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "approach": "I10RY",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "WELTS",
+        "fixes": [
+          "WELTS",
+          "MCDEE",
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "approach": "I09L",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "approach": "I09R",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "approach": "I10C",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "approach": "I10L",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "approach": "I10RY",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "PNTAC",
+        "fixes": [
+          "PNTAC",
+          "TRICH",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I09L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I09R",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I10C",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I10L",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "BENKY6",
+        "transition": "BYLAW",
+        "approach": "I10RY",
+        "fixes": [
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "BFORD",
+        "fixes": [
+          "BFORD",
+          "EZZRA",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "approach": "I09L",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "approach": "I09R",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "approach": "I10C",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "approach": "I10L",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "approach": "I10RY",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "TRIDE",
+        "fixes": [
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
+        "star": "ESSPO5",
+        "transition": "FWA",
+        "approach": "I09L",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "VULCN",
+          "KURKK",
+          "BAMBB",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
+        ]
+      },
+      {
+        "runway": "09R",
+        "star": "ESSPO5",
+        "transition": "FWA",
+        "approach": "I09R",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "ESSPO5",
+        "transition": "FWA",
+        "approach": "I10C",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "ESSPO5",
+        "transition": "FWA",
+        "approach": "I10L",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "ESSPO5",
+        "transition": "FWA",
+        "approach": "I10RY",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "MKITA",
+          "ESSPO",
+          "LAACY",
+          "IZARD",
+          "CABIJ",
+          "MONKZ",
+          "JORJO",
+          "POSSM",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "WATSN4",
+        "transition": "FWA",
+        "fixes": [
+          "FWA",
+          "PRONK",
+          "DAIFE",
+          "WATSN",
+          "HAUPO",
+          "MKITA",
+          "PRISE",
+          "HULLS",
+          "STYLE",
+          "DWEEB",
+          "CENAK"
+        ]
+      },
+      {
+        "runway": "09L",
         "star": "ESSPO5",
         "transition": "BONNT",
+        "approach": "I09L",
         "fixes": [
           "BONNT",
           "FRIDG",
@@ -888,16 +1536,19 @@
           "LAACY",
           "IZARD",
           "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM"
+          "VULCN",
+          "KURKK",
+          "BAMBB",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
         ]
       },
       {
-        "runway": "04R",
+        "runway": "09R",
         "star": "ESSPO5",
         "transition": "BONNT",
-        "approach": "I04R",
+        "approach": "I09R",
         "fixes": [
           "BONNT",
           "FRIDG",
@@ -910,16 +1561,16 @@
           "MONKZ",
           "JORJO",
           "POSSM",
-          "HARRL",
-          "NAPER",
-          "REKKS"
+          "CHILR",
+          "DEVON",
+          "MEOWW"
         ]
       },
       {
-        "runway": "22L",
+        "runway": "10C",
         "star": "ESSPO5",
         "transition": "BONNT",
-        "approach": "I22L",
+        "approach": "I10C",
         "fixes": [
           "BONNT",
           "FRIDG",
@@ -932,15 +1583,16 @@
           "MONKZ",
           "JORJO",
           "POSSM",
-          "KENIL",
-          "LAIKE"
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
         ]
       },
       {
-        "runway": "22R",
+        "runway": "10L",
         "star": "ESSPO5",
         "transition": "BONNT",
-        "approach": "I22R",
+        "approach": "I10L",
         "fixes": [
           "BONNT",
           "FRIDG",
@@ -953,15 +1605,16 @@
           "MONKZ",
           "JORJO",
           "POSSM",
-          "NOLEN",
-          "RIDGE"
+          "PRATT",
+          "CARLE",
+          "BUGSE"
         ]
       },
       {
-        "runway": "27L",
+        "runway": "10R",
         "star": "ESSPO5",
         "transition": "BONNT",
-        "approach": "I27L",
+        "approach": "I10RY",
         "fixes": [
           "BONNT",
           "FRIDG",
@@ -974,79 +1627,14 @@
           "MONKZ",
           "JORJO",
           "POSSM",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
         ]
       },
       {
-        "runway": "27R",
-        "star": "ESSPO5",
-        "transition": "BONNT",
-        "approach": "I27R",
-        "fixes": [
-          "BONNT",
-          "FRIDG",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "ESSPO5",
-        "transition": "BONNT",
-        "approach": "I28C",
-        "fixes": [
-          "BONNT",
-          "FRIDG",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "ESSPO5",
-        "transition": "BONNT",
-        "approach": "I28R",
-        "fixes": [
-          "BONNT",
-          "FRIDG",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
+        "runway": "14R",
         "star": "WATSN4",
         "transition": "BONNT",
         "fixes": [
@@ -1063,151 +1651,133 @@
         ]
       },
       {
-        "runway": "04L",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
+        "runway": "09L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I09L",
         "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I04R",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I22L",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I22R",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I27L",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I27R",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "FYTTE7",
-        "transition": "CHMPN",
-        "approach": "I28C",
-        "fixes": [
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
           "JORJO",
           "MONKZ",
           "TONIE",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
         ]
       },
       {
-        "runway": "28R",
+        "runway": "09R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I09R",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I10C",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I10L",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "BENKY6",
+        "transition": "CASHN",
+        "approach": "I10RY",
+        "fixes": [
+          "CASHN",
+          "BFORD",
+          "BYLAW",
+          "BENKY",
+          "NEWRK",
+          "AHSTN",
+          "PETAH",
+          "JORJO",
+          "MONKZ",
+          "TONIE",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
+        "star": "SHAIN2",
+        "transition": "CASHN",
+        "fixes": [
+          "CASHN",
+          "VINCA",
+          "MAROC",
+          "KELTS",
+          "FNBAR",
+          "TRIDE",
+          "SHAIN",
+          "RAGSS",
+          "JUMPN",
+          "NUNWS"
+        ]
+      },
+      {
+        "runway": "09L",
         "star": "FYTTE7",
         "transition": "CHMPN",
-        "approach": "I28R",
+        "approach": "I09L",
         "fixes": [
           "CHMPN",
           "CLSBY",
@@ -1216,16 +1786,101 @@
           "COGSS",
           "MADII",
           "SOOLU",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
         ]
       },
       {
-        "runway": "32R",
+        "runway": "09R",
+        "star": "FYTTE7",
+        "transition": "CHMPN",
+        "approach": "I09R",
+        "fixes": [
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "CHILR",
+          "DEVON",
+          "MEOWW"
+        ]
+      },
+      {
+        "runway": "10C",
+        "star": "FYTTE7",
+        "transition": "CHMPN",
+        "approach": "I10C",
+        "fixes": [
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
+        ]
+      },
+      {
+        "runway": "10L",
+        "star": "FYTTE7",
+        "transition": "CHMPN",
+        "approach": "I10L",
+        "fixes": [
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "PRATT",
+          "CARLE",
+          "BUGSE"
+        ]
+      },
+      {
+        "runway": "10R",
+        "star": "FYTTE7",
+        "transition": "CHMPN",
+        "approach": "I10RY",
+        "fixes": [
+          "CHMPN",
+          "CLSBY",
+          "FYTTE",
+          "MOTRR",
+          "COGSS",
+          "MADII",
+          "SOOLU",
+          "KURKK",
+          "VULCN",
+          "HIMGO",
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
+        ]
+      },
+      {
+        "runway": "14R",
         "star": "JVL1",
         "transition": "MCW",
         "fixes": [
@@ -1243,1465 +1898,10 @@
         ]
       },
       {
-        "runway": "04L",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I04R",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I22L",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I22R",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I27L",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I27R",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I28C",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "FYTTE7",
-        "transition": "SHIKY",
-        "approach": "I28R",
-        "fixes": [
-          "SHIKY",
-          "BOWNN",
-          "HYYDE",
-          "JAKSA",
-          "MOOPS",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I04R",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I22L",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I22R",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I27L",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I27R",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I28C",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "approach": "I28R",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "SHAIN2",
-        "transition": "STL",
-        "fixes": [
-          "STL",
-          "GROOV",
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I04R",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I22L",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I22R",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I27L",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I27R",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I28C",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "ESSPO5",
-        "transition": "FWA",
-        "approach": "I28R",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "WATSN4",
-        "transition": "FWA",
-        "fixes": [
-          "FWA",
-          "PRONK",
-          "DAIFE",
-          "WATSN",
-          "HAUPO",
-          "MKITA",
-          "PRISE",
-          "HULLS",
-          "STYLE",
-          "DWEEB",
-          "CENAK"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I04R",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I22L",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I22R",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I27L",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I27R",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I28C",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "ERNNY8",
-        "transition": "YOLUR",
-        "approach": "I28R",
-        "fixes": [
-          "YOLUR",
-          "MUSKY",
-          "MINCE",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "WATSN4",
-        "transition": "ZANLA",
-        "fixes": [
-          "ZANLA",
-          "DAIFE",
-          "WATSN",
-          "HAUPO",
-          "MKITA",
-          "PRISE",
-          "HULLS",
-          "STYLE",
-          "DWEEB",
-          "CENAK"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I04R",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I22L",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I22R",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I27L",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I27R",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I28C",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "BENKY6",
-        "transition": "CASHN",
-        "approach": "I28R",
-        "fixes": [
-          "CASHN",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "SHAIN2",
-        "transition": "CASHN",
-        "fixes": [
-          "CASHN",
-          "VINCA",
-          "MAROC",
-          "KELTS",
-          "FNBAR",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I04R",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I22L",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I22R",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I27L",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I27R",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I28C",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "ESSPO5",
-        "transition": "WATSN",
-        "approach": "I28R",
-        "fixes": [
-          "WATSN",
-          "MKITA",
-          "ESSPO",
-          "LAACY",
-          "IZARD",
-          "CABIJ",
-          "MONKZ",
-          "JORJO",
-          "POSSM",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I04R",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I22L",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I22R",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I27L",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I27R",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I28C",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "approach": "I28R",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "SHAIN2",
-        "transition": "PNTAC",
-        "fixes": [
-          "PNTAC",
-          "TRICH",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "ERNNY8",
-        "transition": "LYNNI",
-        "fixes": [
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I04R",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I22L",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I22R",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I27L",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I27R",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I28C",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "WYNDE3",
-        "transition": "TVC",
-        "approach": "I28R",
-        "fixes": [
-          "TVC",
-          "PECOK",
-          "UFDUH",
-          "BITTR",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04L",
+        "runway": "09L",
         "star": "FYTTE7",
         "transition": "MYRRS",
-        "fixes": [
-          "MYRRS",
-          "SAAYY",
-          "BENNR",
-          "JBAGS",
-          "BHAWK",
-          "STNLE",
-          "CUUPP",
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "KURKK",
-          "VULCN",
-          "HIMGO"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "FYTTE7",
-        "transition": "MYRRS",
-        "approach": "I04R",
+        "approach": "I09L",
         "fixes": [
           "MYRRS",
           "SAAYY",
@@ -2720,16 +1920,16 @@
           "KURKK",
           "VULCN",
           "HIMGO",
-          "HARRL",
-          "NAPER",
-          "REKKS"
+          "TRYXI",
+          "DOOGY",
+          "ZENAH"
         ]
       },
       {
-        "runway": "22L",
+        "runway": "09R",
         "star": "FYTTE7",
         "transition": "MYRRS",
-        "approach": "I22L",
+        "approach": "I09R",
         "fixes": [
           "MYRRS",
           "SAAYY",
@@ -2748,15 +1948,16 @@
           "KURKK",
           "VULCN",
           "HIMGO",
-          "KENIL",
-          "LAIKE"
+          "CHILR",
+          "DEVON",
+          "MEOWW"
         ]
       },
       {
-        "runway": "22R",
+        "runway": "10C",
         "star": "FYTTE7",
         "transition": "MYRRS",
-        "approach": "I22R",
+        "approach": "I10C",
         "fixes": [
           "MYRRS",
           "SAAYY",
@@ -2775,15 +1976,16 @@
           "KURKK",
           "VULCN",
           "HIMGO",
-          "NOLEN",
-          "RIDGE"
+          "SHARN",
+          "RRUDA",
+          "RAYYY"
         ]
       },
       {
-        "runway": "27L",
+        "runway": "10L",
         "star": "FYTTE7",
         "transition": "MYRRS",
-        "approach": "I27L",
+        "approach": "I10L",
         "fixes": [
           "MYRRS",
           "SAAYY",
@@ -2802,16 +2004,16 @@
           "KURKK",
           "VULCN",
           "HIMGO",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
+          "PRATT",
+          "CARLE",
+          "BUGSE"
         ]
       },
       {
-        "runway": "27R",
+        "runway": "10R",
         "star": "FYTTE7",
         "transition": "MYRRS",
-        "approach": "I27R",
+        "approach": "I10RY",
         "fixes": [
           "MYRRS",
           "SAAYY",
@@ -2830,620 +2032,10 @@
           "KURKK",
           "VULCN",
           "HIMGO",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "FYTTE7",
-        "transition": "MYRRS",
-        "approach": "I28C",
-        "fixes": [
-          "MYRRS",
-          "SAAYY",
-          "BENNR",
-          "JBAGS",
-          "BHAWK",
-          "STNLE",
-          "CUUPP",
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "FYTTE7",
-        "transition": "MYRRS",
-        "approach": "I28R",
-        "fixes": [
-          "MYRRS",
-          "SAAYY",
-          "BENNR",
-          "JBAGS",
-          "BHAWK",
-          "STNLE",
-          "CUUPP",
-          "CHMPN",
-          "CLSBY",
-          "FYTTE",
-          "MOTRR",
-          "COGSS",
-          "MADII",
-          "SOOLU",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I04R",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I22L",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I22R",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I27L",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I27R",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I28C",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "WYNDE3",
-        "transition": "OBSTR",
-        "approach": "I28R",
-        "fixes": [
-          "OBSTR",
-          "CSTLO",
-          "VIO",
-          "DITCA",
-          "WLTER",
-          "RHIVR",
-          "PAITN",
-          "WYNDE",
-          "FIYER",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I04R",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I22L",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I22R",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I27L",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I27R",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I28C",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "ERNNY8",
-        "transition": "CHDRR",
-        "approach": "I28R",
-        "fixes": [
-          "CHDRR",
-          "LYNNI",
-          "PHRLY",
-          "SWIIS",
-          "ERNNY",
-          "PAPPI",
-          "TUBEZ",
-          "VULCN",
-          "KURKK",
-          "BAMBB",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "04L",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE"
-        ]
-      },
-      {
-        "runway": "04R",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I04R",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "HARRL",
-          "NAPER",
-          "REKKS"
-        ]
-      },
-      {
-        "runway": "22L",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I22L",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "KENIL",
-          "LAIKE"
-        ]
-      },
-      {
-        "runway": "22R",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I22R",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "NOLEN",
-          "RIDGE"
-        ]
-      },
-      {
-        "runway": "27L",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I27L",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "BASHH",
-          "EBENS",
-          "JLOWW"
-        ]
-      },
-      {
-        "runway": "27R",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I27R",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "KURKK",
-          "VULCN",
-          "HIMGO",
-          "HAREE",
-          "BONZO",
-          "SIBLY"
-        ]
-      },
-      {
-        "runway": "28C",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I28C",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "RZUKO",
-          "HAZIL",
-          "SEIKA"
-        ]
-      },
-      {
-        "runway": "28R",
-        "star": "BENKY6",
-        "transition": "IRK",
-        "approach": "I28R",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "BYLAW",
-          "BENKY",
-          "NEWRK",
-          "AHSTN",
-          "PETAH",
-          "JORJO",
-          "MONKZ",
-          "TONIE",
-          "WAVIE",
-          "ADAME",
-          "WILLT"
-        ]
-      },
-      {
-        "runway": "32R",
-        "star": "SHAIN2",
-        "transition": "IRK",
-        "fixes": [
-          "IRK",
-          "LOAMY",
-          "KEOKK",
-          "DRAMS",
-          "RYELY",
-          "BFORD",
-          "EZZRA",
-          "TRIDE",
-          "SHAIN",
-          "RAGSS",
-          "JUMPN",
-          "NUNWS"
+          "GOOZY",
+          "KVENN",
+          "FLLYN",
+          "CFLCC"
         ]
       }
     ],
@@ -3571,246 +2163,124 @@
         ]
       },
       {
-        "fix": "ERNNY",
-        "inbound_true": 297.04437134308364,
-        "turn": "R",
-        "leg_min": 1.0,
-        "base_ft": 8000,
-        "levels_ft": [
-          8000,
-          9000,
-          10000,
-          11000,
-          12000
-        ],
-        "lap_min": 5.143110875247754,
-        "src": "synth",
-        "polygon": [
-          [
-            42.305023,
-            -87.444885
-          ],
-          [
-            42.338719,
-            -87.534183
-          ],
-          [
-            42.344207,
-            -87.544968
-          ],
-          [
-            42.351572,
-            -87.553464
-          ],
-          [
-            42.36031,
-            -87.559091
-          ],
-          [
-            42.369827,
-            -87.561467
-          ],
-          [
-            42.379475,
-            -87.56043
-          ],
-          [
-            42.388596,
-            -87.55605
-          ],
-          [
-            42.396567,
-            -87.548625
-          ],
-          [
-            42.402847,
-            -87.538663
-          ],
-          [
-            42.407007,
-            -87.526841
-          ],
-          [
-            42.408763,
-            -87.513965
-          ],
-          [
-            42.407996,
-            -87.500913
-          ],
-          [
-            42.404759,
-            -87.488574
-          ],
-          [
-            42.365574,
-            -87.388491
-          ],
-          [
-            42.35821,
-            -87.379995
-          ],
-          [
-            42.349471,
-            -87.374368
-          ],
-          [
-            42.339954,
-            -87.371992
-          ],
-          [
-            42.330306,
-            -87.373029
-          ],
-          [
-            42.321186,
-            -87.377409
-          ],
-          [
-            42.313214,
-            -87.384834
-          ],
-          [
-            42.306934,
-            -87.394796
-          ],
-          [
-            42.302774,
-            -87.406618
-          ],
-          [
-            42.301018,
-            -87.419494
-          ],
-          [
-            42.301785,
-            -87.432546
-          ],
-          [
-            42.305023,
-            -87.444885
-          ]
-        ]
-      },
-      {
         "fix": "ESSPO",
         "inbound_true": 293.93577697766995,
         "turn": "R",
         "leg_min": 1.0,
-        "base_ft": 9000,
+        "base_ft": 10000,
         "levels_ft": [
-          9000,
           10000,
           11000,
           12000,
-          13000
+          13000,
+          14000
         ],
-        "lap_min": 5.197302442062371,
+        "lap_min": 5.251494008876987,
         "src": "synth",
         "polygon": [
           [
-            41.55115,
-            -87.151965
+            41.550631,
+            -87.150404
           ],
           [
             41.581736,
             -87.244083
           ],
           [
-            41.586959,
-            -87.255507
+            41.587138,
+            -87.255897
           ],
           [
-            41.594216,
-            -87.264734
+            41.594643,
+            -87.26544
           ],
           [
-            41.603012,
-            -87.271135
+            41.603739,
+            -87.27206
           ],
           [
-            41.612747,
-            -87.274275
+            41.613807,
+            -87.275307
           ],
           [
-            41.622759,
-            -87.27394
+            41.624161,
+            -87.274961
           ],
           [
-            41.632364,
-            -87.270152
+            41.634095,
+            -87.271043
           ],
           [
-            41.640909,
-            -87.263169
+            41.642932,
+            -87.263822
           ],
           [
-            41.647811,
-            -87.253468
+            41.65007,
+            -87.253789
           ],
           [
-            41.652599,
-            -87.241709
+            41.655022,
+            -87.241628
           ],
           [
-            41.654948,
-            -87.228694
+            41.657451,
+            -87.228168
           ],
           [
-            41.654697,
-            -87.21531
+            41.657191,
+            -87.214326
           ],
           [
-            41.651864,
-            -87.202468
+            41.654261,
+            -87.201045
           ],
           [
-            41.616054,
-            -87.098926
+            41.617755,
+            -87.095552
           ],
           [
-            41.608798,
-            -87.089699
+            41.61025,
+            -87.086009
           ],
           [
-            41.600002,
-            -87.083298
+            41.601153,
+            -87.079389
           ],
           [
-            41.590266,
-            -87.080158
+            41.591085,
+            -87.076142
           ],
           [
-            41.580255,
-            -87.080493
+            41.580731,
+            -87.076488
           ],
           [
-            41.570649,
-            -87.084281
+            41.570797,
+            -87.080406
           ],
           [
-            41.562104,
-            -87.091264
+            41.561961,
+            -87.087627
           ],
           [
-            41.555203,
-            -87.100965
+            41.554823,
+            -87.09766
           ],
           [
-            41.550414,
-            -87.112724
+            41.549871,
+            -87.109821
           ],
           [
-            41.548065,
-            -87.125739
+            41.547442,
+            -87.123281
           ],
           [
-            41.548316,
-            -87.139123
+            41.547701,
+            -87.137123
           ],
           [
-            41.55115,
-            -87.151965
+            41.550631,
+            -87.150404
           ]
         ]
       },
@@ -4182,245 +2652,123 @@
       },
       {
         "fix": "WATSN",
-        "inbound_true": 340.06901430562317,
+        "inbound_true": 276.20219541172264,
         "turn": "R",
         "leg_min": 1.0,
-        "base_ft": 13000,
+        "base_ft": 14000,
         "levels_ft": [
-          13000,
           14000,
           15000,
           16000,
-          17000
+          17000,
+          18000
         ],
-        "lap_min": 5.414068709320837,
+        "lap_min": 5.468260276135454,
         "src": "synth",
         "polygon": [
           [
-            41.207774,
-            -85.998818
+            41.274618,
+            -85.927147
           ],
           [
             41.283453,
             -86.035336
           ],
           [
-            41.294604,
-            -86.038607
+            41.286244,
+            -86.050571
           ],
           [
-            41.306011,
-            -86.037926
+            41.291904,
+            -86.064326
           ],
           [
-            41.316897,
-            -86.033339
+            41.300045,
+            -86.075663
           ],
           [
-            41.32652,
-            -86.025159
+            41.310114,
+            -86.08381
           ],
           [
-            41.334224,
-            -86.013944
+            41.321425,
+            -86.08821
           ],
           [
-            41.339485,
-            -86.000457
+            41.333206,
+            -86.088566
           ],
           [
-            41.341943,
-            -85.985618
+            41.344655,
+            -86.084851
           ],
           [
-            41.341431,
-            -85.970437
+            41.354991,
+            -86.07732
           ],
           [
-            41.337984,
-            -85.955951
+            41.36351,
+            -86.066485
           ],
           [
-            41.331837,
-            -85.943145
+            41.369632,
+            -86.053085
           ],
           [
-            41.323409,
-            -85.932893
+            41.372939,
+            -86.038034
           ],
           [
-            41.313274,
-            -85.925892
+            41.373206,
+            -86.022356
           ],
           [
-            41.226445,
-            -85.886103
+            41.361579,
+            -85.898932
           ],
           [
-            41.215038,
-            -85.886785
+            41.35592,
+            -85.885177
           ],
           [
-            41.204152,
-            -85.891371
+            41.347778,
+            -85.87384
           ],
           [
-            41.194529,
-            -85.899551
+            41.337709,
+            -85.865694
           ],
           [
-            41.186824,
-            -85.910767
+            41.326398,
+            -85.861293
           ],
           [
-            41.181564,
-            -85.924254
+            41.314617,
+            -85.860938
           ],
           [
-            41.179106,
-            -85.939093
+            41.303169,
+            -85.864653
           ],
           [
-            41.179618,
-            -85.954273
+            41.292832,
+            -85.872184
           ],
           [
-            41.183065,
-            -85.96876
+            41.284313,
+            -85.883018
           ],
           [
-            41.189212,
-            -85.981566
+            41.278192,
+            -85.896418
           ],
           [
-            41.19764,
-            -85.991818
+            41.274885,
+            -85.911469
           ],
           [
-            41.207774,
-            -85.998818
-          ]
-        ]
-      },
-      {
-        "fix": "WYNDE",
-        "inbound_true": 249.904132148129,
-        "turn": "R",
-        "leg_min": 1.0,
-        "base_ft": 10000,
-        "levels_ft": [
-          10000,
-          11000,
-          12000,
-          13000,
-          14000
-        ],
-        "lap_min": 5.251494008876987,
-        "src": "synth",
-        "polygon": [
-          [
-            42.4821,
-            -87.012589
-          ],
-          [
-            42.455758,
-            -87.110175
-          ],
-          [
-            42.4535,
-            -87.123875
-          ],
-          [
-            42.453934,
-            -87.1379
-          ],
-          [
-            42.457032,
-            -87.151296
-          ],
-          [
-            42.462582,
-            -87.163148
-          ],
-          [
-            42.470207,
-            -87.172649
-          ],
-          [
-            42.479385,
-            -87.179151
-          ],
-          [
-            42.489493,
-            -87.182213
-          ],
-          [
-            42.499841,
-            -87.181624
-          ],
-          [
-            42.509724,
-            -87.177425
-          ],
-          [
-            42.518469,
-            -87.169902
-          ],
-          [
-            42.525478,
-            -87.159568
-          ],
-          [
-            42.530276,
-            -87.147128
-          ],
-          [
-            42.558877,
-            -87.035841
-          ],
-          [
-            42.558442,
-            -87.021816
-          ],
-          [
-            42.555344,
-            -87.008421
-          ],
-          [
-            42.549794,
-            -86.996569
-          ],
-          [
-            42.54217,
-            -86.987068
-          ],
-          [
-            42.532991,
-            -86.980565
-          ],
-          [
-            42.522883,
-            -86.977504
-          ],
-          [
-            42.512535,
-            -86.978092
-          ],
-          [
-            42.502652,
-            -86.982291
-          ],
-          [
-            42.493908,
-            -86.989814
-          ],
-          [
-            42.486898,
-            -87.000148
-          ],
-          [
-            42.4821,
-            -87.012589
+            41.274618,
+            -85.927147
           ]
         ]
       }

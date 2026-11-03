@@ -14,7 +14,7 @@
     "decision",
     "decision+claude"
   ],
-  "default_mode": "formulas",
+  "default_mode": "decision",
   "models": [
     {
       "id": "typesafe/jev-1.14",
@@ -24,16 +24,16 @@
       "benchmark_rank": 1
     },
     {
-      "id": "liquid/d1-ultra",
+      "id": "baseten/elephant-1",
       "provider": "openrouter",
-      "label": "Liquid d1-ultra",
+      "label": "Baseten elephant-1",
       "available": true,
       "benchmark_rank": 2
     },
     {
-      "id": "baseten/elephant-1",
+      "id": "liquid/d1-ultra",
       "provider": "openrouter",
-      "label": "Baseten elephant-1",
+      "label": "Liquid d1-ultra",
       "available": true,
       "benchmark_rank": 3
     },
@@ -47,8 +47,7 @@
       "id": "formula",
       "provider": "formula",
       "label": "Formula (deterministic)",
-      "available": true,
-      "benchmark_rank": 1
+      "available": true
     }
   ],
   "default_model": "typesafe/jev-1.14",
