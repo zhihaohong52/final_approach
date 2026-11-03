@@ -8,9 +8,10 @@ vetoed). Pure and deterministic; no model decides anything here.
 - Departure: pushback at WHEELS_OFF - TAXI_OUT (`t_start`), from a seeded stand (simulated) in the carrier's most-used
   pier, to the holding point of its departure runway; takeoff (a runway event) at WHEELS_OFF, or later if the taxi
   waits made it reach the holding point after that, or takeoff spacing (from takeoffs already settled, and 1 min from
-  every landing on the strip) or a scheduled crossing holds it. It keeps its holding-point node reserved until it
-  lines up 30 s before takeoff (HOLD_UNTIL_TAKEOFF), so the queue behind it forms upstream and is visible to every
-  later mover and to the wave flights; `hold_stats` reports the dwell and the queue waits.
+  every landing on the strip) or a scheduled crossing holds it. It waits for its takeoff in the holding bay at the
+  holding point until it lines up 30 s before takeoff (HOLD_UNTIL_TAKEOFF): off the taxiway, so a departure with an
+  earlier takeoff passes it; at most BAY_CAPACITY at once, beyond which the next one waits upstream on the taxiway
+  (visible to every later mover and to the wave flights); `hold_stats` reports the bay waits and the queue waits.
 - Departure runway (assumption, `rules.LIMITS` "departure runway"): the airport is mixed-mode, and departures use the
   arrival flow's runway (the majority `moves.fcfs_runways` end), unless an open end parallel to it (heading within
   10 degrees, same direction, another strip) carries no arrivals; then every such free end is a departure runway.
@@ -41,8 +42,8 @@ DEPARTURE_SPREAD_DEG = 60.0
 TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one a minute (assumption, LIMITS)
 # a takeoff stays this far from every landing on its strip (mixed mode; assumption, LIMITS)
 LANDING_TAKEOFF_GAP_MIN = 1.0
-HOLD_UNTIL_TAKEOFF = True     # a departure keeps its holding-point node reserved until its takeoff: the queue behind it
-                              # forms upstream on the taxiway, visible to every later mover and to the wave flights
+HOLD_UNTIL_TAKEOFF = True     # a departure waits in the holding bay until it lines up (False: it leaves the holding
+                              # point as it arrives; the takeoff time is unchanged)
 SRC_REAL = "BTS 2015 movements"
 SRC_PARTIAL = "challenge flights.csv subset"
 _TOL = 1e-9
@@ -487,7 +488,27 @@ def _spacing_events(events, settled: set[str] | None) -> list:
     return [e for e in events if e[1] != "takeoff" or settled is None or e[2] in settled]
 
 
-HOLD_QUEUE_MAX_RETRY = 50     # re-schedules of one departure behind later arrivals at its holding point
+# holding bay at each departure holding point (assumption, LIMITS): departures waiting for their takeoff stand off
+# the taxiway, so one with an earlier takeoff passes them; at most this many at once, else the queue backs up upstream
+BAY_CAPACITY = 3
+HOLD_QUEUE_MAX_RETRY = 50     # re-schedules of one departure waiting upstream for room in the bay     # re-schedules of one departure behind later arrivals at its holding point
+
+
+def _bay_free_at(bay, t_in: float, t_out: float) -> tuple[float, str] | None:
+    """None when a departure can wait in the holding bay over [t_in, t_out] (fewer than BAY_CAPACITY others in it at
+    every moment); else (the earliest time >= t_in at which one of the occupants leaves and there is room, its label):
+    the departure must reach the holding point no earlier (the queue backs up upstream)."""
+    occ = [b for b in bay if b[0] < t_out - _TOL and t_in < b[1] - _TOL]
+    pts = sorted({t_in} | {b[0] for b in occ if b[0] > t_in})
+    if all(sum(1 for b in occ if b[0] <= t + _TOL and t < b[1] - _TOL) < BAY_CAPACITY for t in pts):
+        return None
+    for b in sorted(occ, key=lambda b: (b[1], b[2])):
+        t = b[1]
+        if t <= t_in + _TOL:
+            continue
+        if sum(1 for x in bay if x[0] <= t + _TOL and t < x[1] - _TOL) < BAY_CAPACITY:
+            return (t, b[2])
+    return (max(b[1] for b in occ), max(occ, key=lambda b: b[1])[2])
 
 
 def _unreserve(res: Reservations, nodes: list[int], label: str) -> None:
@@ -566,6 +587,7 @@ def _compute(wave: Wave) -> FixedTraffic:
     stats["hold_point_min"], stats["queue_wait_min"] = [], []
     # takeoffs whose time is final: unrouted departures keep WHEELS_OFF; the others settle as they are scheduled
     settled: set[str] = {m.label for m in movers if m.kind == "departure" and (m.path is None or g is None)}
+    bays: dict[int, list[tuple[float, float, str]]] = {}
     for m in movers:
         if m.path is None or g is None:
             continue
@@ -574,7 +596,6 @@ def _compute(wave: Wave) -> FixedTraffic:
         # schedule() does not skip the mover's own runway event: hide it (shared node/edge tables, filtered events)
         view = Reservations(res.node_busy, res.edge_dir,
                             {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
-        hw = surface.HEADWAY_S / 60.0
         last = m.path.nodes[-1]
         fifo_ok, blocks = False, []
         for _attempt in range(HOLD_QUEUE_MAX_RETRY):
@@ -582,22 +603,19 @@ def _compute(wave: Wave) -> FixedTraffic:
             if m.kind != "departure" or not HOLD_UNTIL_TAKEOFF or s.reason == "hold-short search did not converge":
                 fifo_ok = True
                 break
-            # FIFO at the holding point: its dwell there (until line-up) must not overlap another mover that reaches
-            # the node later (scheduled before it, e.g. an earlier takeoff); else it queues upstream behind that one:
-            # a temporary node reservation under that mover's label (so the wait names it) until it has left
+            # holding bay: its wait there (from reaching the holding point to line-up) needs room in the bay, else it
+            # reaches the holding point only when an occupant leaves (a temporary node reservation under that
+            # occupant's label, so the wait names it) and the queue backs up upstream
             leave = max(m.event_min, s.points[-1]["t_min"])
             t_to = _takeoff_time(_spacing_events([e for e in res.runway_events[m.strip] if e[2] != m.label],
                                                  settled), spans.get(m.strip, ()), leave)
             at_hold = next(q["t_min"] for q in s.points if q["node"] == last)
-            line_up = max(t_to - surface.PARK_S / 60.0, s.points[-1]["t_min"])
-            clash = [b for b in res.node_busy[last] if b[2] != m.label and b[0] < line_up + hw - _TOL
-                     and at_hold < b[1] + hw - _TOL]
-            if not clash:
+            free = _bay_free_at(bays.get(last, ()), s.points[-1]["t_min"], t_to - surface.PARK_S / 60.0)
+            if free is None:
                 fifo_ok = True
                 break
             _unreserve(res, m.path.nodes, m.label)
-            ahead = max(clash, key=lambda b: (b[1], b[2]))
-            blk = (at_hold, ahead[1], ahead[2])
+            blk = (at_hold, free[0], free[1])
             res.node_busy[last].append(blk)
             res.node_busy[last].sort()
             blocks.append(blk)
@@ -611,7 +629,7 @@ def _compute(wave: Wave) -> FixedTraffic:
         if not s.ok:
             failures.append((m.label, s.reason or "not scheduled"))
         elif not fifo_ok:
-            failures.append((m.label, "holding-point queue order not resolved"))
+            failures.append((m.label, "no room in the holding bay within the retries"))
         points, waits = s.points, s.waits
         if m.kind == "departure":
             leave = max(m.event_min, s.points[-1]["t_min"])
@@ -634,18 +652,14 @@ def _compute(wave: Wave) -> FixedTraffic:
             end = s.points[-1]["t_min"]
             line_up = t_to - surface.PARK_S / 60.0     # it leaves the holding point 30 s before takeoff (line-up)
             if HOLD_UNTIL_TAKEOFF and s.reason != "hold-short search did not converge" and line_up > end + _TOL:
-                # the departure stays on its holding-point node until it lines up: reserve the node until then, so the
-                # queue behind it forms upstream (the follower enters as it lines up, 1 takeoff a minute) and the wave
-                # flights see it
-                busy = res.node_busy[last]
-                k = busy.index((at_hold, end, m.label))
-                busy[k] = (at_hold, line_up, m.label)
-                busy.sort()
+                # it waits in the holding bay until it lines up: off the taxiway (no node reservation, so a departure
+                # with an earlier takeoff passes it and the wave flights do not see it), at most BAY_CAPACITY at once
+                bays.setdefault(last, []).append((end, line_up, m.label))
                 p = s.points[-1]
-                points = s.points + [{"t_min": line_up, "lat": p["lat"], "lon": p["lon"], "node": last}]
-                waits = waits + [{"node": last, "lat": p["lat"], "lon": p["lon"], "from_min": end,
-                                    "to_min": line_up, "reason": f"hold for takeoff {m.runway}", "strip": None,
-                                    "kind": None, "for": None}]
+                points = s.points + [{"t_min": line_up, "lat": p["lat"], "lon": p["lon"], "node": None}]
+                waits = waits + [{"node": None, "lat": p["lat"], "lon": p["lon"], "from_min": end,
+                                  "to_min": line_up, "reason": f"holding bay, takeoff {m.runway}", "strip": None,
+                                  "kind": None, "for": None}]
         if s.reason == "hold-short search did not converge":
             continue                     # nothing was reserved: no track to draw or verify
         cs_spans = _crossing_spans(g, m.path, s)
@@ -785,7 +799,7 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
                      f"landing or a crossing")
     hs = hold_stats(ft)
     if hs["n"]:
-        parts.append(f"departures at the holding point (reserved until takeoff, queue drawn upstream): median "
+        parts.append(f"departures waiting for takeoff in the holding bay (at most {BAY_CAPACITY}, then queued upstream): median "
                      f"{hs['median']:.1f}, p95 {hs['p95']:.1f}, max {hs['max']:.1f} min, {hs['over_30']} over 30 min "
                      f"(at most {hs['over_30_one_node']} at one node); upstream queue waits median "
                      f"{hs['queue_median']:.1f}, max {hs['queue_max']:.1f} min")

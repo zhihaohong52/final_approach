@@ -107,7 +107,7 @@ LIMITS = [
              "give-way "
              "waits of the plan's hold-short pass (ATC-TAXI-CONFLICT); no ramp or gate waits, so it can sit below BTS "
              "TAXI_IN (FCFS medians on the replays with the 2015 movements, ROT + taxi + waits vs taxi-in reference: "
-             "ORD 4.4 / 15.5, MIA 5.0 / 4.0, ATL 7.0 / 6.5, DFW 10.9 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
+             "ORD 4.4 / 15.5, MIA 5.0 / 4.0, ATL 7.0 / 6.5, DFW 16.4 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
              "validation (Task 27)"},
     {"limit": "ground node headway", "value": f"{surface.HEADWAY_S:g} s", "source": "assumption",
      "note": "ATC-TAXI-CONFLICT (FAA JO 7110.65 §3-7-2: ground control issues the route and hold-short "
@@ -152,22 +152,21 @@ LIMITS = [
              "every landing on its strip (the arrival has vacated, or the departure is airborne before the arrival "
              "crosses the threshold). Wave landings against fixed takeoffs on the same strip are checked only through "
              "the runway-vacate rule (a takeoff while the wave flight is still on the runway)"},
-    {"limit": "departure holding-point queue", "value": "holding node reserved until line-up (30 s before "
-     "takeoff); queue drawn upstream", "source": "assumption",
-     "note": "a fixed departure keeps its holding-point node from arrival there until it lines up, so later "
-             "departures (and wave flights through that node) wait upstream on the taxiway and the queue is visible. "
-             "Takeoffs are spaced only from takeoffs already settled in pushback order (a departure not yet scheduled "
-             "does not block an earlier one). The holding point is first come first served: a departure that would "
-             "overlap the dwell of one reaching the node later is re-scheduled to arrive after it (it queues "
-             "upstream). Replays with the 2015 movements (dwell on the holding node median / p95 / max; upstream "
-             "queue wait median / max; fixed movers over the 30-min horizon): ORD 1.0 / 16.0 / 32.7, 18.5 / 30.1, 1; "
-             "MIA 2.3 / 17.5 / 38.3, 11.2 / 40.0, 3; ATL 2.0 / 9.0 / 43.7, 10.6 / 29.1, 0; DFW 3.0 / 14.1 / 34.0, "
-             "5.6 / 20.3, 0; DEN 6.9 / 17.7 / 23.2, 3.2 / 14.4, 0. Pushback is WHEELS_OFF - "
-             "TAXI_OUT, and BTS TAXI_OUT already contains the real queue. Wave arrivals giving way to a departure "
-             "on a shared taxiway (FCFS plans): DFW 3 (max 7.6 min), ATL 2 (max 1.3 min), other replays 0. Known "
-             "limitation: a departure that pushes early (long BTS TAXI_OUT) reaches its holding point long before its "
-             "takeoff and keeps the node; one with an earlier takeoff that arrives there later queues behind it "
-             "(first come first served at the node, no resequencing), which makes the ORD replay's takeoffs late"},
+    {"limit": "departure holding bay", "value": "3 aircraft per holding point, resequenced by takeoff time; "
+     "beyond that the queue backs up upstream", "source": "assumption",
+     "note": "real ATC resequences departures at the runway (holding bays let an aircraft with an earlier slot pass "
+             "one that is waiting; controller ruling T31). A fixed departure that reaches its holding point before "
+             "its takeoff waits in the bay until it lines up 30 s before takeoff: off the taxiway (no node "
+             "reservation), so it blocks neither a later departure with an earlier takeoff nor the wave flights. "
+             "At most 3 wait at once per holding point (bay capacity, assumption); the next one waits upstream on "
+             "the taxiway until one leaves (re-scheduled behind it, visible to every later mover and to the wave "
+             "flights). Takeoffs are spaced only from takeoffs already settled in pushback order. Replays with the "
+             "2015 movements (bay wait median / p95 / max; upstream queue wait median / max; fixed movers over the "
+             "30-min horizon): ORD 5.4 / 25.0 / 37.6, 10.4 / 29.9, 0; MIA 10.7 / 17.9 / 38.3, 0 / 8.6, 0; ATL "
+             "5.0 / 21.0 / 43.7, 8.5 / 22.5, 0; DFW 5.0 / 18.0 / 39.0, 2.3 / 12.6, 0; DEN 9.3 / 22.4 / 23.2, "
+             "0 / 7.0, 0. Pushback is WHEELS_OFF - TAXI_OUT, and BTS TAXI_OUT already contains the real queue, so "
+             "the bay wait stands for that queue. Wave arrivals giving way to a departure on a shared taxiway (FCFS "
+             "plans): DFW 3 (max 21.0 min), ATL 2 (max 1.3 min), other replays 0"},
     {"limit": "runway ends missing from OSM", "value": "generic straight-line taxi", "source": "assumption",
      "note": "open in 2015 but not in today's OSM; taxi uses the straight-line generic estimate"},
     {"limit": "runway hold clearance", "value": f"{surface.RUNWAY_HOLD_CLEARANCE_M:g} m from a crossed runway's "
@@ -210,8 +209,8 @@ LIMITS = [
              "holding point, never before WHEELS_OFF, spaced from the strip's other takeoffs (departure takeoff "
              "spacing); a schedule that is not ok, or a takeoff inside an already scheduled crossing's window, ranks "
              "last; ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
-             "WHEELS_OFF - TAXI_OUT; the departure holds the holding-point node until it lines up 30 s before "
-             "takeoff (departure holding-point queue); takeoff at WHEELS_OFF, later only if taxi waits, takeoff "
+             "WHEELS_OFF - TAXI_OUT; the departure waits in the holding bay until it lines up 30 s before "
+             "takeoff (departure holding bay); takeoff at WHEELS_OFF, later only if taxi waits, takeoff "
              "spacing, a landing on its strip or a scheduled crossing hold it. Known limitation: arrival runways "
              "are v2's FCFS choice "
              "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
@@ -223,10 +222,9 @@ LIMITS = [
              "same time; it is spaced only from takeoffs already settled in pushback order and from every landing on "
              "the strip (1 min). It matches the holding-point throughput of the ground scheduler (30 s node headway + "
              "30 s line-up). Replays with the 2015 movements, takeoffs later than WHEELS_OFF (> 0 / > 1 / > 5 min, "
-             "max): ORD 95 / 90 / 56 of 144, 24.0; MIA 11 / 11 / 9 of 24, 32.0; ATL 45 / 34 / 9 of 163, 13.0; DFW "
-             "5 / 4 / 1 of 119, 6.0; DEN 0 (v3-taxi: ORD 0; MIA 2 / 0 / 0, 1.0; ATL 62 / 51 / 37, 18.0; DFW and DEN "
-             "0). The ORD and MIA increases are taxi waits behind departures holding their holding point early "
-             "(departure holding-point queue, known limitation), not runway capacity"},
+             "max): ORD 14 / 10 / 1 of 144, 6.0; MIA 2 / 0 / 0 of 24, 1.0; ATL 39 / 28 / 2 of 163, 6.5; DFW "
+             "4 / 4 / 0 of 119, 4.0; DEN 0 (v3-taxi: ORD 0; MIA 2 / 0 / 0, 1.0; ATL 62 / 51 / 37, 18.0; DFW and DEN "
+             "0)"},
 ]
 
 

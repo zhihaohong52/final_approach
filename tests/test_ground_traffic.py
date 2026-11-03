@@ -220,35 +220,54 @@ def test_takeoffs_clear_of_landings_on_every_strip():
                 assert all(abs(t - x) >= 1.0 - 1e-6 for x in lands), strip
 
 
-def test_holding_node_reserved_until_line_up_and_queue_forms_upstream():
-    """Carry T30: a departure keeps its holding-point node until it lines up (30 s before takeoff), so the queue
-    behind it waits upstream on the taxiway (visible to the wave flights), and the hold lengths are reported."""
+def test_holding_bay_lets_an_earlier_takeoff_pass_and_caps_the_queue():
+    """Controller ruling T31: a departure waits for its takeoff in the holding bay (off the taxiway, drawn as a wait
+    with no node, until it lines up 30 s before takeoff), so a later-arriving departure with an earlier takeoff passes
+    it; at most BAY_CAPACITY wait at once per holding point, beyond which the queue backs up upstream."""
     from backend.wave import ground_traffic as GT
     w = build.build_wave("F2015-270287")
     ft = GT._get(w)
     to = {e[2]: e[0] for lst in ft.reservations.runway_events.values() for e in lst if e[1] == "takeoff"}
-    held = 0
+    bay: dict[int, list] = {}
     for tr in ft.tracks:
         if tr.kind != "departure":
             continue
-        last = tr.points[-1]["node"]
-        mine = [b for b in ft.reservations.node_busy[last] if b[2] == tr.callsign]
-        assert len(mine) == 1 and mine[0][1] == pytest.approx(max(to[tr.callsign] - 0.5, mine[0][1]))
-        if tr.waits and tr.waits[-1]["reason"].startswith("hold for takeoff"):
-            held += 1
-            assert mine[0][1] == pytest.approx(to[tr.callsign] - 0.5)
-            assert tr.points[-1]["t_min"] == pytest.approx(to[tr.callsign] - 0.5)
-    assert held > 0
-    deps = {m.label for m in ft.movers if m.kind == "departure"}
-    assert any(w_["for"] in deps for tr in ft.tracks if tr.kind == "departure" for w_ in tr.waits
-               if w_["reason"].startswith("give way"))            # a queue upstream, behind another departure
+        hold = next(q["node"] for q in reversed(tr.points) if q.get("node") is not None)
+        mine = [b for b in ft.reservations.node_busy[hold] if b[2] == tr.callsign]
+        assert len(mine) == 1                                     # its passage only, not the bay wait
+        if tr.waits and tr.waits[-1]["reason"].startswith("holding bay"):
+            assert tr.points[-1]["node"] is None and tr.points[-1]["t_min"] == pytest.approx(to[tr.callsign] - 0.5)
+            assert mine[0][1] <= tr.waits[-1]["from_min"] + 1e-6
+            bay.setdefault(hold, []).append((tr.waits[-1]["from_min"], tr.waits[-1]["to_min"], tr.callsign))
+    assert bay
+    for node, lst in bay.items():                                 # capacity at every entry time
+        for t, _, _ in lst:
+            assert sum(1 for a, b, _ in lst if a <= t + 1e-9 and t < b - 1e-9) <= GT.BAY_CAPACITY, node
+    # some departure enters the bay after another and takes off before it (resequenced at the runway)
+    assert any(a1 < a2 and b2 < b1 for lst in bay.values() for a1, b1, _ in lst for a2, b2, _ in lst)
     for strip, lst in ft.reservations.runway_events.items():    # takeoffs still 1 a minute per strip
         tos = sorted(t for t, k, _ in lst if k == "takeoff")
         assert all(b - a >= 1.0 - 1e-6 for a, b in zip(tos, tos[1:])), strip
     hs = GT.hold_stats(ft)
     assert hs["n"] == len([m for m in ft.movers if m.kind == "departure" and m.path is not None])
     pv = next(p for p in w.provenance if p.layer == "ground_traffic")
-    assert "holding point" in pv.detail and "p95" in pv.detail
+    assert "holding bay" in pv.detail and "p95" in pv.detail
+
+
+def test_full_holding_bay_queues_upstream(monkeypatch):
+    """With a one-aircraft bay the next departure waits upstream (a give-way wait naming the occupant)."""
+    from backend.wave import ground_traffic as GT
+    monkeypatch.setattr(GT, "BAY_CAPACITY", 1)
+    GT._cache_clear()
+    try:
+        w = build.build_wave("F2015-270287")
+        ft = GT._get(w)
+        deps = {m.label for m in ft.movers if m.kind == "departure"}
+        assert any(w_["for"] in deps for tr in ft.tracks if tr.kind == "departure" for w_ in tr.waits
+                   if w_["reason"].startswith("give way"))
+        assert surface.verify_separation([t for t in ft.tracks]) == []
+    finally:
+        GT._cache_clear()
 
 
 def test_fixed_traffic_is_pinned_on_the_built_wave():
@@ -324,21 +343,23 @@ def test_no_internal_sentinel_in_served_waits(wid):
 
 
 def test_queue_retry_exhaustion_keeps_the_mover_and_reports_it(monkeypatch):
-    """Review T31: with one retry allowed, an unresolved holding-point order must not crash build_wave: the departure
-    is scheduled once without the queue block, keeps its reservations and is reported as a fixed failure."""
+    """Review T31: with one retry allowed (and a one-aircraft bay), an unresolved holding-point queue must not crash
+    build_wave: the departure is scheduled once without the queue block, keeps its reservations and is reported as a
+    fixed failure."""
     from backend.wave import ground_traffic as GT
     monkeypatch.setattr(GT, "HOLD_QUEUE_MAX_RETRY", 1)
+    monkeypatch.setattr(GT, "BAY_CAPACITY", 1)         # a full bay forces re-schedules
     GT._cache_clear()
     try:
         w = build.build_wave("F2015-270287")
         ft = GT._get(w)
-        unresolved = [lab for lab, why in ft.failures if why == "holding-point queue order not resolved"]
+        unresolved = [lab for lab, why in ft.failures if why == "no room in the holding bay within the retries"]
         assert unresolved
         drawn = {t.callsign for t in ft.tracks}
         assert set(unresolved) <= drawn
         for lab in unresolved:
             t = next(t for t in ft.tracks if t.callsign == lab)
-            hold = t.points[-1]["node"]
+            hold = next(q["node"] for q in reversed(t.points) if q.get("node") is not None)
             assert any(b[2] == lab for b in ft.reservations.node_busy[hold])
     finally:
         GT._cache_clear()
