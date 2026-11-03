@@ -7,7 +7,7 @@ TEST_DB_URL = os.environ.get("DATABASE_TEST_URL")
 for _k in ("DATABASE_URL_POOLED", "DATABASE_URL", "DATABASE_TEST_URL"):
     os.environ.pop(_k, None)
 os.environ["ATM_STORE"] = "files"
-os.environ.setdefault("ATM_WARM", "0")   # no startup warm-up thread under tests (tests/test_warm.py turns it on)
+os.environ["ATM_WARM"] = "0"   # no startup warm-up thread under tests (tests/test_warm.py turns it on)
 
 from backend import datastore  # noqa: E402
 

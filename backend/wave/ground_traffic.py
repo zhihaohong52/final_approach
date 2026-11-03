@@ -408,7 +408,7 @@ def _takeoff_time(events, spans, t: float) -> float:
                 t, moved = x + TAKEOFF_SPACING_MIN, True
         for t_in, t_out in spans:
             if t_in - a - _TOL <= t <= t_out + b + _TOL:
-                t, moved = t_out + b + 1e-6, True
+                t, moved = t_out + b + 2 * _TOL, True   # just past the span's tolerant edge, so the loop ends
     return t
 
 

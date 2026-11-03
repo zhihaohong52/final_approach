@@ -83,7 +83,10 @@ def _kick_warm() -> None:
             return
         _WARM_KICKED = True
         if _WARM_THREAD is None:
-            _warm()
+            try:
+                _warm()
+            except Exception as e:  # noqa: BLE001 - a failed warm-up must never fail the health check
+                log.warning("replay warm-up did not start: %s: %s", type(e).__name__, e)
 
 
 @asynccontextmanager
