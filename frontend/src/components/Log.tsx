@@ -19,6 +19,7 @@ function summary(m: NegotiationMessage): string {
     case "NO_CONSENSUS": return `No consensus in turn ${b.turn}`;
     case "FALLBACK": return `Deterministic solver picks plan ${b.plan_id} (${b.method})`;
     case "MODEL_FALLBACK": return `${b.from_model} failed (${b.error}); ${b.to_model} answers`;
+    case "UNABLE": return b.text;   // v2.3 (the full UNABLE line is A8)
     // superseded in v2.0, still readable for old runs
     case "MOVE": return b.move.label;
     case "MOVE_REJECTED": return `${b.move.label}: vetoed, ${b.violations[0]?.rule ?? "rule"}`;

@@ -214,3 +214,45 @@ def test_decision_run_id_and_edits_are_validated(client):
         assert len(r.text) < 300
     ok = client.post("/api/decision", json={"run_id": "abc", "decision": "APPROVE", "edits": [{"callsign": "AA1", "slot_min": 3}]})
     assert ok.status_code == 200
+
+
+def test_stub_stream_has_airline_and_unable(client):
+    r = client.post("/api/negotiate-wave", json={"wave_id": WID, "mode": "formulas", "stream": False})
+    j = r.json()
+    assert j["agents"][0] == "ATC" and j["agents"][-1] == "GROUND" and j["agents"][1].startswith("AIRLINE:")
+    assert j["pilots"] and all(p.startswith("PILOT:") for p in j["pilots"]) and j["airlines"]
+    turns = [m for m in j["log"] if m["type"] == "AGENT_TURN"]
+    assert [m["body"]["agent"] for m in turns] == j["agents"]       # one AGENT_TURN per voter, no pilot turns
+    assert sum(m["body"]["role"] == "AIRLINE" for m in turns) == 1
+    unable = [m for m in j["log"] if m["type"] == "UNABLE"]
+    assert len(unable) == 1
+    b = unable[0]["body"]
+    assert unable[0]["sender"] == b["agent"] and b["agent"].startswith("PILOT:")
+    assert {"turn", "callsign", "rule", "source", "evidence", "detail", "instruction", "plan_id", "proposed_by",
+            "text"} <= set(b)
+    assert b["text"].startswith("UNABLE ") and b["text"].endswith(b["rule"])
+
+
+def test_wave_has_airlines(client):
+    j = client.get(f"/api/wave/{WID}").json()
+    assert j["airlines"] and {"code", "name", "callsigns", "basis"} <= set(j["airlines"][0])
+    assert sorted(c for a in j["airlines"] for c in a["callsigns"]) == sorted(f["callsign"] for f in j["flights"])
+
+
+def test_old_replay_passes_through(client, tmp_path):
+    """A stored v3-traffic recording (3 agents, no airlines/pilots/UNABLE) still streams; with no engine_version
+    it counts as another engine, so its paths are withheld (tests/test_geo_api.py does the same)."""
+    import glob
+    src = sorted(glob.glob("data/replay/*.json"))[0]
+    d = json.load(open(src))
+    d.pop("engine_version", None)
+    d["result"].pop("engine_version", None)
+    assert len(d["result"]["agents"]) == 3 and "airlines" not in d["result"]
+    (tmp_path / "replay").mkdir(exist_ok=True)
+    (tmp_path / "replay" / f"{WID}.json").write_text(json.dumps(d))
+    r = client.post("/api/negotiate-wave", json={"wave_id": WID, "mode": "decision", "replay": True})
+    fr = _frames(r.text)
+    res = fr[-1][1]
+    assert fr[-1][0] == "result" and res["paths_unavailable"] is True and "trajectories" not in res
+    assert len(res["agents"]) == 3 and res["engine_version"] == "v2"
+    assert sum(1 for e, _ in fr if e == "message") == len(d["messages"])

@@ -50,8 +50,9 @@ async def fcfs_plan(wave_id: str) -> dict:
 
 @mcp.tool()
 async def legal_moves(wave_id: str, agent_id: str, plan: dict | None = None) -> list[dict]:
-    """List the moves an agent (e.g. ATC, GROUND, PILOT:<callsign>) may make from a plan, most useful first.
-    The plan defaults to the FCFS plan. Read-only. Legality is decided only by the deterministic rule engine:
+    """List the moves an agent (ATC, AIRLINE:<code>, GROUND or PILOT:<cs>) may make from a plan, most useful first.
+    AIRLINE:<code> lists only that airline's own-flight moves; PILOT:<cs> lists the per-flight action space the
+    fallback solver searches (pilots never propose in a negotiation). The plan defaults to the FCFS plan. Read-only. Legality is decided only by the deterministic rule engine:
     infeasible moves are returned ranked lower so the engine's rejection is visible."""
     def run() -> list[dict]:
         w = build.build_wave(wave_id)
@@ -83,7 +84,8 @@ async def get_trajectory(wave_id: str, assignments: list[dict]) -> dict:
 @mcp.tool()
 async def negotiate(wave_id: str) -> dict:
     """Run the formulas-only negotiation for a wave (no paid model calls) and return the result without its
-    message log. Read-only. Legality is decided only by the deterministic rule engine."""
+    message log. `agents` are the voters (ATC, one AIRLINE:<code> per airline, GROUND); `pilots` lists the
+    PILOT:<cs> agents, which only say UNABLE; `airlines` is the grouping. Read-only. Legality is decided only by the deterministic rule engine."""
     def run() -> dict:
         res = graph.negotiate_wave(build.build_wave(wave_id), "formulas")
         res.pop("log", None)

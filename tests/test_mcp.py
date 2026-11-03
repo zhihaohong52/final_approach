@@ -40,3 +40,31 @@ def test_mcp_plans_are_bounded_like_the_api(monkeypatch):
         with pytest.raises(ValueError):
             asyncio.run(mcp_server.legal_moves(w.id, "ATC", {"assignments": bad}))
     assert "feasible" in asyncio.run(mcp_server.check_plan(w.id, {"assignments": rows}))
+
+
+def test_mcp_legal_moves_airline(monkeypatch):
+    """AIRLINE:<code> lists only that carrier's own-flight moves (the airline authority, A3)."""
+    w = fixtures.make_wave()
+    monkeypatch.setattr(build, "build_wave", lambda wave_id: w)
+    mv = asyncio.run(mcp_server.legal_moves(w.id, "AIRLINE:DL"))
+    own = {f.callsign for f in w.flights if f.carrier == "DL"}
+    assert mv and all(m["agent"] == "AIRLINE:DL" and set(m["callsigns"]) <= own for m in mv)
+    assert {m["kind"] for m in mv} & {"swap_own", "shift_slot", "speed_reduction", "ground_delay", "accept"}
+    pilot = asyncio.run(mcp_server.legal_moves(w.id, "PILOT:DL100"))
+    assert pilot and all(m["agent"] == "PILOT:DL100" for m in pilot)
+
+
+def test_mcp_legal_moves_docstring_names_roster():
+    tool = next(t for t in asyncio.run(mcp_server.mcp.list_tools()) if t.name == "legal_moves")
+    assert "AIRLINE:<code>" in tool.description and "PILOT:<cs>" in tool.description
+    assert "never propose" in tool.description
+
+
+def test_mcp_negotiate_roster(monkeypatch):
+    w = fixtures.make_wave()
+    monkeypatch.setattr(build, "build_wave", lambda wave_id: w)
+    res = asyncio.run(mcp_server.negotiate(w.id))
+    codes = sorted({f.carrier for f in w.flights})
+    assert res["agents"] == ["ATC", *[f"AIRLINE:{c}" for c in codes], "GROUND"]
+    assert res["pilots"] == [f"PILOT:{f.callsign}" for f in w.flights]
+    assert {a["code"] for a in res["airlines"]} == {a.removeprefix("AIRLINE:") for a in res["agents"][1:-1]}

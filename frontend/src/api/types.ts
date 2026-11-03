@@ -1,6 +1,6 @@
 // Generated verbatim from docs/api-contract.md. Do not edit by hand; change the contract instead.
 
-export type AgentId = "ATC" | "GROUND" | `PILOT:${string}`;
+export type AgentId = "ATC" | "GROUND" | `AIRLINE:${string}` | `PILOT:${string}`;
 export type Sender = AgentId | "ENGINE" | "DECIDER";
 
 export interface Provenance {
@@ -76,12 +76,18 @@ export interface WaveScenario {
   flights: WaveFlight[];               // negotiated flights
   gates: Gate[];
   severity?: Triage | null;                 // filled once a negotiation has triaged it
-  focus: string | null;                // v2.0: callsign of the disruption flight (its pilot is the PILOT agent)
+  focus: string | null;                // v2.0: callsign of the disruption flight
   provenance: Provenance[];            // per layer for the whole wave
   engine_version?: string;             // v2.2
   geo_available?: boolean;             // v2.2: runway ends have coordinates and the airport is placed
   status_quo?: { plan: JointPlan; evaluation: PlanEvaluation };  // v2.1: first come, first served and its rule check, shown before negotiating
+  airlines?: AirlineGroup[];           // v2.3: the airline agents' groups (Wave.to_dict)
 }
+
+// v2.3: one airline agent AIRLINE:<code> controls these wave flights. Several operating carriers can share an
+// airline (e.g. OH flies for AA), so `callsigns` is the truth, not the callsign prefix.
+export interface AirlineGroup { code: string; name: string; callsigns: string[];
+  basis: string }                      // why these callsigns are grouped
 
 export interface Airport {
   iata: string; icao: string; name: string; lat: number; lon: number;
@@ -189,7 +195,7 @@ export interface PlanEvaluation {
   plan_id: string;
   feasible: boolean;
   checks: RuleCheck[];                 // all rules, all flights
-  utilities: Record<AgentId, number>;  // 0..1 for the 3 negotiating agents (formula decision model)
+  utilities: Record<AgentId, number>;  // 0..1 per voter (v2.3: ATC, each AIRLINE:<code>, GROUND; formula decision model)
   totals: { delay_min: number; fuel_kg: number; hold_min: number; pax_protected_pct: number;
             overtime_min: number; diversions: number };
 }
@@ -211,7 +217,8 @@ export interface Move {
   kind: "swap_order" | "change_runway" | "shift_slot"                         // ATC
       | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // PILOT (own flight); ATC: speed/ground delay of non-focus flights
       | "reassign_gate" | "remote_stand" | "swap_gates"     // GROUND
-      | "hold";                                                                  // v2.2: ATC holds a flight in the stack
+      | "hold"                                                                   // v2.2: ATC holds a flight in the stack
+      | "swap_own";                                                              // v2.3: AIRLINE swaps the slots of two of its own flights
   callsigns: string[];
   params: Record<string, string | number>;   // { runway: "09R" } | { minutes: 6 } | { gate: "B4" }
   label: string;                       // "Swap landing order DL1234 ↔ AA88"
@@ -243,6 +250,7 @@ export interface NegotiationMessage {
 }
 export type MessageType = "TRIAGE" | "OPEN" | "AGENT_TURN" | "CHECK" | "CONSENSUS" | "NO_CONSENSUS"
   | "FALLBACK" | "MODEL_FALLBACK"
+  | "UNABLE"                                                   // v2.3: a pilot refuses a plan or instruction
   | "MOVE" | "MOVE_REJECTED" | "COUNTER" | "VOTE";   // superseded in v2.0 (never emitted), kept for old runs
 
 export interface DecisionMeta {
@@ -258,7 +266,8 @@ export interface DecisionMeta {
 export type MessageBody =
   | { type: "TRIAGE"; score: number; levels: string[]; probabilities: number[]; confidence?: number }
   | { type: "OPEN"; plan: JointPlan; evaluation: PlanEvaluation;          // ENGINE: FCFS opening plan (incumbent of turn 1)
-      agents: AgentId[]; focus: string }
+      agents: AgentId[]; focus: string;                                       // agents = voters
+      pilots?: AgentId[]; airlines?: AirlineGroup[] }                         // v2.3
   | AgentTurnBody                                                          // v2.0: the ONE message per agent per turn
   | { type: "CHECK"; plan_id: string; passed: boolean; violations: RuleCheck[]; proposed_by?: AgentId }
   | { type: "CONSENSUS"; plan_id: string; accepted_by: AgentId[]; turn: number }
@@ -266,6 +275,7 @@ export type MessageBody =
       turn: number; reason: string }
   | { type: "FALLBACK"; plan_id: string; method: string; reason: string }  // reason: why no consensus (who rejected what)
   | { type: "MODEL_FALLBACK"; agent: AgentId; from_model: string; to_model: string; error: string }
+  | UnableBody                                                             // v2.3
   // superseded in v2.0, never emitted by new runs:
   | { type: "MOVE"; move: Move; plan: JointPlan; options_count: number }
   | { type: "MOVE_REJECTED"; move: Move; violations: RuleCheck[] }
@@ -277,7 +287,7 @@ export interface AgentTurnBody {
   type: "AGENT_TURN";
   turn: number;                        // 1..3
   agent: AgentId;
-  role: "ATC" | "PILOT" | "GROUND";
+  role: "ATC" | "AIRLINE" | "GROUND" | "PILOT";   // v2.3: AIRLINE; PILOT only in runs recorded before v2.3
   moves: AppliedMove[];                // moves applied this turn, in order (0-3), each engine-checked
   rejected: RejectedMove[];            // moves the engine vetoed this turn (agent re-picked)
   proposal: JointPlan;                 // the agent's plan for the table after its moves (metrics filled)
@@ -285,15 +295,49 @@ export interface AgentTurnBody {
   votes: Vote[];                       // on every CHECK-passed plan on the table when it speaks
   rationale: string;
   decision?: DecisionMeta;             // the vote decision (moves carry their own)
+  objections?: Objection[];            // v2.3: AIRLINE turns only (empty when none)
 }
 export interface AppliedMove { move: Move; utility_before: number; utility_after: number; decision: DecisionMeta }
-export interface RejectedMove { move: Move; violations: RuleCheck[]; reason: string; decision: DecisionMeta }
+export interface RejectedMove { move: Move; violations: RuleCheck[]; reason: string; decision: DecisionMeta;
+  plan_id?: string }                   // v2.3: id of the plan the vetoed move would have produced (the UNABLE `plan_id`)
 export interface Vote {
   plan_id: string;
   vote: "ACCEPT" | "REJECT";
   p_accept?: number;                   // absent in formulas mode
   utility: number; reservation: number;
   reason: string;
+  decided_by?: "formula" | "floor";    // "formula": a model's P(accept) was uncertain, so the formula decided;
+                                       // "floor" (v2.3, AIRLINE only): the fairness floor REJECTed it, no model was asked
+  floor?: FloorBreach[];               // v2.3: the breaches behind a `decided_by: "floor"` REJECT
+}
+// v2.3 fairness floor: a flight breaches when `value > allowed` (allowed = floor + slack x cap + epsilon).
+export interface FloorBreach {
+  callsign: string;                    // an own flight of the airline
+  metric: "delay_min" | "fuel_kg";
+  floor: number;                       // the floor plan's value for that flight
+  value: number;                       // the judged plan's value
+  allowed: number;                     // the most the airline accepts this turn
+  floor_source: "status_quo" | "best_seen";   // which plan `floor` comes from
+}
+// What an AIRLINE turn objects to: the breaches of each CHECK-passed plan another voter (or the engine) proposed.
+export interface Objection extends FloorBreach {
+  plan_id: string;
+  proposed_by: AgentId | "ENGINE";     // "ENGINE" = the opening plan
+}
+// v2.3: a pilot says it is UNABLE to fly a plan or an instruction (pure formula, no model call).
+// sender = `agent`, round = `turn`.
+export interface UnableBody {
+  type: "UNABLE";
+  turn: number;                        // 0 = on the opening plan, else 1..3
+  agent: `PILOT:${string}`;
+  callsign: string;                    // the pilot's flight
+  rule: RuleId; source: string;        // the failed check's rule and citation
+  evidence: Record<string, string | number>;
+  detail: string;                      // the failed check's detail
+  instruction: Move | null;            // the vetoed move; null when the whole plan is refused
+  plan_id: string;                     // the plan after the instruction (or the refused plan)
+  proposed_by: AgentId | "ENGINE";     // who gave the instruction or proposed the plan
+  text: string;                        // "UNABLE <instruction>: <evidence in words>, <RULE-ID>"
 }
 export interface LegacyVote { plan_id: string; decision: "ACCEPT" | "REJECT"; p_accept?: number;
                               utility: number; reservation: number; reason: string }
@@ -303,8 +347,11 @@ export interface NegotiationResult {
   outcome: "consensus" | "fallback";
   rounds: number;                      // = turns (kept for v1.x clients)
   turns: number;                       // v2.0: 1..3
-  agents: AgentId[];                   // v2.0: ["ATC", "PILOT:<focus>", "GROUND"]
-  focus: string;                       // v2.0: callsign of the disruption flight
+  agents: AgentId[];                   // the voters, v2.3: ["ATC", "AIRLINE:<code>"..., "GROUND"] (old runs: ["ATC", "PILOT:<focus>", "GROUND"])
+  pilots?: AgentId[];                  // v2.3: ["PILOT:<callsign>", ...] one per wave flight, wave order; they never vote
+  airlines?: AirlineGroup[];           // v2.3: the airline grouping (same as WaveScenario.airlines)
+  fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant this run used
+  focus: string;                       // v2.0: callsign of the disruption flight (its pilot is `PILOT:<focus>`)
   revision: Revision;                  // v2.0: the challenge output for the focus flight
   limits: Limit[];                     // v2.0: every limit used, kept or changed, with its source
   final_plan: JointPlan;
@@ -361,6 +408,8 @@ export interface BenchmarkReport {
       delay_min: number; fuel_kg: number; pax_protected_pct: number; overtime_min: number;
       agreement_with_formula_pct: number; brier: number | null;
       latency_p50_ms: number | null; latency_p95_ms: number | null; error_rate_pct: number; cost_usd_per_wave: number;
+      worse_than_status_quo_pct?: number | null;   // v2.3: % of waves with a feasible status quo whose final plan has a flight worse than it; null: no such wave
+      model_calls_per_wave?: number;               // v2.3: mean of stats.model_calls
     };
     delay_min_vs_feasible_status_quo?: number;   // arm mean delay on waves where status quo is legal
     n_ok?: number; failed_ids?: string[]; p95_all_ms?: number | null; model_decisions?: number;
@@ -376,6 +425,14 @@ export interface BenchmarkReport {
   coverage?: { procedures: Record<string, number>; surface: Record<string, number>;
     ground_traffic: Record<string, number> };   // v2.2: per layer, tier -> wave count (sums to n_waves)
   taxi_validation?: Record<string, unknown>;   // v2.2: filled by the taxi validation step
+  fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant the arms ran with
+  fairness_variants?: {                // v2.3: the firm vs relaxing comparison and the pick
+    firm: FairnessVariantReport; relaxing: FairnessVariantReport;
+    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[] };   // null: neither eligible
+  };
+}
+export interface FairnessVariantReport {      // v2.3
+  arms: { label: string; summary: BenchmarkReport["arms"][number]["summary"] }[];
 }
 
 export interface Triage { score: number; levels: string[]; probabilities: number[]; confidence?: number }

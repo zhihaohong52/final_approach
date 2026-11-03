@@ -1,11 +1,11 @@
 # API contract: Disruption Negotiator v2 (wave mode)
 
-Status: **v2.2 final, 4 Nov 2026** (additive over v2.1; engine `v3-traffic`; all v2.2 parts below are shipped and the samples in `frontend/src/api/samples/` are regenerated from them). Earlier history: **v2.0, 31 Oct 2026 13:40** (challenge rules_of_play: exactly 3 agents ATC / PILOT:<focus> / GROUND,
+Status: **v2.3, 4 Nov 2026** (additive over v2.2.1: airline agents, fairness floor, pilot UNABLE; see the v2.3 note at the end of this paragraph; the engine is still `v3-traffic` until the version bump, and the samples in `frontend/src/api/samples/` are v2.2 recordings that stay valid because every v2.3 field is optional). Earlier history: **v2.0, 31 Oct 2026 13:40** (challenge rules_of_play: exactly 3 agents ATC / PILOT:<focus> / GROUND,
 one `AGENT_TURN` message per agent per turn, max 3 turns; `MOVE`/`MOVE_REJECTED`/`COUNTER`/`VOTE` superseded;
 result gains `revision`, `limits`, `turns`, `agents`, `focus`; `Wave.focus`; `GET /api/flights`; new rules
 `ATC-RWY-CAPACITY`, `GND-GATE-NOTICE`; workbook limits). v1.2 (12:55): added `Triage`; `/api/eval` marked v1;
 benchmark brier/latency/ablation nullable. Frozen at 12:30 for the frontend; any later change is
-announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). v2.2 part 2 (3 Nov 2026, additive): `GET /api/wave/{id}/geo` (`WaveGeo`, procedures; `surface: null` until the surface milestone), `POST /api/trajectories` (`{wave_id, assignments}` or `{run_id}`), `EvaluateRequest.include_trajectories?` / `EvaluateResponse.trajectories?`, `NegotiationResult.paths_unavailable?` (replay engine-version guard), and `alt_src?` on `TrajectorySet` air points. v2.2 time base (engine `v3-time`): scheduled arrival is the BTS gate time (see Conventions), `delay_min` is measured at in-block against it, and `WaveFlight.taxi_in_ref_min?` is added. v2.2 surface (engine `v3-taxi`, additive): `in_block_min` = slot + ROT + unimpeded taxi routed on the OpenStreetMap taxiway graph (see Conventions); the `FlightMetrics` taxi fields (`exit`, `rot_s`, `taxi_unimpeded_min`, `taxi_wait_min` = 0, `taxi_min`) are filled; `Gate.lat/lon/geo_src` are filled from the OSM stand binding; `TrajectorySet.ground` holds one unimpeded taxi-in per landing wave flight (`waits` empty until `ATC-TAXI-CONFLICT`); `WaveScenario.provenance` gains the `surface` layer; `ATC-TAXI-ROUTE` can fail. `GET /api/wave/{id}/geo` fills `WaveGeo.surface` (taxiways, runways, stands with `gate`, holding_positions, attribution). v2.2 ground traffic (engine `v3-traffic`, additive): the plan's landing wave flights are scheduled on the taxi graph against the fixed traffic (queue arrivals and real 2015 departures) with hold-short / give-way waits; `taxi_wait_min` is filled, `taxi_min` = unimpeded + waits, `FlightMetrics.hold_short_strip?` is added; `TrajectorySet.ground` holds the wave tracks with their `waits` (wave flights only); the plan-independent fixed traffic is served once per wave in `WaveGeo.ground_traffic` (thinned tracks and runway events, cached with the `/geo` ETag); `ATC-TAXI-CONFLICT` is checked (14 rules), its failures fill `TrajectorySet.conflicts`, and informational `kind: "fixed_holds_for_landing"` / `"fixed_departure_holds"` entries say which fixed crosser or fixed departure (a takeoff less than 1 min before a plan landing on its strip) holds for a plan landing (landing priority, never a violation). v2.2 rejection paths (additive): `POST /api/trajectories {wave_id, assignments}` accepts an optional `move` (a `Move`, e.g. a `RejectedMove.move`) and returns the paths of the plan that move produces (`moves.apply`), so the surface map can show a rejected move's failing ground conflicts. v2.2.1 (4 Nov 2026, additive): `Config.rule_ids` (every rule the engine checks, `rules.RULE_IDS`), and `WaveSummary.window_end` of flights.csv waves is the window end (window_start + 1 h; it repeated window_start). Bad numbers in an `Assignment` (a JSON integer too large for a float, e.g. 10^400) or a callsign longer than 16 characters are `422 invalid_request`, never a 500. `POST /api/decision` v2 requires `run_id` to be a string of 1-64 characters and `edits` (optional) a list of at most 64 objects (64 KB of JSON); otherwise `422 invalid_request`. Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
+announced in the commit message with the prefix `contract:`. v2.1 (2 Nov 2026): `GET /api/wave/{id}` adds optional `status_quo` (the first-come-first-served plan and its rule check), so a wave shows a plan before any negotiation. v2.1.1 (3 Nov 2026, additive): `Config.store`, `persisted?` on the `POST /api/decision` response, and `GET /api/runs?wave_id=` (past runs of a wave). v2.2 (3 Nov 2026, additive, part 1 of the flight-paths-and-taxi build): `FlightMetrics` path fields, `Gate.lat/lon/geo_src`, `QueueArrival.origin`, `WaveScenario.engine_version` and `geo_available`, `NegotiationResult.engine_version` and `trajectories`, `BenchmarkReport.engine_version/coverage/taxi_validation`, `RuleId` `ATC-HOLD-STACK`/`ATC-TAXI-CONFLICT`, `Move.kind` `hold`, `Provenance.layer` `procedures|surface|ground_traffic`, and the `WaveGeo`/`TrajectorySet` types (endpoints `GET /api/wave/{id}/geo` and `POST /api/trajectories` land in later parts). v2.2 part 2 (3 Nov 2026, additive): `GET /api/wave/{id}/geo` (`WaveGeo`, procedures; `surface: null` until the surface milestone), `POST /api/trajectories` (`{wave_id, assignments}` or `{run_id}`), `EvaluateRequest.include_trajectories?` / `EvaluateResponse.trajectories?`, `NegotiationResult.paths_unavailable?` (replay engine-version guard), and `alt_src?` on `TrajectorySet` air points. v2.2 time base (engine `v3-time`): scheduled arrival is the BTS gate time (see Conventions), `delay_min` is measured at in-block against it, and `WaveFlight.taxi_in_ref_min?` is added. v2.2 surface (engine `v3-taxi`, additive): `in_block_min` = slot + ROT + unimpeded taxi routed on the OpenStreetMap taxiway graph (see Conventions); the `FlightMetrics` taxi fields (`exit`, `rot_s`, `taxi_unimpeded_min`, `taxi_wait_min` = 0, `taxi_min`) are filled; `Gate.lat/lon/geo_src` are filled from the OSM stand binding; `TrajectorySet.ground` holds one unimpeded taxi-in per landing wave flight (`waits` empty until `ATC-TAXI-CONFLICT`); `WaveScenario.provenance` gains the `surface` layer; `ATC-TAXI-ROUTE` can fail. `GET /api/wave/{id}/geo` fills `WaveGeo.surface` (taxiways, runways, stands with `gate`, holding_positions, attribution). v2.2 ground traffic (engine `v3-traffic`, additive): the plan's landing wave flights are scheduled on the taxi graph against the fixed traffic (queue arrivals and real 2015 departures) with hold-short / give-way waits; `taxi_wait_min` is filled, `taxi_min` = unimpeded + waits, `FlightMetrics.hold_short_strip?` is added; `TrajectorySet.ground` holds the wave tracks with their `waits` (wave flights only); the plan-independent fixed traffic is served once per wave in `WaveGeo.ground_traffic` (thinned tracks and runway events, cached with the `/geo` ETag); `ATC-TAXI-CONFLICT` is checked (14 rules), its failures fill `TrajectorySet.conflicts`, and informational `kind: "fixed_holds_for_landing"` / `"fixed_departure_holds"` entries say which fixed crosser or fixed departure (a takeoff less than 1 min before a plan landing on its strip) holds for a plan landing (landing priority, never a violation). v2.2 rejection paths (additive): `POST /api/trajectories {wave_id, assignments}` accepts an optional `move` (a `Move`, e.g. a `RejectedMove.move`) and returns the paths of the plan that move produces (`moves.apply`), so the surface map can show a rejected move's failing ground conflicts. v2.2.1 (4 Nov 2026, additive): `Config.rule_ids` (every rule the engine checks, `rules.RULE_IDS`), and `WaveSummary.window_end` of flights.csv waves is the window end (window_start + 1 h; it repeated window_start). Bad numbers in an `Assignment` (a JSON integer too large for a float, e.g. 10^400) or a callsign longer than 16 characters are `422 invalid_request`, never a 500. `POST /api/decision` v2 requires `run_id` to be a string of 1-64 characters and `edits` (optional) a list of at most 64 objects (64 KB of JSON); otherwise `422 invalid_request`. Spec: `docs/superpowers/specs/2026-11-02-flight-paths-and-taxi-design.md` §7. **v2.3 (4 Nov 2026, additive; airline agents):** `AgentId` adds `AIRLINE:<code>` (one voter per airline in the wave) and `AgentTurnBody.role` adds `"AIRLINE"`; every wave flight now has a pilot agent `PILOT:<callsign>` that never proposes or votes and only says `UNABLE` (new `MessageType`, `UnableBody`); `NegotiationResult.agents` lists the voters only, the pilots go in the new `NegotiationResult.pilots`; new `airlines` (`AirlineGroup[]`) on `WaveScenario`, `NegotiationResult` and the `OPEN` body; `NegotiationResult.fairness`; `Move.kind` `swap_own`; the fairness floor adds `FloorBreach`, `Objection`, `AgentTurnBody.objections?`, `Vote.decided_by?` / `Vote.floor?` and `RejectedMove.plan_id?`; `BenchmarkReport` gains `fairness?`, `arms[].summary.worse_than_status_quo_pct?` / `model_calls_per_wave?`, `fairness_variants?`. Runs recorded before v2.3 carry their own three-agent `agents` and none of the new fields; clients must accept both. Spec: `docs/superpowers/specs/2026-11-04-airline-agents-design.md`. Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md`.
 
 The frontend (Vite + React + TS, `frontend/`) talks only to these endpoints. In dev, Vite proxies
 `/api` to `http://localhost:8000`. In production the same FastAPI service serves `frontend/dist` at `/`.
@@ -16,12 +16,17 @@ response per endpoint in `frontend/src/api/samples/*.json`. Until then, build ag
 
 - JSON, `snake_case` keys. Times on the wave timeline are **minutes relative to the wave window
   start `T0`** (`*_min`, may be negative); every entity also carries ISO strings for display.
-- `AgentId`: `"ATC" | "GROUND" | "PILOT:<callsign>"`. Since v2.0 exactly **three** agents negotiate:
-  `ATC`, `PILOT:<WaveScenario.focus>` (the pilot of the disruption flight only) and `GROUND`
-  (`NegotiationResult.agents`). Other wave flights have no pilot agent: ATC sequences them (runway,
-  slot/holding, speed control or ground delay as ATC instructions), GROUND assigns their gates, and the
-  engine still checks all their rules. Non-agent senders: `"ENGINE"` (safety rules / protocol) and
-  `"DECIDER"` (wave triage).
+- `AgentId`: `"ATC" | "GROUND" | "AIRLINE:<code>" | "PILOT:<callsign>"`. Since v2.3 the **voters** are `ATC`, one
+  `AIRLINE:<code>` per airline that has a flight in the wave (sorted by code) and `GROUND`
+  (`NegotiationResult.agents`; `["ATC", "AIRLINE:AA", "GROUND"]` when one airline flies the wave). Consensus needs
+  every voter. An airline agent controls its own flights (its `callsigns` in `WaveScenario.airlines`): own-flight
+  moves and a swap of two of its own flights. Every wave flight also has a **pilot agent** `PILOT:<callsign>`
+  (`NegotiationResult.pilots`, wave order): pilots never propose, move or vote, they only say `UNABLE` when a plan
+  or instruction fails one of their rules (see `UnableBody`). The deterministic rule engine still decides legality;
+  ATC sequences, GROUND assigns gates, and the engine checks all rules for all flights. Runs recorded before v2.3
+  carry their own `agents` (`["ATC", "PILOT:<focus>", "GROUND"]`, the pilot of the focus flight voting) and no
+  `pilots`/`airlines`: read `agents` from the run, never assume a roster. Non-agent senders: `"ENGINE"` (safety
+  rules / protocol) and `"DECIDER"` (wave triage).
 - Errors: non-2xx status with `{ "error": { "code": string, "message": string } }`.
   `429` adds `retry_after_s`. Rate limit: 10 live negotiations per 10 min per IP.
 - Every real-world fact carries a `Provenance` so the UI can badge real vs simulated.
@@ -37,7 +42,7 @@ response per endpoint in `frontend/src/api/samples/*.json`. Until then, build ag
 - Ground traffic (engine `v3-traffic`): the wave's fixed traffic (queue arrivals; real BTS 2015 departures from a simulated stand, pushback at `WHEELS_OFF − TAXI_OUT`, then waiting in the holding bay at its holding point until line-up 30 s before takeoff: off the taxiway, resequenced by takeoff time, at most 3 per holding point, beyond which the queue backs up upstream; the bay wait is the track's last wait, its last point has no node) is scheduled once per wave and never yields. Per plan, the landing wave flights with a routed taxi move in runway-exit order along their fixed route and wait (node headway 30 s, no head-on edge use, runway crossing gap: no landing from 1.5 min before to 1 min after the time in the strip's protected zone, no takeoff within 1 min) against the fixed traffic, the earlier wave flights and every landing of the plan. `taxi_min` = `taxi_unimpeded_min` + `taxi_wait_min`; `in_block_min` = slot + ROT + `taxi_min`. `ATC-TAXI-CONFLICT` (source "FAA JO 7110.65 §3-7-2 …") evidence: `waits, wait_min, crossings, exit_clear_min, next_landing_min` (the next landing or takeoff on the exit strip, either kind; `next_event` names it) + `tier`, and when relevant `hold_short_strip`, `blocking`, `landing_conflicts`, `reason`. It fails iff the total wait exceeds the 30-min horizon (or the route starts inside another strip's zone during a runway event), or the flight is still on the runway it exits (until `exit_clear_min`) at another flight's landing or takeoff on that strip (no margin, JO 7110.65 §3-10-3), or it lands while a fixed arrival is still on that runway (`landing_conflicts`). A fixed crosser whose scheduled crossing falls in a plan landing's gap window holds for it (landings have priority; the fixed 2015 traffic is not re-timed per plan): evidence `fixed_holds`, an informational conflict, never a failure. Waits alone never fail it. Without a routed taxi (generic or no-geometry tier) it passes with "ground conflicts not modelled (tier)". `TrajectorySet.conflicts` = the failing checks, located at the exit node (vacate / scheduler failures) or the touchdown point, plus the informational `fixed_holds_for_landing` entries at the crosser's hold and `fixed_departure_holds` entries at the departure's holding point. `WaveGeo.ground_traffic` (null without a real surface tier): `tracks` (fixed movers, `[t_min, lat, lon]` points, waits `[from, to, lat, lon, reason]`) and `runway_events` (strip → `[t_min, kind, callsign]`).
 
 ```ts
-type AgentId = "ATC" | "GROUND" | `PILOT:${string}`;
+type AgentId = "ATC" | "GROUND" | `AIRLINE:${string}` | `PILOT:${string}`;
 type Sender = AgentId | "ENGINE" | "DECIDER";
 
 interface Provenance {
@@ -154,13 +159,19 @@ interface WaveScenario {
   flights: WaveFlight[];               // negotiated flights
   gates: Gate[];
   severity?: Triage | null;                 // filled once a negotiation has triaged it
-  focus: string | null;                // v2.0: callsign of the disruption flight (its pilot is the PILOT agent);
+  focus: string | null;                // v2.0: callsign of the disruption flight;
                                        // null => the engine uses the most-delayed disrupted flight
   provenance: Provenance[];            // per layer for the whole wave
   status_quo?: { plan: JointPlan; evaluation: PlanEvaluation };  // v2.1: first come, first served and its rule check, shown before negotiating
   engine_version?: string;             // v2.2
   geo_available?: boolean;             // v2.2: runway ends have coordinates and the airport is placed
+  airlines?: AirlineGroup[];           // v2.3: the airline agents' groups (Wave.to_dict)
 }
+
+// v2.3: one airline agent AIRLINE:<code> controls these wave flights. Several operating carriers can share an
+// airline (e.g. OH flies for AA), so `callsigns` is the truth, not the callsign prefix.
+interface AirlineGroup { code: string; name: string; callsigns: string[];
+  basis: string }                      // why these callsigns are grouped, e.g. "no grouping row: operating carrier is its own airline"
 
 interface Triage { score: number; levels: string[]; probabilities: number[]; confidence?: number }  // 0-based score
 
@@ -276,7 +287,7 @@ interface PlanEvaluation {
   plan_id: string;
   feasible: boolean;
   checks: RuleCheck[];                 // all rules, all flights
-  utilities: Record<AgentId, number>;  // 0..1 for the 3 negotiating agents (formula decision model)
+  utilities: Record<AgentId, number>;  // 0..1 per voter (v2.3: ATC, each AIRLINE:<code>, GROUND; formula decision model)
   totals: { delay_min: number; fuel_kg: number; hold_min: number; pax_protected_pct: number;
             overtime_min: number; diversions: number };
 }
@@ -284,11 +295,12 @@ interface Move {
   id: string;
   agent: AgentId;
   kind: "swap_order" | "change_runway" | "shift_slot"                         // ATC
-      | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // PILOT (own flight);
+      | "speed_reduction" | "ground_delay" | "request_divert" | "accept"      // own flight (v2.3: AIRLINE; pilots do not move);
                                                                              // v2.0: ATC may also issue speed_reduction /
                                                                              // ground_delay for non-focus flights
       | "reassign_gate" | "remote_stand" | "swap_gates"     // GROUND
-      | "hold";                                                                  // v2.2: ATC holds a flight in the stack
+      | "hold"                                                                   // v2.2: ATC holds a flight in the stack
+      | "swap_own";                                                              // v2.3: AIRLINE swaps the slots of two of its own flights
   callsigns: string[];
   params: Record<string, string | number>;   // { runway: "09R" } | { minutes: 6 } | { gate: "B4" }
   label: string;                       // "Swap landing order DL1234 ↔ AA88"
@@ -336,6 +348,7 @@ interface NegotiationMessage {
 }
 type MessageType = "TRIAGE" | "OPEN" | "AGENT_TURN" | "CHECK" | "CONSENSUS" | "NO_CONSENSUS"
   | "FALLBACK" | "MODEL_FALLBACK"
+  | "UNABLE"                                                   // v2.3: a pilot refuses a plan or instruction
   | "MOVE" | "MOVE_REJECTED" | "COUNTER" | "VOTE";   // superseded in v2.0 (never emitted), kept for old runs
 
 interface DecisionMeta {
@@ -351,7 +364,8 @@ interface DecisionMeta {
 type MessageBody =
   | { type: "TRIAGE"; score: number; levels: string[]; probabilities: number[]; confidence?: number }
   | { type: "OPEN"; plan: JointPlan; evaluation: PlanEvaluation;          // ENGINE: FCFS opening plan (incumbent of turn 1)
-      agents: AgentId[]; focus: string }
+      agents: AgentId[]; focus: string;                                       // agents = voters
+      pilots?: AgentId[]; airlines?: AirlineGroup[] }                         // v2.3
   | AgentTurnBody                                                          // v2.0: the ONE message per agent per turn
   | { type: "CHECK"; plan_id: string; passed: boolean; violations: RuleCheck[]; proposed_by?: AgentId }
   | { type: "CONSENSUS"; plan_id: string; accepted_by: AgentId[]; turn: number }
@@ -359,6 +373,7 @@ type MessageBody =
       turn: number; reason: string }
   | { type: "FALLBACK"; plan_id: string; method: string; reason: string }  // reason: why no consensus (who rejected what)
   | { type: "MODEL_FALLBACK"; agent: AgentId; from_model: string; to_model: string; error: string }
+  | UnableBody                                                             // v2.3
   // superseded in v2.0, never emitted by new runs:
   | { type: "MOVE"; move: Move; plan: JointPlan; options_count: number }
   | { type: "MOVE_REJECTED"; move: Move; violations: RuleCheck[] }
@@ -370,7 +385,7 @@ interface AgentTurnBody {
   type: "AGENT_TURN";
   turn: number;                        // 1..3
   agent: AgentId;
-  role: "ATC" | "PILOT" | "GROUND";
+  role: "ATC" | "AIRLINE" | "GROUND" | "PILOT";   // v2.3: AIRLINE; PILOT only in runs recorded before v2.3
   moves: AppliedMove[];                // moves applied this turn, in order (0-3), each engine-checked
   rejected: RejectedMove[];            // moves the engine vetoed this turn (agent re-picked)
   proposal: JointPlan;                 // the agent's plan for the table after its moves (metrics filled)
@@ -378,15 +393,56 @@ interface AgentTurnBody {
   votes: Vote[];                       // on every CHECK-passed plan on the table when it speaks
   rationale: string;
   decision?: DecisionMeta;             // the vote decision (moves carry their own)
+  objections?: Objection[];            // v2.3: AIRLINE turns only (empty when none): see below
 }
 interface AppliedMove { move: Move; utility_before: number; utility_after: number; decision: DecisionMeta }
-interface RejectedMove { move: Move; violations: RuleCheck[]; reason: string; decision: DecisionMeta }
+interface RejectedMove { move: Move; violations: RuleCheck[]; reason: string; decision: DecisionMeta;
+  plan_id?: string }                   // v2.3: id of the plan the vetoed move would have produced (the UNABLE `plan_id`)
 interface Vote {
   plan_id: string;
   vote: "ACCEPT" | "REJECT";
   p_accept?: number;                   // absent in formulas mode
   utility: number; reservation: number;
   reason: string;
+  decided_by?: "formula" | "floor";    // "formula": a model's P(accept) was uncertain (0.3-0.7), so the formula decided;
+                                       // "floor" (v2.3, AIRLINE only): the fairness floor REJECTed it, no model was asked
+  floor?: FloorBreach[];               // v2.3: the breaches behind a `decided_by: "floor"` REJECT (>= 1)
+}
+// v2.3 fairness floor. An airline compares each of its flights' delay and fuel in a plan with the floor plan: the
+// status quo (first come, first served) when it is feasible, else the best feasible plan seen so far. A flight
+// breaches when `value > allowed`; `allowed` = floor + slack x the flight's cap + a small epsilon (delay 0.05 min,
+// fuel 0.5 kg); slack is 0 for `fairness: "firm"` and 0.10 / 0.22 / 0.34 on turns 1 / 2 / 3 for `"relaxing"`. When some CHECK-passed plan on the table has no breach for the airline, it REJECTs every
+// plan that has one (`Vote.decided_by: "floor"`); otherwise it votes on utility (the escape clause).
+interface FloorBreach {
+  callsign: string;                    // an own flight of the airline
+  metric: "delay_min" | "fuel_kg";
+  floor: number;                       // the floor plan's value for that flight
+  value: number;                       // the judged plan's value
+  allowed: number;                     // the most the airline accepts this turn; breach iff value > allowed
+  floor_source: "status_quo" | "best_seen";   // which plan `floor` comes from (best_seen when the status quo is infeasible)
+}
+// What an AIRLINE turn objects to: the breaches of every CHECK-passed plan another voter (or the engine) put on the
+// table. Plans the airline proposed itself are not listed. Absent from ATC/GROUND turns.
+interface Objection extends FloorBreach {
+  plan_id: string;                     // the plan with the breach
+  proposed_by: AgentId | "ENGINE";     // "ENGINE" = the opening plan
+}
+// v2.3: a pilot says it is UNABLE to fly a plan or an instruction. Pure formula (no model call), one per
+// pilot-side failed rule (PLT-EARLIEST-ETA, PLT-FUEL-RESERVE, PLT-CREW-DUTY, ATC-WIND-LIMITS) of a move the engine
+// vetoed, or of a plan that failed CHECK; deduped per (plan_id, instruction, callsign, rule). sender = `agent`,
+// round = `turn`. A plan with an UNABLE can never win (it also fails CHECK); this is the refusal in the pilot's words.
+interface UnableBody {
+  type: "UNABLE";
+  turn: number;                        // 0 = on the opening plan, else 1..3
+  agent: `PILOT:${string}`;
+  callsign: string;                    // the pilot's flight
+  rule: RuleId; source: string;        // the failed check's rule and citation
+  evidence: Record<string, string | number>;
+  detail: string;                      // the failed check's detail
+  instruction: Move | null;            // the vetoed move; null when the whole plan is refused
+  plan_id: string;                     // the plan after the instruction (or the refused plan)
+  proposed_by: AgentId | "ENGINE";     // who gave the instruction or proposed the plan
+  text: string;                        // "UNABLE <instruction>: <evidence in words>, <RULE-ID>"
 }
 interface LegacyVote { plan_id: string; decision: "ACCEPT" | "REJECT"; p_accept?: number;
                        utility: number; reservation: number; reason: string }
@@ -396,8 +452,11 @@ interface NegotiationResult {
   outcome: "consensus" | "fallback";
   rounds: number;                      // = turns (kept for v1.x clients)
   turns: number;                       // v2.0: 1..3
-  agents: AgentId[];                   // v2.0: ["ATC", "PILOT:<focus>", "GROUND"]
-  focus: string;                       // v2.0: callsign of the disruption flight
+  agents: AgentId[];                   // the voters, v2.3: ["ATC", "AIRLINE:<code>"..., "GROUND"] (old runs: ["ATC", "PILOT:<focus>", "GROUND"])
+  pilots?: AgentId[];                  // v2.3: ["PILOT:<callsign>", ...] one per wave flight, wave order; they never vote
+  airlines?: AirlineGroup[];           // v2.3: the airline grouping (same as WaveScenario.airlines)
+  fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant this run used
+  focus: string;                       // v2.0: callsign of the disruption flight (its pilot is `PILOT:<focus>`)
   revision: Revision;                  // v2.0: the challenge output for the focus flight
   limits: Limit[];                     // v2.0: every limit used, kept or changed, with its source
   final_plan: JointPlan;
@@ -435,14 +494,19 @@ interface Limit {
 }
 ```
 
-Message order (v2.0). Round 0: `TRIAGE`, `OPEN`. Each turn 1..3:
-`AGENT_TURN(ATC)` → `CHECK` (if its proposal is new) → `AGENT_TURN(PILOT:<focus>)` → `CHECK` →
-`AGENT_TURN(GROUND)` → `CHECK` → `CONSENSUS` or `NO_CONSENSUS`. Exactly one `AGENT_TURN` per agent
-per turn. `FALLBACK` only after `NO_CONSENSUS` of turn 3. `MODEL_FALLBACK` can appear anywhere.
+Message order (v2.3). Round 0: `TRIAGE`, `OPEN`, `UNABLE*` (pilots that cannot fly the opening plan). Each turn 1..3:
+`AGENT_TURN(ATC)` → `UNABLE*` → `CHECK` (if its proposal is new) → `AGENT_TURN(AIRLINE:<code>)` → `UNABLE*` →
+`CHECK` (each airline in turn, sorted by code, if its proposal is new) → `AGENT_TURN(GROUND)` → `UNABLE*` → `CHECK` → `CONSENSUS` or
+`NO_CONSENSUS`. In short `ATC → (UNABLE*) → CHECK → AIRLINE:* each → (UNABLE*) → CHECK → GROUND → (UNABLE*) →
+CHECK → CONSENSUS|NO_CONSENSUS`; an `UNABLE` follows an `AGENT_TURN` whose vetoed moves or new proposal failed a
+pilot-side rule, and a gate move by GROUND can trip `PLT-CREW-DUTY`, so it can follow GROUND too. Exactly one
+`AGENT_TURN` per voter (`agents`) per turn; pilots never take a turn. `FALLBACK` only after `NO_CONSENSUS` of turn
+3. `MODEL_FALLBACK` can appear anywhere. Runs recorded before v2.3 keep their old order (`ATC → CHECK →
+PILOT:<focus> → CHECK → GROUND → CHECK`, no `UNABLE`) and their own `agents`.
 
-Protocol rules: in turn t ATC starts from the incumbent plan, PILOT from ATC's proposal, GROUND from
-PILOT's. Each agent votes on every CHECK-passed plan on the table when it speaks (incumbent, proposals
-earlier in this turn, its own proposal). Consensus = one CHECK-passed plan ACCEPTed by all 3 agents in
+Protocol rules: in turn t ATC starts from the incumbent plan, each airline from the previous proposal in
+order (ATC's, then the earlier airlines'), GROUND from the last airline's. Each voter votes on every CHECK-passed plan on the table when it speaks (incumbent, proposals
+earlier in this turn, its own proposal). Consensus = one CHECK-passed plan with no pilot `UNABLE` ACCEPTed by all voters in
 the same turn. Otherwise the best CHECK-passed plan of the turn becomes the next incumbent; after turn
 3 the deterministic non-AI solver decides and `FALLBACK.reason` says why. Limits come from the
 challenge workbook (`data/challenge2/challenge2_operational_constraints.xlsx`); every limit kept,
@@ -555,6 +619,9 @@ interface BenchmarkReport {
       delay_min: number; fuel_kg: number; pax_protected_pct: number; overtime_min: number;
       agreement_with_formula_pct: number; brier: number | null;
       latency_p50_ms: number | null; latency_p95_ms: number | null; error_rate_pct: number; cost_usd_per_wave: number;
+      worse_than_status_quo_pct?: number | null;   // v2.3: % of waves with a feasible status quo whose final plan (consensus or
+                                                   // fallback) has a flight worse than the status quo (delay > +0.05 min or fuel > +0.5 kg); null: no such wave
+      model_calls_per_wave?: number;               // v2.3: mean of stats.model_calls
     };
     delay_min_vs_feasible_status_quo?: number;   // arm mean delay on waves where status quo is legal
     n_ok?: number; failed_ids?: string[]; p95_all_ms?: number | null; model_decisions?: number;
@@ -570,6 +637,14 @@ interface BenchmarkReport {
   coverage?: { procedures: Record<string, number>; surface: Record<string, number>;
     ground_traffic: Record<string, number> };   // v2.2: per layer, tier -> wave count (sums to n_waves)
   taxi_validation?: Record<string, unknown>;   // v2.2: filled by the taxi validation step
+  fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant the arms ran with
+  fairness_variants?: {                // v2.3: the firm vs relaxing comparison and the pick (benchmark_notes.py --variants)
+    firm: FairnessVariantReport; relaxing: FairnessVariantReport;
+    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[] };   // null: neither eligible
+  };
+}
+interface FairnessVariantReport {      // v2.3
+  arms: { label: string; summary: BenchmarkReport["arms"][number]["summary"] }[];   // the per-arm summary (a subset of keys may be present)
 }
 ```
 

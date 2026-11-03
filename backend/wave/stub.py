@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import airlines, unable
 from .model import Assignment, FlightMetrics, JointPlan, Move, RuleCheck, Wave
 
 WAVE_ID = "ATL-2024-07-15-16"
@@ -67,7 +68,7 @@ def _eval(plan: JointPlan, feasible: bool = True) -> dict:
     return {"plan_id": plan.id, "feasible": feasible,
             "checks": [RuleCheck("ATC-RWY-OPEN", "ATC", feasible, "runway open (stub)", "ops rule",
                                  {"runway": "26R"}, plan.assignments[0].callsign).to_dict()],
-            "utilities": {"ATC": 0.7, "GROUND": 0.6, **{f"PILOT:{a.callsign}": 0.65 for a in plan.assignments}},
+            "utilities": {"ATC": 0.7, "GROUND": 0.6, "AIRLINE:DL": 0.65},
             "totals": {"delay_min": sum(a.metrics.delay_min for a in plan.assignments), "fuel_kg": 600.0,
                        "hold_min": 10.0, "pax_protected_pct": 100.0, "overtime_min": 0.0, "diversions": 0}}
 
@@ -95,14 +96,16 @@ def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None, on_mes
         time.sleep(0.05)
 
     focus = wave.focus or wave.flights[0].callsign
-    pilot = f"PILOT:{focus}"
-    agents = ["ATC", pilot, "GROUND"]
+    pilots = [f"PILOT:{f.callsign}" for f in wave.flights]
+    code = next(c for c, cs in airlines.groups(wave).items() if focus in cs)   # the focus flight's airline
+    airline = f"AIRLINE:{code}"
+    agents = ["ATC", airline, "GROUND"]   # voters; pilots never take a turn
     base = _plan(wave)
     final = _plan(wave, shift=1)
     mv = Move("m1", "ATC", "shift_slot", [focus], {"minutes": 1}, f"Shift {focus} slot +1")
-    bad = Move("m2", pilot, "speed_reduction", [focus], {"minutes": 9}, f"{focus} slow 9 min")
-    viol = RuleCheck("PLT-EARLIEST-ETA", "PILOT", False, "speed reduction 9 > 8 min cap", "ops rule",
-                     {"minutes": 9, "limit": 8}, focus).to_dict()
+    bad = Move("m2", "ATC", "shift_slot", [focus], {"minutes": -9}, f"Pull {focus} slot 9 min earlier")
+    viol = RuleCheck("PLT-EARLIEST-ETA", "PILOT", False, "slot T-3 is before the earliest touchdown T4", "ops rule",
+                     {"slot_min": -3, "earliest_min": 4}, focus)
 
     def turn(agent, role, moves, rejected, why):
         return {"turn": 1, "agent": agent, "role": role, "moves": moves, "rejected": rejected,
@@ -118,19 +121,22 @@ def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None, on_mes
                                "focus": focus}, "FCFS opening plan.", dec=False)
     emit(1, "ATC", "AGENT_TURN",
          turn("ATC", "ATC", [{"move": mv.__dict__, "utility_before": 0.6, "utility_after": 0.7,
-                              "decision": dict(fmeta)}], [], "Smooths the queue."), "Smooths the queue.")
+                              "decision": dict(fmeta)}],
+              [{"move": bad.__dict__, "violations": [viol.to_dict()], "plan_id": "stub-rejected",
+                "reason": "PLT-EARLIEST-ETA: slot before the earliest touchdown", "decision": dict(fmeta)}],
+              "Smooths the queue; the engine vetoed pulling the focus flight earlier."), "Smooths the queue.")
+    ub = unable.unable_body(1, viol, bad, "stub-rejected", "ATC")
+    emit(1, ub["agent"], "UNABLE", {k: v for k, v in ub.items() if k != "type"}, ub["text"], dec=False)
     emit(1, "ENGINE", "CHECK", check("ATC"), "All rules pass.", dec=False)
-    emit(1, pilot, "AGENT_TURN",
-         turn(pilot, "PILOT", [], [{"move": bad.__dict__, "violations": [viol],
-                                    "reason": "speed reduction 9 > 8 min cap", "decision": dict(fmeta)}],
-              "Engine vetoed an out-of-range speed reduction; accepts ATC's plan."),
-         "Engine vetoed an out-of-range speed reduction.")
-    emit(1, "ENGINE", "CHECK", check(pilot), "All rules pass.", dec=False)
+    airline_turn = turn(airline, "AIRLINE", [], [], "Accepts ATC's plan: none of its flights is worse than the original plan.")
+    airline_turn["objections"] = []
+    emit(1, airline, "AGENT_TURN", airline_turn, "Accepts ATC's plan.")
+    emit(1, "ENGINE", "CHECK", check(airline), "All rules pass.", dec=False)
     emit(1, "GROUND", "AGENT_TURN", turn("GROUND", "GROUND", [], [], "Keeps gates as scheduled."),
          "Keeps gates as scheduled.")
     emit(1, "ENGINE", "CHECK", check("GROUND"), "All rules pass.", dec=False)
     emit(1, "ENGINE", "CONSENSUS", {"plan_id": final.id, "accepted_by": agents, "turn": 1},
-         "All 3 agents accept.", dec=False)
+         f"All {len(agents)} agents accept.", dec=False)
     fa = next(a for a in final.assignments if a.callsign == focus)
     fl = next(f for f in wave.flights if f.callsign == focus)
     hh = lambda m: f"16:{int(m):02d}"   # noqa: E731  (fixture window starts 16:00)
@@ -144,7 +150,8 @@ def negotiate_wave(wave: Wave, mode: str, chain: list[str] | None = None, on_mes
     limits = [{"limit": "wake separation (same runway)", "value": "stub", "source": "assumption",
                "note": "stub backend: no workbook limits"}]
     return {"run_id": "", "wave_id": wave.id, "mode": mode, "model": model, "outcome": "consensus", "rounds": 1,
-            "turns": 1, "agents": agents, "focus": focus, "revision": revision, "limits": limits,
+            "turns": 1, "agents": agents, "pilots": pilots, "airlines": airlines.describe(wave),
+            "fairness": "firm", "focus": focus, "revision": revision, "limits": limits,
             "final_plan": final.to_dict(), "evaluation": _eval(final),
             "baseline": {"plan": base.to_dict(), "evaluation": _eval(base)},
             "narration": None, "model_errors": [],
