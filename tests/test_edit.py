@@ -1,6 +1,8 @@
+import pytest
 from backend.wave import build as B
 from backend.wave import edit
 from backend.wave.graph import negotiate_wave
+from tests.test_rules import _fixture_movements  # noqa: F401  (pytest fixture: committed 2015 movements)
 
 
 def _agreed(wave_id="F2015-270287"):
@@ -27,6 +29,50 @@ def test_edit_that_breaks_wake_separation_is_caught_and_a_legal_slot_suggested()
     assert s is not None and abs(s - (lead["slot_min"] + 0.5)) <= edit.SEARCH_MIN
     fixed = [dict(r, slot_min=s) if r["callsign"] == "MQ3318" else r for r in rows]
     assert edit.check_edit(w, edit.plan_from_dicts(fixed))["evaluation"]["feasible"]
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_suggestion_also_clears_breaches_that_name_the_edited_flight():
+    """Review T31: with the 2015 ground traffic, moving MQ3318 0.5 min behind OO5559 also leaves OO5559 still on the
+    runway at MQ3318's landing (ATC-TAXI-CONFLICT of OO5559, evidence blocked_by MQ3318). That breach names MQ3318,
+    so its suggested slot must clear it too: the suggested plan is feasible."""
+    test_edit_that_breaks_wake_separation_is_caught_and_a_legal_slot_suggested()
+    w, rows = _agreed()
+    rows = [dict(r) for r in rows]
+    lead = next(r for r in rows if r["callsign"] == "OO5559")
+    other = next(r for r in rows if r["callsign"] == "MQ3318")
+    other.update(runway=lead["runway"], slot_min=lead["slot_min"] + 0.5)
+    ev = edit.check_edit(w, edit.plan_from_dicts(rows))["evaluation"]
+    named = [c for c in ev["checks"] if not c["passed"] and c["callsign"] != "MQ3318" and "MQ3318" in edit._named(c)]
+    assert any(c["rule"] == "ATC-TAXI-CONFLICT" and c["callsign"] == "OO5559" for c in named)
+
+
+def test_suggestion_must_clear_a_breach_naming_the_flight(monkeypatch):
+    """Review T31 (deterministic, no data): B's edit breaks wake separation and leaves A on the runway at B's landing
+    (A's ATC-TAXI-CONFLICT, evidence blocked_by B). The first trial slot keeps A's breach; it must not be suggested
+    although A's breach was there before: B caused it. The second trial slot clears both."""
+    w, rows = _agreed()
+    rows = [dict(r) for r in rows]
+    b = next(r for r in rows if r["callsign"] == "MQ3318"); a_cs = "OO5559"
+    s0 = b["slot_min"]
+
+    def chk(rule, cs, ok, **ev):
+        return {"rule": rule, "callsign": cs, "passed": ok, "detail": "", "evidence": ev}
+
+    def fake_eval(wave, plan):
+        s = plan.get("MQ3318").slot_min
+        if s == s0:
+            checks = [chk("ATC-WAKE-SEP", "MQ3318", False, leader=a_cs),
+                      chk("ATC-TAXI-CONFLICT", a_cs, False, blocked_by="MQ3318")]
+        elif s == s0 + 1:
+            checks = [chk("ATC-TAXI-CONFLICT", a_cs, False, blocked_by="MQ3318")]
+        else:
+            checks = [chk("ATC-TAXI-CONFLICT", a_cs, True)]
+        return {"checks": checks, "feasible": all(c["passed"] for c in checks)}
+    monkeypatch.setattr(edit, "evaluate", fake_eval)
+    monkeypatch.setattr(edit, "_floor", lambda wave, a: None)
+    out = edit.check_edit(w, edit.plan_from_dicts(rows))
+    assert out["suggestions"]["MQ3318"] == s0 - 1
 
 
 def test_runways_follow_the_wave_date():

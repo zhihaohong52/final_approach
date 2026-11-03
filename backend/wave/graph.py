@@ -181,8 +181,8 @@ def _wait_clause(o) -> str:
 
 
 def _taxi_line(wave: Wave, a, ts=None) -> str:
-    """Per-flight taxi line (spec §6.7): `{exit} → {stand} {unimpeded:.1f} min`, from the per-wave taxi table, plus the
-    hold-short clause of the plan's hold-short pass (`ts`, the plan's TrajectorySet) when the flight waits."""
+    """Per-flight taxi line (spec §6.7): `{exit} → {stand} {unimpeded:.1f} min`, from the per-wave taxi table,
+    plus the hold-short clause of the plan's hold-short pass (`ts`, the plan's TrajectorySet) when the flight waits."""
     if a.action != "land" or not a.runway:
         return "no taxi (not landing)"
     tx = surface.taxi_info(wave, a.runway, a.gate, wave.flight(a.callsign).gate_size)

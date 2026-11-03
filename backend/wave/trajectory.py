@@ -127,7 +127,10 @@ class GroundOutcome:
         never the arrival (ruling T31), so these never fail the rule; each is reported as an informational conflict
         `fixed_holds_for_landing` with the hold the crosser would need (until 1 min after the landing);
       * `landing_conflicts`: fixed arrivals still on the landing runway (from their landing to their exit clear) at
-        this landing: same-runway separation (JO 7110.65 §3-10-3), a failure.
+        this landing: same-runway separation (JO 7110.65 §3-10-3), a failure;
+      * `fixed_departures`: fixed takeoffs on the landing strip less than LANDING_TAKEOFF_GAP_MIN before the landing.
+        Landing priority: the fixed departure would have been held (until the gap after the landing), so these never
+        fail the rule; each is an informational conflict `fixed_departure_holds` with that hold.
     `passed` is the rule's verdict; `detail` its text; `at_min`, `lat`, `lon` where the conflict is drawn."""
     callsign: str
     modelled: bool
@@ -146,6 +149,7 @@ class GroundOutcome:
     landing_conflicts: list = field(default_factory=list)
     hold_short_strip: str | None = None
     fixed_holds: list = field(default_factory=list)
+    fixed_departures: list = field(default_factory=list)
     lat: float | None = None
     lon: float | None = None
 
@@ -571,6 +575,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     nodes = ground_traffic._CowTable(res.node_busy)
     edges = ground_traffic._CowTable(res.edge_dir)
     occ = fixed.occupancy
+    dep_at = None                    # fixed departure label -> its holding-point point, built on first use
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
         lc, fh = [], []
@@ -583,12 +588,22 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
                                "lat": g.nodes[hn][0], "lon": g.nodes[hn][1]})
             elif a_ - _TOLG <= slot < b_ - _TOLG:
                 lc.append(f"fixed arrival {lab} still on {strip} ({a_:.2f}-{b_:.2f} min)")
+        fd = []
+        for t_, kind, lab in res.runway_events.get(strip, ()):
+            # a fixed takeoff less than LANDING_TAKEOFF_GAP_MIN before this landing: landing priority, the fixed
+            # departure would have been held until the gap after the landing (informational)
+            if kind == "takeoff" and slot - ground_traffic.LANDING_TAKEOFF_GAP_MIN + _TOLG < t_ < slot - _TOLG:
+                if dep_at is None:
+                    dep_at = {t.callsign: t.points[-1] for t in fixed.tracks if t.kind == "departure" and t.points}
+                pt = dep_at.get(lab)
+                fd.append({"fixed": lab, "strip": strip, "takeoff_min": t_, "landing_min": slot,
+                           "hold_min": slot + ground_traffic.LANDING_TAKEOFF_GAP_MIN - t_,
+                           "lat": pt["lat"] if pt else None, "lon": pt["lon"] if pt else None})
         if tx.tier != "real" or tx.path is None:
             t = surface.arrival_track(wave, cs, tx, slot)
             if t is not None:
                 wave_tracks.append(t)
-            o = GroundOutcome(cs, False, tx.tier if tx.path is None and tx.tier == "real" else tx.tier, slot,
-                              landing_conflicts=lc, fixed_holds=fh)
+            o = GroundOutcome(cs, False, tx.tier, slot, landing_conflicts=lc, fixed_holds=fh, fixed_departures=fd)
             o.lat, o.lon = _touchdown(ts, cs)
             ts.outcomes[cs] = o
             continue
@@ -596,7 +611,8 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
         view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
         s = surface.schedule(g, p, t_exit, view, cs)
         names = [n for i, n in enumerate(p.names) if n and (i == 0 or p.names[i - 1] != n)]
-        wait = sum(w["to_min"] - w["from_min"] for w in s.waits)    # = last point - exit - unimpeded; exactly 0 unimpeded
+        # = last point - exit - unimpeded; exactly 0 unimpeded
+        wait = sum(w["to_min"] - w["from_min"] for w in s.waits)
         wave_tracks.append(GroundTrack(cs, "arrival", True, tx.exit_label, tx.stand, names, s.points, s.waits,
                                        tx.taxi_min, tx.taxi_min + wait, tx.src))
         own = surface.runway_strips_at(g, p.nodes[0]) or {strip}
@@ -607,7 +623,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
         o = GroundOutcome(cs, True, "real", slot, s.ok, s.reason, t_exit, s.exit_clear_min, tuple(sorted(own)),
                           s.waits, wait,
                           sorted(dict.fromkeys(st for _, st in p.crossings)), blocking, nxt, lc,
-                          max(hs, key=lambda w: w["to_min"] - w["from_min"])["strip"] if hs else None, fh)
+                          max(hs, key=lambda w: w["to_min"] - w["from_min"])["strip"] if hs else None, fh, fd)
         if blocking or not s.ok:
             o.lat, o.lon = s.points[0]["lat"], s.points[0]["lon"]
         else:
@@ -628,6 +644,16 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
                                            f"(scheduled crossing T{h['crossing_from_min']:+.2f}-"
                                            f"T{h['crossing_to_min']:+.2f}; fixed 2015 traffic is not re-timed "
                                            f"per plan)"})
+        for h in o.fixed_departures:  # informational: the landing has priority, the fixed departure holds
+            lat, lon = (h["lat"], h["lon"]) if h["lat"] is not None else (wave.airport.lat, wave.airport.lon)
+            ts.conflicts.append({"rule": "ATC-TAXI-CONFLICT", "kind": "fixed_departure_holds", "callsign": cs,
+                                 "fixed": h["fixed"], "strip": h["strip"], "hold_min": round(h["hold_min"], 2),
+                                 "at_min": round(h["takeoff_min"], 2), "lat": lat, "lon": lon,
+                                 "detail": f"fixed {h['fixed']} would hold for takeoff on {h['strip']} "
+                                           f"{h['hold_min']:.1f} min for landing {cs} T{h['landing_min']:+.2f} "
+                                           f"(scheduled takeoff T{h['takeoff_min']:+.2f}, less than "
+                                           f"{ground_traffic.LANDING_TAKEOFF_GAP_MIN:g} min before it; fixed 2015 "
+                                           f"traffic is not re-timed per plan)"})
 
 
 _TOLG = 1e-9
@@ -642,10 +668,10 @@ def detail(o: GroundOutcome) -> str:
     """ATC-TAXI-CONFLICT detail of one outcome (the rule and `conflicts` share it)."""
     cs = o.callsign
     if not o.modelled:
-        head = f"{cs}: ground conflicts not modelled ({'no route' if o.tier == 'real' else o.tier})"
         if o.landing_conflicts:
-            return f"{cs}: lands T{o.slot_min:+.1f} inside fixed traffic's runway use: " + "; ".join(o.landing_conflicts)
-        return head
+            return (f"{cs}: lands T{o.slot_min:+.1f} inside fixed traffic's runway use: "
+                    + "; ".join(o.landing_conflicts))
+        return f"{cs}: ground conflicts not modelled ({'no route' if o.tier == 'real' else o.tier})"
     probs = []
     if not o.ok:
         probs.append(o.reason or "not scheduled")
@@ -659,11 +685,14 @@ def detail(o: GroundOutcome) -> str:
     w = f"{len(o.waits)} wait{'s' if len(o.waits) != 1 else ''} {o.wait_min:.1f} min" if o.waits else "no waits"
     fh = (f"; fixed {', '.join(h['fixed'] for h in o.fixed_holds)} hold short for its landing (landing priority)"
           if o.fixed_holds else "")
+    fh += (f"; fixed {', '.join(h['fixed'] for h in o.fixed_departures)} hold for takeoff for its landing "
+           f"(landing priority)" if o.fixed_departures else "")
     hs = [x for x in o.waits if x.get("strip")]
     if hs:
         b = max(hs, key=lambda x: x["to_min"] - x["from_min"])
         w += f" (hold short {b['strip']} {b['to_min'] - b['from_min']:.1f} min for {b['kind']} {b['for']})"
-    nx = f"next {o.next_event[1]} {o.next_event[2]} T{o.next_event[0]:+.2f}" if o.next_event else "no later runway event"
+    nx = (f"next {o.next_event[1]} {o.next_event[2]} T{o.next_event[0]:+.2f}" if o.next_event
+          else "no later runway event")
     return (f"{cs}: reaches the stand with {w}; runway vacated T{o.exit_clear_min:+.2f}, {nx}"
             + (f"; crosses {', '.join(o.crossings)}" if o.crossings else "") + fh)
 

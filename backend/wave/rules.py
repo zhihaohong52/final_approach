@@ -9,7 +9,7 @@ import math
 import re
 from collections import Counter
 
-from backend.wave import holding, route, surface, trajectory, wind
+from backend.wave import ground_traffic, holding, route, surface, trajectory, wind
 from backend.wave.model import FlightMetrics, JointPlan, RuleCheck, Wave
 from backend.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics_map, turnaround_min
 
@@ -103,10 +103,11 @@ LIMITS = [
              "Quality gate per wave: every open runway end in OSM reaches >= 80 % of the wave's bound stands, else "
              "the wave uses the generic estimate (straight line runway midpoint -> gate x1.4 at 15 kt, generic exit at "
              "the required roll and 12 kt; assumption). Runways without coordinates keep v2's 6 min near / 10 min "
-             "far. Remote stand: + 10 min bus. No taxiway closures modelled. taxi = unimpeded + the hold-short / give-way "
+             "far. Remote stand: + 10 min bus. No taxiway closures modelled. taxi = unimpeded + the hold-short / "
+             "give-way "
              "waits of the plan's hold-short pass (ATC-TAXI-CONFLICT); no ramp or gate waits, so it can sit below BTS "
              "TAXI_IN (FCFS medians on the replays with the 2015 movements, ROT + taxi + waits vs taxi-in reference: "
-             "ORD 2.3 / 9.0, MIA 2.5 / 6.0, ATL 5.7 / 12.5, DFW 16.0 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
+             "ORD 2.3 / 9.0, MIA 2.5 / 6.0, ATL 5.7 / 12.5, DFW 10.9 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
              "validation (Task 27)"},
     {"limit": "ground node headway", "value": f"{surface.HEADWAY_S:g} s", "source": "assumption",
      "note": "ATC-TAXI-CONFLICT (FAA JO 7110.65 §3-7-2: ground control issues the route and hold-short "
@@ -127,6 +128,14 @@ LIMITS = [
              "would need, until 1 min after the landing; evidence fixed_holds). The fixed track and its knock-on "
              "effects are not re-timed. A plan landing while a fixed arrival is still on that runway does fail "
              "(same-runway separation, evidence landing_conflicts)"},
+    {"limit": "fixed departures vs plan landings", "value": "landing priority; a fixed takeoff less than "
+     f"{ground_traffic.LANDING_TAKEOFF_GAP_MIN:g} min before a plan landing on its strip would be held",
+     "source": "assumption",
+     "note": "the fixed takeoffs are spaced from the queue and FCFS landings when the wave is built, not from the "
+             "plan's landings. A plan landing less than the landing / takeoff gap after a fixed takeoff on the same "
+             "strip does not fail ATC-TAXI-CONFLICT: a controller would hold the departure. It is an informational "
+             "conflict (kind fixed_departure_holds: fixed callsign, strip, the hold until the gap after the landing; "
+             "evidence fixed_departure_holds); the fixed departure is not re-timed"},
     {"limit": "taxi search horizon", "value": f"{surface.HORIZON_MIN:g} min", "source": "assumption",
      "note": "a wave flight whose total taxi wait exceeds it (or whose route starts inside another strip's zone "
              "during a landing or takeoff) fails ATC-TAXI-CONFLICT; shorter waits never fail, they add to in-block"},
@@ -192,14 +201,16 @@ LIMITS = [
              "with no tailwind whose centreline crosses no arrival strip and no strip already chosen (nearest heading "
              "first; crossing-runway operations are not modelled). Mixed mode (departures share the arrival runway) "
              "iff there is none. Replays: ORD 22L + 27R/28C/28R (v3-taxi: 22L only, the cause of its late takeoffs), "
-             "MIA 08L/08R (v3-taxi: mixed on 12), DFW 35R/36L/36R + 31L/31R, ATL and DEN unchanged. In pushback order each departure is trial-scheduled (hold-short scheduler, crossing "
+             "MIA 08L/08R (v3-taxi: mixed on 12), DFW 35R/36L/36R + 31L/31R, ATL and DEN unchanged. "
+             "In pushback order each departure is trial-scheduled (hold-short scheduler, crossing "
              "waits and queues included) to every candidate and takes the earliest expected takeoff: leaving the "
              "holding point, never before WHEELS_OFF, spaced from the strip's other takeoffs (departure takeoff "
              "spacing); a schedule that is not ok, or a takeoff inside an already scheduled crossing's window, ranks "
              "last; ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
              "WHEELS_OFF - TAXI_OUT; the departure holds the holding-point node until it lines up 30 s before "
              "takeoff (departure holding-point queue); takeoff at WHEELS_OFF, later only if taxi waits, takeoff "
-             "spacing, a landing on its strip or a scheduled crossing hold it. Known limitation: arrival runways are v2's FCFS choice "
+             "spacing, a landing on its strip or a scheduled crossing hold it. Known limitation: arrival runways "
+             "are v2's FCFS choice "
              "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
              "ATL lands on the outboard runways (08L, 09R, 10) and departs from 08R/09L"},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
@@ -506,7 +517,10 @@ def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
             if r is not None:
                 groups.setdefault(trajectory.stack_key(r.hold), []).append(t)
     # one key set for both layers (parked T14): the labels the trajectory set gave its stacks
-    labels = {k: ts.stack_labels.get(k) or trajectory.stack_labels(groups)[k] for k in groups}
+    missing = set(groups) - set(ts.stack_labels)
+    if missing:          # both layers group by stack_key over the same routes: a mismatch is a bug, never relabelled
+        raise RuntimeError(f"stack keys {sorted(missing)} have no TrajectorySet stack label")
+    labels = {k: ts.stack_labels[k] for k in groups}
     out: dict[str, RuleCheck] = {}
     for key, ts_ in groups.items():
         label = labels[key]
@@ -612,7 +626,8 @@ def _taxi_conflict_check(ts, cs: str) -> RuleCheck:
     the scheduler could not give the flight a conflict-free taxi within the 30-min horizon (`Scheduled.ok` false), or
     it is still on the runway it exits (exit_clear_min) at another flight's landing or takeoff on that strip, or it
     lands while a fixed arrival is still on that runway. Waits alone never fail it: they cost in-block time. A fixed
-    crosser inside its landing's gap window holds for it (landing priority): informational, evidence `fixed_holds`. Not modelled (pass) without a routed OSM taxi."""
+    crosser inside its landing's gap window holds for it (landing priority): informational, evidence `fixed_holds`.
+    Not modelled (pass) without a routed OSM taxi."""
     o = ts.outcomes.get(cs)
     if o is None:
         return RuleCheck("ATC-TAXI-CONFLICT", "ATC", True, f"{cs}: no valid runway/slot, no taxi scheduled",
@@ -628,11 +643,14 @@ def _taxi_conflict_check(ts, cs: str) -> RuleCheck:
         ev["hold_short_strip"] = o.hold_short_strip
     if o.blocking:
         ev["blocking"] = ", ".join(f"{k} {lab} T{t:+.2f}" for t, k, lab in o.blocking)
+        ev["blocked_by"] = ", ".join(lab for _, _, lab in o.blocking)
     if o.landing_conflicts:
         ev["landing_conflicts"] = "; ".join(o.landing_conflicts)
     if o.fixed_holds:
         ev["fixed_holds"] = len(o.fixed_holds)
         ev["fixed_holds_for_landing"] = ", ".join(f"{h['fixed']} {h['hold_min']:.1f} min" for h in o.fixed_holds)
+    if o.fixed_departures:
+        ev["fixed_departure_holds"] = ", ".join(f"{h['fixed']} {h['hold_min']:.1f} min" for h in o.fixed_departures)
     if not o.ok:
         ev["reason"] = o.reason or "not scheduled"
     if not o.modelled and o.passed:

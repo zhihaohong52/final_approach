@@ -632,6 +632,22 @@ def moves_fcfs_runways(w):
 
 
 @pytest.mark.usefixtures("_fixture_movements")
+def test_taxi_wait_costs_the_atc_taxi_term():
+    """Spec §6.5: the ATC taxi term is (taxi_min - best unimpeded) / 10 with taxi_min = unimpeded + waits (review T31)."""
+    from backend.wave import utility
+    w, p = _ord_plan_with_crossing()
+    cs = p.assignments[0].callsign
+    mm = metrics_map(w, p)
+    assert mm[cs].taxi_wait_min > 0
+    no_wait = dict(mm)
+    no_wait[cs] = replace(mm[cs], taxi_wait_min=0.0, taxi_min=mm[cs].taxi_unimpeded_min)
+    a = p.assignments[0]
+    assert utility._taxi_extra(w, a, mm[cs]) == pytest.approx(
+        utility._taxi_extra(w, a, no_wait[cs]) + mm[cs].taxi_wait_min / utility.TAXI_ROUTED_CAP_MIN, abs=1e-9)
+    assert utility.agent_terms(w, p, "ATC", mm)["taxi"] < utility.agent_terms(w, p, "ATC", no_wait)["taxi"]
+
+
+@pytest.mark.usefixtures("_fixture_movements")
 def test_taxi_wait_feeds_in_block():
     w, p = _ord_plan_with_crossing()      # helper: pick a wave flight whose route crosses a strip with a landing 0.5 min after its exit
     m = metrics_map(w, p)[p.assignments[0].callsign]
@@ -751,9 +767,18 @@ def test_every_still_vacating_message_is_a_failing_taxi_conflict(monkeypatch):
 @pytest.mark.usefixtures("_fixture_movements")
 def test_stack_labels_come_from_the_trajectory_set():
     """Parked T14: ATC-HOLD-STACK labels and TrajectorySet.stack_violations use one key set."""
+    from backend.wave import route
     w = build.build_wave(ORD); p = fcfs_plan(w)
+    for a in [x for x in p.assignments if x.action == "land"][:4]:      # 15 min late: two laps each, several stacks
+        p = p.with_assignment(replace(a, slot_min=a.slot_min + 15))
     ts = trajectory.build(w, p)
-    assert isinstance(ts.stack_labels, dict)
+    rs = route.routes_for_wave(w)
+    groups = {trajectory.stack_key(rs[(t.callsign, t.runway)].hold) for t in ts.air
+              if t.wave and t.laps >= 1 and (t.callsign, t.runway) in rs}
+    assert len(groups) >= 1
+    assert set(groups) <= set(ts.stack_labels)
+    stack = [c for c in rules.check(w, p) if c.rule == "ATC-HOLD-STACK"]
+    assert stack and all(any(lab in c.detail for lab in ts.stack_labels.values()) for c in stack)
 
 
 def _fixed_landing_hits(w, ts):
@@ -795,6 +820,40 @@ def test_landing_inside_a_fixed_crossing_is_landing_priority_not_a_failure(monke
     vac = {(m_f, m_c) for m_f, m_c in hits if (m_f, m_c) not in named}
     for fixed, cs in vac:                     # the only other kind: a fixed arrival still on the runway (a failure)
         assert not _by(rules.check(w, q), "ATC-TAXI-CONFLICT", cs).passed
+
+
+@pytest.mark.usefixtures("_fixture_movements")
+def test_landing_just_after_a_fixed_takeoff_is_landing_priority_not_a_failure():
+    """Ruling T31 (review): a plan landing less than LANDING_TAKEOFF_GAP_MIN after a fixed takeoff on the same strip
+    passes (the fixed departure would have been held) and is an informational `fixed_departure_holds` conflict."""
+    from backend.wave import ground_traffic
+    w = build.build_wave(ORD); p = fcfs_plan(w)
+    g = surface._geo(w).graph
+    res = ground_traffic.reservations(w)
+    rw_of = {m.label: m.runway for m in ground_traffic._get(w).movers if m.kind == "departure"}   # takeoff end
+    # isolated fixed takeoffs (no other event on their strip within 4 min after) on strips a wave flight can use;
+    # each wave landing 0.5 min after one: the takeoff never fails the rule (only scheduler / vacate / fixed-arrival
+    # reasons can), and it is always reported as an informational conflict
+    picks = [(strip, t, lab) for strip, lst in sorted(res.runway_events.items())
+             for t, kind, lab in lst if kind == "takeoff" and 0 < t < 100
+             and not any(e[2] != lab and t - 0.1 < e[0] < t + 4.0 for e in lst)]
+    assert picks, "no isolated fixed takeoff"
+    passed = 0
+    for strip, t, lab in picks[:8]:
+        for a in [x for x in p.assignments if x.action == "land"][:3]:
+            q = p.with_assignment(replace(a, runway=rw_of[lab], slot_min=round(t + 0.5, 2)))
+            c = _by(rules.check(w, q), "ATC-TAXI-CONFLICT", a.callsign)
+            assert lab in c.evidence["fixed_departure_holds"]
+            assert c.passed == ({"reason", "blocking", "landing_conflicts"}.isdisjoint(c.evidence)), c.detail
+            ts = trajectory.build(w, q)
+            info = [x for x in ts.conflicts if x.get("kind") == "fixed_departure_holds" and x["callsign"] == a.callsign]
+            assert any(x["fixed"] == lab and x["strip"] == strip and x["lat"] is not None
+                       and x["hold_min"] == pytest.approx(0.5 + ground_traffic.LANDING_TAKEOFF_GAP_MIN, abs=0.011)
+                       for x in info)
+            if c.passed:
+                passed += 1
+                assert not [x for x in ts.conflicts if x["callsign"] == a.callsign and "kind" not in x]
+    assert passed >= 1
 
 
 @pytest.mark.usefixtures("_fixture_movements")

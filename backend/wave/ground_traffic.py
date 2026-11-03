@@ -36,9 +36,11 @@ WINDOW_BEFORE_MIN, WINDOW_AFTER_MIN = 30.0, 120.0   # departures with wheels-off
 LOAD_EARLY_MIN = 360.0        # movements are filtered on schedule: read 6 h earlier so late departures still enter
 LOAD_LATE_MIN = 15.0          # ... and 15 min later for early ones
 PARALLEL_DEG = 10.0
-DEPARTURE_SPREAD_DEG = 60.0   # other free ends within this of the arrival flow also take departures (assumption, LIMITS)
+# other free ends within this of the arrival flow also take departures (assumption, LIMITS)
+DEPARTURE_SPREAD_DEG = 60.0
 TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one a minute (assumption, LIMITS)
-LANDING_TAKEOFF_GAP_MIN = 1.0  # a takeoff stays this far from every landing on its strip (mixed mode; assumption, LIMITS)
+# a takeoff stays this far from every landing on its strip (mixed mode; assumption, LIMITS)
+LANDING_TAKEOFF_GAP_MIN = 1.0
 HOLD_UNTIL_TAKEOFF = True     # a departure keeps its holding-point node reserved until its takeoff: the queue behind it
                               # forms upstream on the taxiway, visible to every later mover and to the wave flights
 SRC_REAL = "BTS 2015 movements"
@@ -137,16 +139,17 @@ def departure_mode(wave: Wave) -> tuple[bool, str | None, list[str]]:
     par = [r.id for r in wave.airport.runways if r.open and strip_of(r.id) != strip_of(maj)
            and _hdg_diff(r.heading_true, m.heading_true) <= PARALLEL_DEG]
     free = sorted(r for r in par if strip_of(r) not in used)
-    # other free ends within DEPARTURE_SPREAD_DEG of the flow, no tailwind, whose strip crosses no arrival strip and
-    # no strip already chosen (crossing-runway operations are not modelled), by angle then id
+    # other free ends within DEPARTURE_SPREAD_DEG of the flow, no tailwind and wind within the airport's crosswind /
+    # tailwind limits, whose strip crosses no arrival strip and no strip already chosen (crossing-runway operations
+    # are not modelled), by angle then id
     by_id = {r.id: r for r in wave.airport.runways}
     arr_rw = [r for r in wave.airport.runways if strip_of(r.id) in used]
-    tail = {x.runway: x.tailwind_kt for x in wave.runway_wind}
+    wind = {x.runway: x for x in wave.runway_wind}
     chosen = [by_id[e] for e in free]
     extra = []
     for r in sorted((r for r in wave.airport.runways if r.open and r.id not in free and strip_of(r.id) not in used
                      and _hdg_diff(r.heading_true, m.heading_true) <= DEPARTURE_SPREAD_DEG
-                     and tail.get(r.id, 0.0) <= 0.0),
+                     and (r.id not in wind or (wind[r.id].tailwind_kt <= 0.0 and wind[r.id].within_limits))),
                     key=lambda r: (_hdg_diff(r.heading_true, m.heading_true), r.id)):
         if any(strip_of(c.id) == strip_of(r.id) for c in chosen):
             continue
@@ -484,8 +487,7 @@ def _spacing_events(events, settled: set[str] | None) -> list:
     return [e for e in events if e[1] != "takeoff" or settled is None or e[2] in settled]
 
 
-HOLD_QUEUE_MAX_RETRY = 50
-_QUEUE_BLOCK = "\x00queue"     # temporary node_busy entry: the departure must reach its holding point after this
+HOLD_QUEUE_MAX_RETRY = 50     # re-schedules of one departure behind later arrivals at its holding point
 
 
 def _unreserve(res: Reservations, nodes: list[int], label: str) -> None:
@@ -574,14 +576,15 @@ def _compute(wave: Wave) -> FixedTraffic:
                             {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
         hw = surface.HEADWAY_S / 60.0
         last = m.path.nodes[-1]
-        fifo_ok = False
+        fifo_ok, blocks = False, []
         for _attempt in range(HOLD_QUEUE_MAX_RETRY):
             s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
             if m.kind != "departure" or not HOLD_UNTIL_TAKEOFF or s.reason == "hold-short search did not converge":
                 fifo_ok = True
                 break
             # FIFO at the holding point: its dwell there (until line-up) must not overlap another mover that reaches
-            # the node later (scheduled before it, e.g. an earlier takeoff); else it queues upstream behind that one
+            # the node later (scheduled before it, e.g. an earlier takeoff); else it queues upstream behind that one:
+            # a temporary node reservation under that mover's label (so the wait names it) until it has left
             leave = max(m.event_min, s.points[-1]["t_min"])
             t_to = _takeoff_time(_spacing_events([e for e in res.runway_events[m.strip] if e[2] != m.label],
                                                  settled), spans.get(m.strip, ()), leave)
@@ -593,9 +596,17 @@ def _compute(wave: Wave) -> FixedTraffic:
                 fifo_ok = True
                 break
             _unreserve(res, m.path.nodes, m.label)
-            res.node_busy[last].append((at_hold, max(b[1] for b in clash), _QUEUE_BLOCK))
+            ahead = max(clash, key=lambda b: (b[1], b[2]))
+            blk = (at_hold, ahead[1], ahead[2])
+            res.node_busy[last].append(blk)
             res.node_busy[last].sort()
-        res.node_busy[last] = [b for b in res.node_busy.get(last, ()) if b[2] != _QUEUE_BLOCK]
+            blocks.append(blk)
+        for blk in blocks:
+            res.node_busy[last].remove(blk)
+        if not fifo_ok:
+            # retries exhausted (its reservations were dropped): schedule once without the queue blocks, keep it,
+            # and report the unresolved order as a fixed failure
+            s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
         scheduled[m.label] = s
         if not s.ok:
             failures.append((m.label, s.reason or "not scheduled"))
@@ -766,6 +777,9 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
         parts.append(f"departures sharing a wave or queue arrival's callsign, labelled: {', '.join(relabel)}")
     if ft.takeoffs_shifted:
         parts.append(f"{ft.takeoffs_shifted} takeoffs after WHEELS_OFF because of taxi waits")
+    deps_n = sum(1 for m in ft.movers if m.kind == "departure")
+    if deps_n:
+        parts.append(f"takeoffs later than WHEELS_OFF: {ft.stats.get('late', 0)} of {deps_n}")
     if ft.stats.get("takeoffs_held"):
         parts.append(f"{ft.stats['takeoffs_held']} takeoffs held at the holding point for takeoff spacing, a "
                      f"landing or a crossing")

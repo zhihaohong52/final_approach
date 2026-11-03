@@ -202,16 +202,19 @@ def _clip(x: float) -> float:
     return min(max(x, 0.0), 1.0)
 
 
-def _taxi_extra(wave: Wave, a: Assignment) -> float:
-    """ATC taxi term of one landing, normalised (spec §6.5): (taxi - best unimpeded taxi for its gate over the open
-    runways) / 10 min; no-geometry tier: v2's (near/far taxi - 6) / 4. Taxi here excludes the ROT on both sides."""
+def _taxi_extra(wave: Wave, a: Assignment, m: FlightMetrics | None = None) -> float:
+    """ATC taxi term of one landing, normalised (spec §6.5): (taxi_min - best unimpeded taxi for its gate over the
+    open runways) / 10 min, with taxi_min = unimpeded + taxi waits (`FlightMetrics.taxi_min`, so a hold-short or
+    give-way wait costs ATC); no-geometry tier: v2's (near/far taxi - 6) / 4. Taxi here excludes the ROT on both
+    sides."""
     size = wave.flight(a.callsign).gate_size
     tx = surface.taxi_info(wave, a.runway, a.gate, size)
     if tx.tier == "none":
         return (tx.taxi_min - TAXI_NEAR_MIN) / TAXI_EXTRA_CAP_MIN
     alts = [t.taxi_min for t in (surface.taxi_info(wave, r.id, a.gate, size) for r in wave.airport.runways if r.open)
             if t.tier != "none"]
-    return max(0.0, tx.taxi_min - min(alts, default=tx.taxi_min)) / TAXI_ROUTED_CAP_MIN
+    taxi = m.taxi_min if m is not None and m.taxi_min is not None else tx.taxi_min
+    return max(0.0, taxi - min(alts, default=tx.taxi_min)) / TAXI_ROUTED_CAP_MIN
 
 
 def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
@@ -228,7 +231,7 @@ def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
             counts[a.runway or "?"] = counts.get(a.runway or "?", 0) + 1
         # concentration of wave landings on one runway: 0 when spread, 1 when all on one
         load = (max(counts.values()) - 1) / (len(landing) - 1) if len(landing) > 1 else 0.0
-        taxi_extra = sum(_taxi_extra(wave, a) for a in landing) / n
+        taxi_extra = sum(_taxi_extra(wave, a, mm[a.callsign]) for a in landing) / n
         div = sum(1 for a in asg if a.action == "divert") / n
         return {"holding": -W_ATC["holding"] * _clip(mean_hold / HOLD_CAP_MIN),
                 "runway_load": -W_ATC["runway_load"] * _clip(load),

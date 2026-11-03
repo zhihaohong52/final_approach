@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -304,3 +305,39 @@ def test_ord_departures_spread_over_non_crossing_runways():
         assert not any(GT._strips_cross(by[a], by[b]) for b in cands[i + 1:])
     used = {m.runway for m in fixed_traffic(w) if m.kind == "departure"}
     assert len(used) > 1 and used <= set(cands)
+
+
+@pytest.mark.parametrize("wid", ["F2015-270287", "F2015-69315", "F2015-75"])
+def test_no_internal_sentinel_in_served_waits(wid):
+    """Review T31: a holding-point queue wait names the mover ahead, never an internal marker (served in /geo)."""
+    from backend.wave import wavegeo
+    w = build.build_wave(wid)
+    labels = {m.label for m in fixed_traffic(w)}
+    for t in fixed_tracks(w):
+        for x in t.waits:
+            assert "\x00" not in x["reason"] and "\x00" not in str(x.get("for"))
+            if x.get("for") is not None and x["reason"].startswith("give way"):
+                assert x["for"] in labels or x["for"] in {f.callsign for f in w.flights}
+    gt = wavegeo.ground_traffic_part(w)
+    assert "\x00" not in json.dumps(gt)
+
+
+def test_queue_retry_exhaustion_keeps_the_mover_and_reports_it(monkeypatch):
+    """Review T31: with one retry allowed, an unresolved holding-point order must not crash build_wave: the departure
+    is scheduled once without the queue block, keeps its reservations and is reported as a fixed failure."""
+    from backend.wave import ground_traffic as GT
+    monkeypatch.setattr(GT, "HOLD_QUEUE_MAX_RETRY", 1)
+    GT._cache_clear()
+    try:
+        w = build.build_wave("F2015-270287")
+        ft = GT._get(w)
+        unresolved = [lab for lab, why in ft.failures if why == "holding-point queue order not resolved"]
+        assert unresolved
+        drawn = {t.callsign for t in ft.tracks}
+        assert set(unresolved) <= drawn
+        for lab in unresolved:
+            t = next(t for t in ft.tracks if t.callsign == lab)
+            hold = t.points[-1]["node"]
+            assert any(b[2] == lab for b in ft.reservations.node_busy[hold])
+    finally:
+        GT._cache_clear()

@@ -409,7 +409,8 @@ export interface TrajectorySet {
     waits: { lat: number; lon: number; from_min: number; to_min: number; reason: string }[];
     unimpeded_min: number; taxi_min: number; src: "osm" | "synth" }[];
   conflicts: { rule: RuleId; callsign: string; at_min: number; lat: number; lon: number; detail: string;
-    // v3-traffic: absent = a failing check; "fixed_holds_for_landing" = informational (the landing has priority, the
-    // fixed crosser `fixed` would hold short of `strip` for `hold_min`; not a violation)
-    kind?: "fixed_holds_for_landing"; fixed?: string; strip?: string; hold_min?: number }[];
+    // v3-traffic: absent = a failing check; otherwise informational, never a violation (the landing has priority):
+    // "fixed_holds_for_landing" = the fixed crosser `fixed` would hold short of `strip` for `hold_min`;
+    // "fixed_departure_holds" = the fixed departure `fixed` would hold for takeoff on `strip` for `hold_min`
+    kind?: "fixed_holds_for_landing" | "fixed_departure_holds"; fixed?: string; strip?: string; hold_min?: number }[];
 }

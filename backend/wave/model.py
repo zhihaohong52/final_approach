@@ -195,7 +195,8 @@ class FlightMetrics(_Dict):
     taxi_unimpeded_min: float | None = None
     taxi_wait_min: float = 0.0
     taxi_min: float | None = None
-    hold_short_strip: str | None = None   # v3-traffic: strip of the flight's longest hold-short wait (None: no hold-short)
+    # v3-traffic: strip of the flight's longest hold-short wait (None: no hold-short)
+    hold_short_strip: str | None = None
 
 
 @dataclass

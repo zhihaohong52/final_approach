@@ -592,7 +592,8 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
 
     arr0_nb = t0_min                       # earliest arrival at the first node
     nb = [-math.inf] * n                   # earliest departure from each node
-    why: dict[int, tuple] = {}             # index -> (reason, strip, kind, cs) of the binding wait (-1 = before the first node)
+    # index -> (reason, strip, kind, cs) of the binding wait (-1 = before the first node)
+    why: dict[int, tuple] = {}
     arr = [0.0] * n
     dep = [0.0] * n
 

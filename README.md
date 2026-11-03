@@ -68,7 +68,7 @@ flowchart LR
     ATC --> PIL --> GND
   end
 
-  ENGINE["Rule engine (deterministic)<br/>12 rules, cites source and values<br/>lists legal moves, CHECKs every plan"]
+  ENGINE["Rule engine (deterministic)<br/>14 rules, cites source and values<br/>lists legal moves, CHECKs every plan"]
   DEC["Decision layer: picks a move / votes<br/>jev-1.14 (default, benchmark winner) or formulas; one model at a time:<br/>jev-1.14 → d1-ultra → elephant-1 → formula<br/>(next only on timeout or invalid answer)"]
   FB["Fallback solver (deterministic)<br/>beam search + safety net<br/>if no consensus after 3 turns"]
   NAR["Claude Haiku 5.5<br/>writes the duty-manager brief<br/>(explains only, decides nothing)"]
@@ -138,11 +138,13 @@ Components (all under `backend/`):
 
 - **Wave builder** (`wave/flights2015.py`, `wave/build.py`): builds the wave from a `flights.csv` row (or a BTS 2024 wave), real runways, METAR, FAA registry and OSM gates, plus seeded simulation of what no public source has. Deterministic per id.
 - **Workbook limits** (`wave/constraints.py`): airport capacity, wake table, fuel and crew rules parsed from `data/challenge2/challenge2_operational_constraints.xlsx` (sheet `rules_of_play`), with hard-coded fallbacks equal to the workbook.
-- **Rules engine** (`wave/rules.py`): every check is a formula, and every result cites rule, source and input values. Twelve rules:
+- **Rules engine** (`wave/rules.py`): every check is a formula, and every result cites rule, source and input values. Fourteen rules:
   - `ATC-RWY-OPEN`: runway exists and is open.
   - `ATC-WAKE-SEP`: workbook wake distance (3-8 nm) between leader and follower on the same physical runway, converted to time at 140 kt (x1.25 when wet or low visibility).
   - `ATC-RWY-CAPACITY`: arrivals per runway per rolling 60 min within the workbook cap.
   - `ATC-TAXI-ROUTE`: taxi route to the gate is usable.
+  - `ATC-TAXI-CONFLICT`: the landing taxis to its stand against the fixed 2015 ground traffic and earlier wave flights (hold-short / give-way waits within the 30-min horizon) and has vacated its runway before the next landing or takeoff on it. Waits cost in-block time, they never fail it.
+  - `ATC-HOLD-STACK`: at most 5 simultaneous holders per physical hold fix, 1,000 ft apart, bottom-first exit (a later entrant may not leave while an earlier one still holds).
   - `ATC-WIND-LIMITS`: crosswind and tailwind from real METAR against FAA Order 8400.9 section 6d and demonstrated crosswind by type.
   - `PLT-EARLIEST-ETA`: no landing before the flight can physically arrive.
   - `PLT-FUEL-RESERVE`: hold fits within extra fuel above alternate plus 30 min final reserve.

@@ -6,7 +6,6 @@ slot on the same runway where that flight breaks nothing, and nobody else breaks
 from __future__ import annotations
 
 import math
-import re
 
 from backend.wave.model import Assignment, JointPlan, Wave
 from backend.wave.utility import evaluate
@@ -73,6 +72,16 @@ def plan_from_dicts(rows: list[dict], wave: Wave | None = None) -> JointPlan:
     return JointPlan(out, "edited by the duty manager")
 
 
+# rule evidence fields that name the other flight(s) a breach is with (comma-separated callsigns)
+OTHER_FLIGHT_KEYS = ("leader", "follower", "conflict", "overlapping", "earlier_holding", "blocked_by")
+
+
+def _named(check: dict) -> set[str]:
+    """Callsigns a failing check names in its structured evidence (OTHER_FLIGHT_KEYS)."""
+    ev = check.get("evidence") or {}
+    return {x.strip() for k in OTHER_FLIGHT_KEYS for x in str(ev.get(k, "")).split(",") if x.strip()}
+
+
 def _failures(ev: dict) -> set[tuple[str, str | None]]:
     return {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]}
 
@@ -113,9 +122,8 @@ def check_edit(wave: Wave, plan: JointPlan, include_trajectories: bool = False) 
         for cs in sorted({c for _, c in fails if c}):
             # tolerate other flights' breaches, except those that name this flight (e.g. a flight still on the
             # runway at this one's landing): those it must clear too
-            names_cs = re.compile(rf"(?<![A-Z0-9]){re.escape(cs)}(?![A-Z0-9])")
             caused = {(c["rule"], c.get("callsign")) for c in ev["checks"] if not c["passed"]
-                      and c.get("callsign") != cs and names_cs.search(f"{c.get('detail', '')} {c.get('evidence', '')}")}
+                      and c.get("callsign") != cs and cs in _named(c)}
             try:
                 s = _nearest_legal(wave, plan, plan.get(cs), {f for f in fails if f[1] != cs} - caused)
             except StopIteration:

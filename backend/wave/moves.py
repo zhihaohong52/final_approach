@@ -232,15 +232,25 @@ def _taxi(wave: Wave, cs: str, runway: str | None, gate: str | None) -> float:
     return surface.taxi_info(wave, runway, gate, _flight(wave, cs).gate_size).taxi_min
 
 
-def _wait_txt(wave: Wave, plan: JointPlan, m: Move, cs: str, who: bool = False) -> str:
-    """` +{wait} hold-short {strip}` (or ` +{wait} taxi wait` for give-way waits only) of `cs` in the plan the move
-    produces, from its hold-short pass (spec §6.7); "" without a wait. `who` appends the callsign (two-flight moves)."""
-    mm = metrics_map(wave, apply(wave, plan, m))[cs]
-    w = mm.taxi_wait_min or 0.0
-    if w < 0.05:
-        return ""
-    what = f"hold-short {mm.hold_short_strip}" if mm.hold_short_strip else "taxi wait"
-    return f" +{w:.1f} {what}" + (f" {cs}" if who else "")
+LABEL_MAX = 120   # characters of a move label
+
+
+def _wait_txt(wave: Wave, plan: JointPlan, m: Move, cs: str | list[str], who: bool = False) -> str:
+    """` +{wait} hold-short {strip}` (or ` +{wait} taxi wait` for give-way waits only) of `cs` (or of each callsign
+    of a list) in the plan the move produces, from its hold-short pass (spec §6.7); "" without a wait. `who`
+    appends the callsign (two-flight moves). Reads the memoised TrajectorySet of the resulting plan (the same one
+    its evaluation uses), not a full metrics map."""
+    from backend.wave import trajectory
+    outcomes = trajectory.build(wave, apply(wave, plan, m)).outcomes
+    out = ""
+    for c in ([cs] if isinstance(cs, str) else cs):
+        o = outcomes.get(c)
+        w = o.wait_min if o is not None else 0.0
+        if w < 0.05:
+            continue
+        what = f"hold-short {o.hold_short_strip}" if o.hold_short_strip else "taxi wait"
+        out += f" +{w:.1f} {what}" + (f" {c}" if who else "")
+    return out
 
 
 def _own_violations(checks) -> int:
@@ -361,9 +371,11 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                     continue
                 ta, tb = _taxi(wave, a.callsign, a.runway, b.gate), _taxi(wave, b.callsign, b.runway, a.gate)
                 m = _move("GROUND", "swap_gates", [a.callsign, b.callsign], {}, "")
-                wt = _wait_txt(wave, plan, m, a.callsign, True) + _wait_txt(wave, plan, m, b.callsign, True)
-                mv.append(replace(m, label=f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) "
-                                           f"(taxi {ta:.0f}/{tb:.0f} min{wt})"))
+                wt = _wait_txt(wave, plan, m, [a.callsign, b.callsign], True)
+                lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min{wt})"
+                if len(lab) > LABEL_MAX:     # keep the menu line short: the waits stay in the move's evaluation
+                    lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min)"
+                mv.append(replace(m, label=lab))
     else:
         cs = agent_id.split(":", 1)[1]
         a = plan.get(cs)
