@@ -116,14 +116,19 @@ LIMITS = [
      "earliest landing is t_entry + SR + GD + T_route(runway) with t_entry = ETA - T_route(FCFS runway)"},
     {"limit": "procedures cycle", "value": "FAA CIFP 2611", "source": "real data",
      "note": "current procedures (CIFP 2611) flown over 2015 traffic; not for navigation"},
-    {"limit": "departure runway", "value": "free parallel end nearest the stand, else the arrival runway (mixed mode)",
-     "source": "assumption",
+    {"limit": "departure runway", "value": "the flow's free parallel ends (segregated), else the arrival runway "
+     "(mixed mode); earliest expected takeoff", "source": "assumption",
      "note": "fixed ground traffic (real BTS 2015 departures, wheels-off T-30..T+120): mixed mode iff no open runway "
              "end parallel to the majority FCFS arrival runway (heading within 10 deg, same direction, another strip) "
-             "is free of arrivals; departures then share the arrival runway, else use the free parallel end whose "
-             "threshold is nearest their (seeded, simulated) stand. Pushback = WHEELS_OFF - TAXI_OUT; the departure "
-             "holds 30 s at the holding point (line-up buffer); takeoff at WHEELS_OFF, later only if taxi waits "
-             "delay it"},
+             "is free of arrivals; then departures share the arrival runway, else every free parallel end is a "
+             "departure runway. In WHEELS_OFF order each departure takes the candidate minimising pushback + "
+             "unimpeded taxi to that end + queue wait behind the takeoffs already assigned there (departure takeoff "
+             "spacing); ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
+             "WHEELS_OFF - TAXI_OUT; the departure holds 30 s at the holding point (line-up buffer); takeoff at "
+             "WHEELS_OFF, later only if taxi waits delay it"},
+    {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
+     "note": "used only to choose a departure's runway (expected queue wait); it matches the holding-point "
+             "throughput of the ground scheduler (30 s node headway + 30 s line-up buffer)"},
 ]
 
 

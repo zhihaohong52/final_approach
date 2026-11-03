@@ -129,3 +129,12 @@ def test_departure_mode_segregated_and_mixed(monkeypatch):
     monkeypatch.setattr(moves, "fcfs_runways", lambda wave: {"DL100": "26R", "DL201": "27L", "AA302": "26R",
                                                              "UA403": "26R"})
     assert departure_mode(w) == (True, "26R", ["26R"])            # both parallels host arrivals: mixed mode
+
+
+def test_departures_only_on_the_flow_departure_runways():
+    from backend.wave import rules
+    w = build.build_wave("F2015-270287")
+    mixed, arr_rw, cands = departure_mode(w)
+    deps = [m for m in fixed_traffic(w) if m.kind == "departure"]
+    assert deps and {m.runway for m in deps} <= set(cands)
+    assert any(r["limit"] == "departure takeoff spacing" and r["source"] == "assumption" for r in rules.LIMITS)

@@ -10,8 +10,10 @@ vetoed). Pure and deterministic; no model decides anything here.
   waits made it reach the holding point after that.
 - Departure runway (assumption, `rules.LIMITS` "departure runway"): the airport is mixed-mode, and departures use the
   arrival flow's runway (the majority `moves.fcfs_runways` end), unless an open end parallel to it (heading within
-  10 degrees, same direction, another strip) carries no arrivals; then departures use the one of those ends whose
-  threshold is nearest the departure stand.
+  10 degrees, same direction, another strip) carries no arrivals; then every such free end is a departure runway.
+  Departures, in WHEELS_OFF order, each take the candidate with the earliest expected takeoff: pushback + unimpeded
+  taxi to that end + queue wait behind the takeoffs already assigned there at one a minute (TAKEOFF_SPACING_MIN);
+  ties go to the threshold nearest the stand, then the runway id.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ WINDOW_BEFORE_MIN, WINDOW_AFTER_MIN = 30.0, 120.0   # departures with wheels-off
 LOAD_EARLY_MIN = 360.0        # movements are filtered on schedule: read 6 h earlier so late departures still enter
 LOAD_LATE_MIN = 15.0          # ... and 15 min later for early ones
 PARALLEL_DEG = 10.0
+TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one a minute (assumption, LIMITS)
 SRC_REAL = "BTS 2015 movements"
 SRC_PARTIAL = "challenge flights.csv subset"
 _TOL = 1e-9
@@ -98,7 +101,7 @@ def departure_mode(wave: Wave) -> tuple[bool, str | None, list[str]]:
     `moves.fcfs_runways` end (the queue's when the wave has no runway choice; ties by id). The airport is
     mixed-mode iff no open end parallel to it (heading within 10 degrees, same direction, another strip) is free of
     arrivals (wave flights' FCFS ends and the queue's, by strip); then the candidates are the arrival runway alone,
-    else the free parallel ends (the departure picks the one nearest its stand)."""
+    else all the free parallel ends (each departure takes the earliest expected takeoff among them)."""
     from backend.wave import moves                 # lazy: moves -> utility -> ... import cycle
     from backend.wave.rules import strip_of
     fc = [r for r in moves.fcfs_runways(wave).values() if r] or [q.runway for q in wave.queue]
@@ -263,6 +266,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
     wave_cs = {f.callsign for f in wave.flights} | {q.callsign for q in wave.queue}
     hw = {x.runway: x.headwind_kt - x.tailwind_kt for x in wave.runway_wind}
     out: list[FixedMover] = []
+    last_to: dict[str, float] = {}       # runway end -> latest expected takeoff assigned there
     for ev, kind, cs, obj in todo:
         st = stand_for(cs) if g is not None else None
         skey, snode = (st[0], int(st[1]["node"])) if st else ("", -1)
@@ -288,38 +292,52 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
             continue
         m = obj
         mixed, arr_rw, cands = mode
-        rwy = None
-        if cands:
-            if st is not None and len(cands) > 1:
-                by_id = {r.id: r for r in wave.airport.runways}
-                la, lo = st[1]["lat"], st[1]["lon"]
+        rwy, entry, why = None, None, None
+        by_id = {r.id: r for r in wave.airport.runways}
 
-                def dist(rid: str) -> float:
-                    r = by_id[rid]
-                    if r.le_lat is None or r.le_lon is None:
-                        return math.inf
-                    kx = math.cos(math.radians(la))
-                    return math.hypot((r.le_lon - lo) * kx, r.le_lat - la)
-                rwy = min(cands, key=lambda r: (dist(r), r))
-            else:
-                rwy = cands[0]
+        def dist(rid: str) -> float:
+            r = by_id.get(rid)
+            if st is None or r is None or r.le_lat is None or r.le_lon is None:
+                return math.inf
+            la, lo = st[1]["lat"], st[1]["lon"]
+            return math.hypot((r.le_lon - lo) * math.cos(math.radians(la)), r.le_lat - la)
+
+        # departure runway: among the flow's candidates, the earliest expected takeoff = pushback + unimpeded taxi to
+        # the end's runway entry + queue wait behind the takeoffs already assigned there (TAKEOFF_SPACING_MIN);
+        # ties -> nearest threshold to the stand, then id
+        rows = []
+        for rid in cands:
+            ent = _entry_node(g, rid, main) if g is not None and st is not None else None
+            taxi_u = None
+            if ent is not None:
+                hit = surface._tree(g, ent)["best"].get(snode)
+                taxi_u = hit[0] / 60.0 + surface.PARK_S / 60.0 if hit is not None else None
+            if taxi_u is None:
+                rows.append(((math.inf, dist(rid), rid), rid, ent, None))
+                continue
+            push = ev - (float(m.taxi_min) if m.taxi_min is not None else taxi_u)
+            ready = push + taxi_u
+            wait = max(0.0, last_to.get(rid, -math.inf) + TAKEOFF_SPACING_MIN - ready)
+            rows.append(((ready + wait, dist(rid), rid), rid, ent, ready + wait))
+        if rows:
+            _, rwy, entry, t_exp = min(rows, key=lambda r: r[0])
+            if t_exp is not None:
+                last_to[rwy] = max(ev, t_exp)        # takeoff is never before WHEELS_OFF
         strip = _strip_key(g, rwy) if rwy else ""
-        path, why = None, None
+        path = None
         if rwy is None:
             why = "no open runway"
         elif g is None:
             why = "no OSM surface graph"
         elif st is None:
             why = "no stand in the main taxi network"
+        elif entry is None:
+            why = f"runway end {rwy} not in OSM"
         else:
-            entry = _entry_node(g, rwy, main)
-            if entry is None:
-                why = f"runway end {rwy} not in OSM"
-            else:
-                try:
-                    path = departure_path(g, snode, entry, strip)
-                except NoPath as e:
-                    why = f"no taxi path ({e})"
+            try:
+                path = departure_path(g, snode, entry, strip)
+            except NoPath as e:
+                why = f"no taxi path ({e})"
         if m.taxi_min is not None:
             taxi = float(m.taxi_min)
         else:
