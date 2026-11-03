@@ -127,12 +127,15 @@ LIMITS = [
              "spacing); a schedule that is not ok, or a takeoff inside an already scheduled crossing's window, ranks "
              "last; ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
              "WHEELS_OFF - TAXI_OUT; the departure holds 30 s at the holding point (line-up buffer); takeoff at "
-             "WHEELS_OFF, later only if taxi waits delay it. Known limitation: arrival runways are v2's FCFS choice "
+             "WHEELS_OFF, later only if taxi waits, takeoff spacing or a scheduled crossing hold it. Known limitation: arrival runways are v2's FCFS choice "
              "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
              "ATL lands on the outboard runways (08L, 09R, 10) and departs from 08R/09L"},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
-     "note": "used only to choose a departure's runway (expected takeoff in the trial schedule); it matches the "
-             "holding-point throughput of the ground scheduler (30 s node headway + 30 s line-up buffer)"},
+     "note": "a departure's recorded takeoff is the earliest time >= max(WHEELS_OFF, leaving the holding point) "
+             "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "
+             "(the departure waits at the holding point: FCFS, the crosser came first); the runway choice uses the "
+             "same time. It matches the holding-point throughput of the ground scheduler (30 s node headway + 30 s "
+             "line-up buffer)"},
 ]
 
 

@@ -19,6 +19,7 @@ vetoed). Pure and deterministic; no model decides anything here.
 from __future__ import annotations
 
 import math
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Literal
@@ -180,7 +181,13 @@ def departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> Tax
     strip's protected zone or on any runway's pavement. The final 30 s (PARK_S) is kept as a line-up buffer: the
     departure holds the holding-point node for 30 s, then lines up; it is not drawn queueing there until WHEELS_OFF
     (a long TAXI_OUT would block the node and reorder every later takeoff)."""
-    nodes = list(reversed(surface.unimpeded(g, entry, stand_node).nodes))
+    tr = surface._tree(g, entry)                 # the entry-rooted Dijkstra (cached on the graph), nodes only
+    if stand_node not in tr["best"]:
+        raise NoPath(f"stand node {stand_node} is not reachable from runway entry {entry}")
+    nodes, st = [], tr["best"][stand_node][1]
+    while st is not None:                        # parent chain runs stand -> entry: already the departure order
+        nodes.append(st[0])
+        st = tr["parent"][st]
     strips = surface.runway_strips(g)
     k = len(nodes) - 1
     while k > 0 and (surface._in_zone(g, nodes[k], strip) or any(surface.on_runway(g, nodes[k], st) for st in strips)):
@@ -241,7 +248,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
     date, t0 = _t0(wave)
     mv = movements(wave)
     mode = departure_mode(wave)
-    stats = {"no_taxi_out": 0}
+    stats = {"no_taxi_out": 0, "duplicate_departures": [], "takeoffs_held": 0}
     main = _main_comp(g) if g is not None else None
     piers = _stand_piers(wave, g, main) if g is not None else {}
     used: set[int] = set()
@@ -261,7 +268,10 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
     if mv:
         seen: set[str] = set()
         for m in sorted(mv, key=lambda m: (m.wheels_min_abs if m.wheels_min_abs is not None else 1e9, m.callsign)):
-            if m.kind != "departure" or m.wheels_min_abs is None or m.callsign in seen:
+            if m.kind != "departure" or m.wheels_min_abs is None:
+                continue
+            if m.callsign in seen:
+                stats["duplicate_departures"].append(m.callsign)
                 continue
             off = float(m.wheels_min_abs - t0)
             if -WINDOW_BEFORE_MIN - _TOL <= off <= WINDOW_AFTER_MIN + _TOL:
@@ -359,27 +369,46 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
 
 class _CowTable(dict):
     """Copy-on-write view of a reservation table for trial scheduling: reads fall through to `base`, and the first
-    write to a key copies its list (schedule() only uses get and setdefault)."""
+    write to a key copies its list into the view, so `base` and its lists are never mutated."""
 
     def __init__(self, base: dict):
         super().__init__()
         self.base = base
 
+    def _own(self, k) -> bool:
+        return dict.__contains__(self, k)
+
+    def __contains__(self, k) -> bool:
+        return self._own(k) or k in self.base
+
+    def __getitem__(self, k):
+        return dict.__getitem__(self, k) if self._own(k) else self.base[k]
+
     def get(self, k, d=None):
-        return super().get(k, d) if k in self else self.base.get(k, d)
+        return dict.__getitem__(self, k) if self._own(k) else self.base.get(k, d)
 
     def setdefault(self, k, d=None):
-        if k not in self:
-            self[k] = list(self.base.get(k, ()))
-        return self[k]
+        if not self._own(k):
+            dict.__setitem__(self, k, list(self.base.get(k, ())))
+        return dict.__getitem__(self, k)
 
 
-def _takeoff_slot(events, t: float) -> float:
-    """Earliest time >= t at least TAKEOFF_SPACING_MIN from every other takeoff on the strip (expected queue)."""
-    tos = sorted(e[0] for e in events if e[1] == "takeoff")
-    for x in tos:
-        if x > t - TAKEOFF_SPACING_MIN + _TOL and x < t + TAKEOFF_SPACING_MIN - _TOL:
-            t = x + TAKEOFF_SPACING_MIN
+def _takeoff_time(events, spans, t: float) -> float:
+    """The departure's takeoff: the earliest time >= t that is TAKEOFF_SPACING_MIN from every other takeoff on the
+    strip and outside the crossing window of every scheduled crossing of it (a takeoff in [t_in - a, t_out + b] of a
+    crossing span, GAP_MIN["takeoff"] = (a, b), would break that crossing's gap). The departure waits at the holding
+    point: the crosser came first (FCFS). t only grows, so this ends."""
+    a, b = surface.GAP_MIN["takeoff"]
+    tos = [e[0] for e in events if e[1] == "takeoff"]
+    moved = True
+    while moved:
+        moved = False
+        for x in tos:
+            if t - TAKEOFF_SPACING_MIN + _TOL < x < t + TAKEOFF_SPACING_MIN - _TOL:
+                t, moved = x + TAKEOFF_SPACING_MIN, True
+        for t_in, t_out in spans:
+            if t_in - a - _TOL <= t <= t_out + b + _TOL:
+                t, moved = t_out + b + 1e-6, True
     return t
 
 
@@ -403,11 +432,9 @@ def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[st
 def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
                    spans: dict[str, list[tuple[float, float]]]) -> None:
     """Trial-schedule the departure to each candidate end against a copy-on-write view of the current reservations
-    and keep the end with the earliest actual takeoff, ok=True first; ties to the threshold nearest the stand, then
-    the runway id. The takeoff is the expected one: the time it leaves the holding point (never before WHEELS_OFF),
-    then spaced TAKEOFF_SPACING_MIN from the strip's other takeoffs. A candidate whose takeoff would fall in the
-    crossing window of an already scheduled mover on that strip ranks with the ok=False ones. Moves its
-    pre-inserted takeoff event to the chosen strip."""
+    and keep the end with the earliest takeoff, ok=True first; ties to the threshold nearest the stand, then the
+    runway id. The takeoff is the one `_compute` will record: `_takeoff_time` from the time it leaves the holding
+    point (never before WHEELS_OFF). Moves its pre-inserted takeoff event to the chosen strip."""
     events = {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()}
     best = None
     for rid, entry, strip, d in m.options:
@@ -417,10 +444,8 @@ def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
             continue
         view = Reservations(_CowTable(res.node_busy), _CowTable(res.edge_dir), events)
         s = surface.schedule(g, path, m.t_start_min, view, m.label)
-        t = _takeoff_slot(events.get(strip, ()), max(m.event_min, s.points[-1]["t_min"]))
-        before, after = surface.GAP_MIN["takeoff"]
-        bad = not s.ok or any(a < t + after + _TOL and t - before - _TOL < b for a, b in spans.get(strip, ()))
-        key = (bad, t, d, rid)
+        t = _takeoff_time(events.get(strip, ()), spans.get(strip, ()), max(m.event_min, s.points[-1]["t_min"]))
+        key = (not s.ok, t, d, rid)
         if best is None or key < best[0]:
             best = (key, rid, strip, path)
     if best is None or best[1] == m.runway:
@@ -461,13 +486,17 @@ def _compute(wave: Wave) -> FixedTraffic:
         if not s.ok:
             failures.append((m.label, s.reason or "not scheduled"))
         if m.kind == "departure":
-            leave = s.points[-1]["t_min"]
+            leave = max(m.event_min, s.points[-1]["t_min"])
+            lst = res.runway_events[m.strip]
+            t_to = _takeoff_time([e for e in lst if e[2] != m.label], spans.get(m.strip, ()), leave)
             if leave > m.event_min + _TOL:
-                lst = res.runway_events[m.strip]
-                i = lst.index((m.event_min, "takeoff", m.label))
-                lst[i] = (leave, "takeoff", m.label)
-                lst.sort()
                 shifted += 1
+            if t_to > leave + _TOL:
+                stats["takeoffs_held"] += 1
+            if t_to > m.event_min + _TOL:
+                i = lst.index((m.event_min, "takeoff", m.label))
+                lst[i] = (t_to, "takeoff", m.label)
+                lst.sort()
         if s.reason == "hold-short search did not converge":
             continue                     # nothing was reserved: no track to draw or verify
         for strip, a, b in _crossing_spans(g, m.path, s):
@@ -475,9 +504,9 @@ def _compute(wave: Wave) -> FixedTraffic:
         names = [n for i, n in enumerate(m.path.names) if n and (i == 0 or m.path.names[i - 1] != n)]
         tracks.append(GroundTrack(m.label, m.kind, False, m.runway, m.stand, names, s.points, s.waits,
                                   m.path.unimpeded_min, s.points[-1]["t_min"] - m.t_start_min, m.path.src))
-    # A takeoff moved later (above) was not seen by the movers scheduled before it: re-check every track's runway
-    # gaps against the final events with the independent verifier (one track at a time: checks 3 and 4 only).
-    # A broken crossing gap is a failure; an arrival still vacating at another fixed movement's takeoff or landing
+    # Safety net: re-check every track's runway gaps against the final events with the independent verifier (one
+    # track at a time: checks 3 and 4 only). Takeoffs are held clear of scheduled crossings above, so a broken
+    # crossing gap should not occur; if one does it is a failure; an arrival still vacating at another fixed movement's takeoff or landing
     # comes from the data's own times (queue slots, real WHEELS_OFF) and is counted, never hidden.
     stats["vacating"] = []
     if g is not None:
@@ -493,7 +522,8 @@ def _compute(wave: Wave) -> FixedTraffic:
 
 
 _CACHE: dict[str, FixedTraffic] = {}
-_CACHE_MAX = 16
+_CACHE_MAX = 32               # as build_wave's LRU
+_LOCK = threading.Lock()      # eviction from the benchmark's worker threads (as route / trajectory)
 
 
 def _get(wave: Wave) -> FixedTraffic:
@@ -507,9 +537,10 @@ def _get(wave: Wave) -> FixedTraffic:
 
 
 def _put(k: str, ft: FixedTraffic) -> None:
-    while len(_CACHE) >= _CACHE_MAX:
-        _CACHE.pop(next(iter(_CACHE)))
-    _CACHE[k] = ft
+    with _LOCK:
+        while len(_CACHE) >= _CACHE_MAX:
+            _CACHE.pop(next(iter(_CACHE)), None)
+        _CACHE[k] = ft
 
 
 def fixed_traffic(wave: Wave) -> list[FixedMover]:
@@ -547,9 +578,8 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
         parts.append(f"partial: {len(arrs)} queue arrivals only, no departures (no BTS 2015 movements for this "
                      f"airport and day)")
     unrouted = [m for m in ft.movers if m.path is None]
-    parts.append(f"not scheduled (wait over the 30-min horizon, cannot hold short, or crossing gap broken by a "
-                 f"delayed takeoff): {len(ft.failures)}"
-                 + (f" ({', '.join(cs for cs, _ in ft.failures)})" if ft.failures else ""))
+    parts.append(f"scheduled over the 30-min horizon or with an unresolved conflict (still reserved): "
+                 f"{len(ft.failures)}" + (f" ({', '.join(cs for cs, _ in ft.failures)})" if ft.failures else ""))
     vac = ft.stats.get("vacating") or []
     if vac:
         parts.append(f"fixed arrivals still on the runway at another fixed movement (data times): {len(vac)} "
@@ -562,6 +592,14 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
         parts.append(f"departures sharing a wave or queue arrival's callsign, labelled: {', '.join(relabel)}")
     if ft.takeoffs_shifted:
         parts.append(f"{ft.takeoffs_shifted} takeoffs after WHEELS_OFF because of taxi waits")
+    if ft.stats.get("takeoffs_held"):
+        parts.append(f"{ft.stats['takeoffs_held']} takeoffs held at the holding point for takeoff spacing or a "
+                     f"crossing")
+    dup = ft.stats.get("duplicate_departures") or []
+    if dup:
+        parts.append(f"repeated departure callsigns in the window, first kept: {len(dup)} ({', '.join(dup)})")
+    if ft.stats.get("no_taxi_out"):
+        parts.append(f"departures without BTS TAXI_OUT (pushback from the unimpeded taxi): {ft.stats['no_taxi_out']}")
     detail = "; ".join(parts)
     if ft.real:
         return Provenance("ground_traffic", "real", SRC_REAL, detail)

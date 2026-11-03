@@ -305,7 +305,15 @@ def on_runway(g: TaxiGraph, node: int, strip: str) -> bool:
 
 
 def edge_crosses_strip(g: TaxiGraph, u: int, v: int, strip: str) -> bool:
-    """Pure geometry: the straight edge u-v crosses the strip's centreline strictly inside both segments."""
+    """Pure geometry: the straight edge u-v crosses the strip's centreline strictly inside both segments; cached."""
+    key = ("edge_x", u, v, strip)
+    hit = g._trees.get(key)
+    if hit is None:
+        hit = g._trees[key] = _edge_crosses_strip(g, u, v, strip)
+    return hit
+
+
+def _edge_crosses_strip(g: TaxiGraph, u: int, v: int, strip: str) -> bool:
     du, dv = strip_distance_m(g, u, strip), strip_distance_m(g, v, strip)
     lat0, lon0 = g.nodes[u]
     kx, ky = _local(g, lat0)

@@ -10,17 +10,20 @@ from backend.wave.fixtures import make_wave
 from backend.wave.ground_traffic import departure_mode, fixed_traffic, fixed_tracks, reservations
 from backend.wave.model import QueueArrival, Runway
 
-ORD_FIXTURE = Path("tests/data/movements/ORD-2015-08-19.csv")   # real BTS 2015 ORD rows, sched 01:00-11:39 local
+# Real BTS On-Time 2015 movement rows (US DOT, public domain) for the replay days, cut to the scheduled window the
+# waves read: ORD 2015-08-19 (F2015-270287), ATL 2015-03-01 (F2015-69315), DFW 2015-01-01 (F2015-75).
+FIXTURES = Path(__file__).resolve().parent / "data" / "movements"
+DAYS = {"ORD": "ORD-2015-08-19.csv", "ATL": "ATL-2015-03-01.csv", "DFW": "DFW-2015-01-01.csv"}
 
 
 @pytest.fixture(autouse=True)
-def _ord_movements(monkeypatch):
-    """ORD 2015-08-19 movements from the committed fixture (the real files are gitignored and DB-seeded), so the
-    tests run offline and identically with or without data/ref/movements2015."""
+def _fixture_movements(monkeypatch):
+    """Movements from the committed fixtures (the real files are gitignored and DB-seeded), so the tests run
+    offline and identically with or without data/ref/movements2015."""
     from backend.datastore import files
     real = files._movements
-    frame = pd.read_csv(ORD_FIXTURE, dtype=str, keep_default_na=False)
-    monkeypatch.setattr(files, "_movements", lambda iata: (frame, "date") if iata == "ORD" else real(iata))
+    frames = {k: pd.read_csv(FIXTURES / v, dtype=str, keep_default_na=False) for k, v in DAYS.items()}
+    monkeypatch.setattr(files, "_movements", lambda iata: (frames[iata], "date") if iata in frames else real(iata))
     store.load_movements.cache_clear(); reservations.cache_clear()
     yield
     store.load_movements.cache_clear(); reservations.cache_clear()
@@ -109,7 +112,7 @@ def test_provenance_counts_movers_and_failures():
     w = build.build_wave("F2015-270287")
     pv = next(p for p in w.provenance if p.layer == "ground_traffic")
     assert pv.source == "BTS 2015 movements"
-    assert "departures" in pv.detail and "arrivals" in pv.detail and "not scheduled" in pv.detail
+    assert "departures" in pv.detail and "arrivals" in pv.detail and "still reserved" in pv.detail
 
 
 def _two_parallel_wave(open27=True):
@@ -138,3 +141,55 @@ def test_departures_only_on_the_flow_departure_runways():
     deps = [m for m in fixed_traffic(w) if m.kind == "departure"]
     assert deps and {m.runway for m in deps} <= set(cands)
     assert any(r["limit"] == "departure takeoff spacing" and r["source"] == "assumption" for r in rules.LIMITS)
+
+
+def test_multi_candidate_airport_spreads_departures():
+    w = build.build_wave("F2015-75")                     # DFW, segregated: three free parallel ends
+    mixed, arr_rw, cands = departure_mode(w)
+    assert not mixed and len(cands) > 1
+    used = {m.runway for m in fixed_traffic(w) if m.kind == "departure"}
+    assert len(used) > 1 and used <= set(cands)
+
+
+def test_trial_scheduling_does_not_leak(monkeypatch):
+    import copy
+    from backend.wave import ground_traffic as GT
+    real = GT._settle_runway
+    calls = []
+
+    def checked(g, m, res, spans):
+        before = copy.deepcopy((res.node_busy, res.edge_dir, spans))
+        ev = copy.deepcopy(res.runway_events)
+        real(g, m, res, spans)
+        assert (res.node_busy, res.edge_dir, spans) == before          # trials wrote only to their views
+        mine = lambda evs: sorted((s, e) for s, l in evs.items() for e in l if e[2] == m.label)
+        others = lambda evs: {s: [e for e in l if e[2] != m.label] for s, l in evs.items()}
+        assert others(res.runway_events) == {s: l for s, l in others(ev).items()}
+        assert len(mine(res.runway_events)) == len(mine(ev)) == 1        # its own takeoff, maybe on another strip
+        calls.append(m.label)
+
+    monkeypatch.setattr(GT, "_settle_runway", checked)
+    reservations.cache_clear()
+    w = build.build_wave("F2015-75")
+    assert calls and fixed_traffic(w)
+
+
+@pytest.mark.parametrize("wid", ["F2015-75", "F2015-69315"])   # DFW, ATL (departures crossing a departure runway)
+def test_no_fixed_track_in_a_protected_zone(wid):
+    from backend.wave import ground_traffic as GT
+    w = build.build_wave(wid)
+    g = surface.load_graph(w.airport.icao)
+    ft = GT._get(w)
+    msgs = surface.verify_separation(ft.tracks, runway_events=ft.reservations.runway_events, g=g)
+    assert [m for m in msgs if "protected zone" in m] == []
+    assert not any("crossing gap" in r for _, r in ft.failures)
+
+
+def test_cow_table_reads_through_and_copies_on_write():
+    from backend.wave.ground_traffic import _CowTable
+    base = {1: [(0.0, 1.0, "A")]}
+    v = _CowTable(base)
+    assert 1 in v and v[1] == base[1] and v.get(2) is None and 2 not in v
+    v.setdefault(1, []).append((2.0, 3.0, "B"))
+    v.setdefault(2, []).append((4.0, 5.0, "C"))
+    assert base == {1: [(0.0, 1.0, "A")]} and v[1][-1][2] == "B" and v[2] == [(4.0, 5.0, "C")]
