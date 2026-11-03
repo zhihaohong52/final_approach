@@ -195,8 +195,9 @@ def test_floor_plan_stays_incumbent(clt_firm):
     w, r = clt_firm
     sq = baseline.status_quo(w)
     assert rules.feasible(w, sq)
-    if r["turns"] == 1:   # preflight F25: if turn 1 already agrees, report it rather than force turn 2
-        pytest.skip(f"turn 1 reached {r['outcome']}")
+    # precondition (review M3): turn 1 must end without agreement, else this test fails rather than skips
+    nc1 = [m for m in r["log"] if m["type"] == "NO_CONSENSUS" and m["round"] == 1]
+    assert nc1 and r["turns"] == 2, f"turn 1 reached {r['outcome']} in {r['turns']} turn(s)"
     atc2 = _turns(r, "ATC")[1]
     assert atc2["round"] == 2 and atc2["body"]["votes"][0]["plan_id"] == sq.id
     assert r["outcome"] == "consensus" and r["final_plan"]["id"] == sq.id
@@ -293,3 +294,43 @@ def test_divert_guard_per_move():
     closed = replace(w, airport=replace(w.airport, runways=[replace(r, open=False) for r in w.airport.runways]))
     assert all(graph._divert_ok(closed, m, chk) for m in dv)
     assert graph._divert_ok(w, next(m for m in moves._candidates(w, p, "ATC")), chk)
+
+
+def test_own_flight_matches_whole_callsign():
+    """Review M4: a check names flight AA1 only as a whole token, never as a prefix of AA123."""
+    from types import SimpleNamespace as NS
+    c = NS(callsign=None, detail="Gate B7 busy: AA123 needs T+10..T+55")
+    assert graph._own_flight(c, "AA123") and not graph._own_flight(c, "AA1") and not graph._own_flight(c, "A123")
+    assert graph._own_flight(NS(callsign="AA1", detail="x"), "AA1")
+    assert graph._own_flight(NS(callsign=None, detail="AA1: taxi 18L -> B7"), "AA1")
+    fails = [NS(callsign=None, detail="Gate B7 busy: AA123 needs T+10..T+55", passed=False)]
+    assert graph._counted("AIRLINE:AA", fails, set(), ["AA1"]) == []
+    assert graph._counted("AIRLINE:AA", fails, set(), ["AA123"]) == fails
+
+
+def test_escape_clause_judged_at_end_of_turn(monkeypatch):
+    """Review M1: an airline voted on utility because no floor-meeting plan was on the table when it spoke, then
+    GROUND proposed one. The breaching plan, although every voter accepted it, must not win this turn; the
+    floor-meeting plan becomes the next incumbent. Control: with no floor-meeting plan, the breaching plan wins."""
+    w = make_wave()
+    run = graph._Run(w, "formulas", None, None, "t", "firm")
+    p = moves.fcfs_plan(w)
+    q = next(moves.apply(w, p, m) for m in moves._candidates(w, p, "GROUND")
+             if rules.feasible(w, moves.apply(w, p, m)) and moves.apply(w, p, m).id != p.id)
+    assert rules.feasible(w, p)
+    breach = {"callsign": "DL100", "metric": "delay_min", "floor": 0.0, "value": 9.0, "allowed": 0.05,
+              "floor_source": "status_quo"}
+    floor_ok = {q.id}
+    monkeypatch.setattr(graph._Run, "breaches",
+                        lambda self, plan, ag, rnd: [] if plan.id in floor_ok or ag != "AIRLINE:DL" else [breach])
+    ballots = {ag: [{"plan_id": p.id, "vote": "ACCEPT", "utility": 0.5, "reservation": 0.1}] for ag in run.agents}
+    ballots["GROUND"].append({"plan_id": q.id, "vote": "ACCEPT", "utility": 0.5, "reservation": 0.1})
+    st = {"ctx": run, "round": 1, "checked": {p.id: (p, True), q.id: (q, True)}, "ballots": ballots,
+          "proposals": [("ATC", p), ("GROUND", q)]}
+    out = graph._decide_turn(st)
+    assert out["route"] == "next" and out["table"].id == q.id
+    assert not any(m["type"] == "CONSENSUS" for m in run.log)
+    floor_ok.clear()                       # control: no plan meets DL's floor, so the escape clause stands
+    run2 = graph._Run(w, "formulas", None, None, "t2", "firm")
+    out2 = graph._decide_turn({**st, "ctx": run2})
+    assert out2["route"] == "finalize" and out2["final"].id == p.id

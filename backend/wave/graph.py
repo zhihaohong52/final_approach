@@ -53,6 +53,7 @@ Choices made here (documented for review):
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import uuid
@@ -121,8 +122,8 @@ def _vkeys(checks) -> set[tuple[str, str | None]]:
 
 def _own_flight(c, cs: str) -> bool:
     """A check belongs to flight `cs` when it names it (callsign field, or the detail text for
-    multi-flight rules such as gate conflicts)."""
-    return c.callsign == cs or cs in c.detail
+    multi-flight rules such as gate conflicts). The detail must name `cs` as a whole token: AA1 is not AA123."""
+    return c.callsign == cs or re.search(rf"(?<![A-Za-z0-9]){re.escape(cs)}(?![A-Za-z0-9])", c.detail or "") is not None
 
 
 def _counted(agent: str, checks, known: set[str], own=None) -> list:
@@ -861,6 +862,20 @@ def _no_consensus_reason(run: _Run, rnd: int, checked: dict, ballots: dict) -> s
     return f"turn {rnd}: no CHECK-passed plan accepted by all {len(run.agents)} agents (" + " | ".join(parts) + ")"
 
 
+def _escape_guard(run: _Run, rnd: int, valid: list[JointPlan], unanimous: list[JointPlan]) -> list[JointPlan]:
+    """Firm escape clause, judged at the end of the turn: an airline voted on utility (escape) only if no
+    floor-meeting plan was on the table when it spoke. A later voter (e.g. GROUND) may still put one on the table
+    in the same turn; then a plan that breaches that airline's floor cannot win this turn. The floor-meeting plan
+    is not declared here (the airline never voted on it); the incumbent rule carries it into turn t+1."""
+    out = []
+    for p in unanimous:
+        blocked = any(run.breaches(p, ag, rnd) and any(not run.breaches(q, ag, rnd) for q in valid if q.id != p.id)
+                      for ag in run.airlines)
+        if not blocked:
+            out.append(p)
+    return out
+
+
 def _decide_turn(st: S) -> dict:
     run: _Run = st["ctx"]
     rnd = st["round"]
@@ -871,6 +886,7 @@ def _decide_turn(st: S) -> dict:
     unanimous = [p for p in valid if p.id not in run.unable_plans
                  and all(any(v["plan_id"] == p.id and v["vote"] == "ACCEPT" for v in ballots.get(ag, []))
                          for ag in agents)]
+    unanimous = _escape_guard(run, rnd, valid, unanimous)
     if unanimous:
         best = max(unanimous, key=lambda p: (*_maxmin(w, p), p.id))
         if rules.feasible(w, best):
