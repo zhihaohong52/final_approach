@@ -28,6 +28,7 @@ PILOT_SEARCH_MIN = 60.0        # a Pilot's own-slot search horizon
 CALM_KT = 3.0                  # at or below: wind gives no runway preference, follow the queue
 HOLD_LAPS = (1, 2, 3, 4)       # ATC `hold` move: whole laps at the flight's hold fix
 TRANSITION_ALT_FT = 18000      # US transition altitude: flight levels at or above it
+HOLD_JUSTIFYING = ("ATC-", "PLT-")   # a hold is offered only if it cuts violations of these rules
 
 AUTHORITY = {
     "ATC": {"swap_order", "change_runway", "shift_slot", "speed_reduction", "ground_delay", "hold"},
@@ -215,6 +216,22 @@ def hold_spec(wave: Wave, a: Assignment):
     return trajectory.hold_for(wave, r)
 
 
+def _hold_label(wave: Wave, after: JointPlan, cs: str, h) -> str:
+    """Label of a `hold` from the plan it produces: laps flown, the hold's base level (the stack may give a
+    higher level), and the minutes / fuel of the applied slot (laps x lap_min plus any wake-push vector, at
+    the holding burn metrics_map charges)."""
+    t = next(x for x in trajectory.build(wave, after).air if x.callsign == cs)
+    mins = t.laps * (t.lap_min or 0.0) + t.vector_min
+    kg = mins * hold_burn(_flight(wave, cs))
+    return (f"Hold {cs} {t.laps} lap{'' if t.laps == 1 else 's'} at {h.fix} "
+            f"(base {alt_str(h.base_ft)}, {mins:.1f} min, ~{kg:.0f} kg)")
+
+
+def _own_violations(checks) -> int:
+    """Violations of rules a hold may be justified by (ATC-*, PLT-*); GND-* are Ground's to fix."""
+    return sum(1 for c in checks if not c.passed and c.rule.startswith(HOLD_JUSTIFYING))
+
+
 # ---------------------------------------------------------------- moves
 
 def _pstr(params: dict) -> str:
@@ -268,15 +285,11 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                                     f"Vector {a.callsign} {d:+g} min (path stretch)"))
                 h = hold_spec(wave, a)
                 if h is not None:
-                    # fuel = what metrics_map charges for these laps: laps x lap_min x holding burn
-                    burn = hold_burn(_flight(wave, a.callsign))
                     for n in HOLD_LAPS:
                         if n == mm[a.callsign].hold_laps:
                             continue   # already holding exactly n laps
-                        mins = n * h.lap_min
-                        mv.append(_move("ATC", "hold", [a.callsign], {"laps": n},
-                                        f"Hold {a.callsign} {n} lap{'s' if n > 1 else ''} at {h.fix} "
-                                        f"({alt_str(h.base_ft)}, {mins:.1f} min, ~{mins * burn:.0f} kg)"))
+                        m = _move("ATC", "hold", [a.callsign], {"laps": n}, "")
+                        mv.append(replace(m, label=_hold_label(wave, apply(wave, plan, m), a.callsign, h)))
             if a.callsign != getattr(wave, "focus", None) and a.runway and has_slot(a):
                 # one ATC absorption instruction per holding non-focus flight: the smallest step that
                 # covers its airborne hold (speed control if airborne, ground delay if not)
@@ -352,16 +365,25 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
 def legal_moves(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
     """Moves within the agent's authority, most useful first (fewest violations after the move,
     then the agent's own utility), at most MAX_MOVES. Infeasible moves are kept (ranked lower) so the
-    engine can visibly reject them. No-ops are dropped except a Pilot's `accept`.
+    engine can visibly reject them. No-ops are dropped except a Pilot's `accept`. A `hold` is offered only
+    if it strictly reduces the ATC-* / PLT-* violations of `plan`: airborne holding is never spent on a
+    Ground rule (a busy gate is fixed by a gate move).
     Raises ValueError for an unknown agent id."""
     pid = plan.id
     scored = []
+    own_now = None
     for m in _candidates(wave, plan, agent_id):
         p2 = apply(wave, plan, m)
         if m.kind != "accept" and p2.id == pid:
             continue
         mm = metrics_map(wave, p2)
-        nv = sum(1 for c in rules.check(wave, p2, mm) if not c.passed)
+        chk = rules.check(wave, p2, mm)
+        if m.kind == "hold":
+            if own_now is None:
+                own_now = _own_violations(rules.check(wave, plan, metrics_map(wave, plan)))
+            if _own_violations(chk) >= own_now:
+                continue
+        nv = sum(1 for c in chk if not c.passed)
         scored.append(((nv, -agent_utility(wave, p2, agent_id, mm), m.id), m))
     scored.sort(key=lambda x: x[0])
     out = [m for _, m in scored[:MAX_MOVES]]

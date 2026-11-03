@@ -291,7 +291,7 @@ def test_compact_passes_path_fields():
 
 # ---------------------------------------------------------------- agent views and prompt budget (spec §6.7)
 
-REPLAY_IDS = sorted(p.stem for p in Path("data/replay").glob("*.json"))
+REPLAY_IDS = sorted(p.stem for p in (Path(__file__).resolve().parents[1] / "data" / "replay").glob("*.json"))
 
 
 def _prompt_chars(wid, monkeypatch) -> int:
@@ -323,3 +323,17 @@ def test_views_show_each_flights_path():
     assert any(" · hold " in s and " base " in s and " · lap " in s and s.endswith(" kg") for s in v["path"].values())
     pv = graph._view(w, p, pilot)
     assert pv["path"] == v["path"][pilot.split(":", 1)[1]]
+
+
+def test_view_path_without_geometry_and_when_diverted():
+    from atm.wave import moves
+    from atm.wave.utility import negotiators
+    w = make_wave(); p = moves.fcfs_plan(w)    # fixture wave: no procedures
+    v = graph._view(w, p, "ATC")
+    assert all(v["path"][a.callsign] == f"no route geometry for {a.runway}" for a in p.assignments)
+    pilot = negotiators(w)[1]
+    cs = pilot.split(":", 1)[1]
+    d = next(m for m in moves.legal_moves(w, p, pilot) if m.kind == "request_divert")
+    q = moves.apply(w, p, d)
+    assert graph._view(w, q, "ATC")["path"][cs] == "no path (not landing)"
+    assert graph._view(w, q, pilot)["path"] == "no path (not landing)"

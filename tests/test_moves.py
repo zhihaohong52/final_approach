@@ -204,17 +204,19 @@ def test_hold_label_states_fix_level_minutes_and_charged_fuel():
     assert hm
     for m in hm:
         cs, laps = m.callsigns[0], m.params["laps"]
-        rx = rf"Hold {cs} {laps} laps? at (\S+) \((FL\d{{3}}|\d{{1,2}},\d{{3}} ft), (\d+\.\d) min, ~(\d+) kg\)"
+        rx = rf"Hold {cs} {laps} laps? at (\S+) \(base (FL\d{{3}}|\d{{1,2}},\d{{3}} ft), (\d+\.\d) min, ~(\d+) kg\)"
         g = re.fullmatch(rx, m.label)
         assert g, m.label
         q = apply(w, p, m)
         t = next(x for x in trajectory.build(w, q).air if x.callsign == cs)
         mm = metrics_map(w, q)[cs]
         assert g.group(1) == t.hold_fix
-        assert float(g.group(3)) == pytest.approx(laps * t.lap_min, abs=0.05)
         assert mm.hold_laps == laps
-        # the label's fuel is exactly the laps' share of what metrics_map charges (hold_min x hold_burn)
-        assert g.group(4) == f"{laps * t.lap_min * hold_burn(w.flight(cs)):.0f}"
+        # minutes and fuel are those of the applied slot: laps x lap_min plus any wake-push vector,
+        # at the holding burn metrics_map charges
+        mins = t.laps * t.lap_min + t.vector_min
+        assert g.group(3) == f"{mins:.1f}"
+        assert g.group(4) == f"{mins * hold_burn(w.flight(cs)):.0f}"
 
 
 def test_hold_only_with_a_hold_fix_and_validated():
@@ -246,3 +248,44 @@ def test_shift_and_change_runway_labels_mention_path():
                                   f"Vector {m.callsigns[0]} -2 min (path stretch)") for m in sh)
     cr = [m for m in c if m.kind == "change_runway"]
     assert cr and all(m.label.endswith(" min route)") for m in cr)
+
+
+def test_hold_label_counts_wake_push_as_vector(monkeypatch):
+    # a slot pushed past earliest + n laps by wake separation: the label states the applied minutes
+    from atm.wave import build, moves, trajectory
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    real = moves._earliest_legal
+    monkeypatch.setattr(moves, "_earliest_legal", lambda wv, o, wk, fl: real(wv, o, wk, fl + 1.3))
+    m = next(m for m in moves._candidates(w, p, "ATC") if m.kind == "hold")
+    t = next(x for x in trajectory.build(w, apply(w, p, m)).air if x.callsign == m.callsigns[0])
+    assert t.vector_min > 1.0 and f", {t.laps * t.lap_min + t.vector_min:.1f} min," in m.label
+
+
+def _own_violations(w, plan):
+    return sorted((c.rule, c.callsign) for c in rules.check(w, plan)
+                  if not c.passed and c.rule.startswith(("ATC-", "PLT-")))
+
+
+def test_hold_offered_only_when_it_reduces_atc_or_pilot_violations():
+    from atm.wave import build
+    for wid in ("F2015-69315", "F2015-58926"):
+        w = build.build_wave(wid); p = fcfs_plan(w)
+        base = len(_own_violations(w, p))
+        for m in (m for m in legal_moves(w, p, "ATC") if m.kind == "hold"):
+            assert len(_own_violations(w, apply(w, p, m))) < base, m.label
+
+
+@pytest.mark.parametrize("wid", ["F2015-69315", "F2015-58926"])
+def test_formula_negotiation_does_not_hold_for_gate_rules(wid):
+    # GND-GATE-FREE is Ground's to fix (gate moves); ATC must not buy it with airborne holding
+    from atm.wave import build, graph
+    from atm.wave.model import Assignment, JointPlan
+    from atm.wave.utility import metrics_map
+    w = build.build_wave(wid)
+    r = graph.negotiate_wave(w, "formulas")
+    held = [x["move"] for e in r["log"] if e["type"] == "AGENT_TURN"
+            for x in e["body"]["moves"] if x["move"]["kind"] == "hold"]
+    assert not held, [m["label"] for m in held]
+    fp = JointPlan([Assignment(**{k: v for k, v in a.items() if k in Assignment.__dataclass_fields__})
+                    for a in r["final_plan"]["assignments"]], "final")
+    assert all(m.hold_laps == 0 for m in metrics_map(w, fp).values())
