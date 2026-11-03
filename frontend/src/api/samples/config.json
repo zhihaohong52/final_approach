@@ -14,15 +14,8 @@
     "decision",
     "decision+claude"
   ],
-  "default_mode": "decision",
+  "default_mode": "formulas",
   "models": [
-    {
-      "id": "baseten/elephant-1",
-      "provider": "openrouter",
-      "label": "Baseten elephant-1",
-      "available": true,
-      "benchmark_rank": 1
-    },
     {
       "id": "typesafe/jev-1.14",
       "provider": "openrouter",
@@ -38,6 +31,13 @@
       "benchmark_rank": 2
     },
     {
+      "id": "baseten/elephant-1",
+      "provider": "openrouter",
+      "label": "Baseten elephant-1",
+      "available": true,
+      "benchmark_rank": 3
+    },
+    {
       "id": "typesafe/jev",
       "provider": "typesafe",
       "label": "Typesafe jev",
@@ -48,10 +48,10 @@
       "provider": "formula",
       "label": "Formula (deterministic)",
       "available": true,
-      "benchmark_rank": 4
+      "benchmark_rank": 1
     }
   ],
-  "default_model": "baseten/elephant-1",
+  "default_model": "typesafe/jev-1.14",
   "llm_available": true,
   "tracing": false,
   "replay_available": true,
