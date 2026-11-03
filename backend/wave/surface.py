@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import heapq
 import math
+import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Literal
@@ -155,13 +156,18 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     parent: dict[tuple, tuple | None] = {}
     via: dict[tuple, tuple[str | None, str | None]] = {}   # state -> (name, strip) of the edge entered by
     done: set[tuple] = set()
+    # one tuple object per state and per (name, strip): the tree holds ~10k states at a hub, so sharing them (instead
+    # of a fresh tuple per dict value) roughly halves its memory; the returned structure is unchanged
+    canon: dict[tuple, tuple] = {}
+    names: dict[tuple, tuple] = {}
     start = (root, -1)
+    canon[start] = start
     dist = {start: 0.0}
     parent[start] = None
     heap = [(0.0, root, -1)]
     while heap:
         t, u, p = heapq.heappop(heap)
-        st = (u, p)
+        st = canon[(u, p)]
         if st in done:
             continue
         done.add(st)
@@ -175,13 +181,28 @@ def _tree(g: TaxiGraph, root: int) -> dict:
             ns = (v, u)
             if ns in done or nt >= dist.get(ns, math.inf):
                 continue
+            ns = canon.setdefault(ns, ns)
+            nm = (name, strip)
             dist[ns] = nt
             parent[ns] = st
-            via[ns] = (name, strip)
+            via[ns] = names.setdefault(nm, nm)
             heapq.heappush(heap, (nt, v, u))
     out = {"best": best, "parent": parent, "via": via, "dist": dist}
-    g._trees[key] = out
+    _keep_tree(g, key, out)
     return out
+
+
+MAX_TREES = 12   # Dijkstra trees kept per graph (LRU): ~1.9 MB each at ORD (tracemalloc); all 54 ORD exit trees: ~100 MB
+
+
+def _keep_tree(g: TaxiGraph, key: tuple, tree: dict) -> None:
+    """Cache a Dijkstra tree on the graph, evicting the least recently built beyond MAX_TREES (the per-wave taxi
+    table holds the routes the hot path reads, so an evicted tree only costs a recompute at build time)."""
+    order = g._trees.setdefault("_tree_lru", [])
+    g._trees[key] = tree
+    order.append(key)
+    while len(order) > MAX_TREES:
+        g._trees.pop(order.pop(0), None)
 
 
 def unimpeded(g: TaxiGraph, exit_node: int, stand_node: int) -> TaxiPath:
@@ -437,6 +458,22 @@ class GroundTrack:
     unimpeded_min: float
     taxi_min: float
     src: str
+
+    def to_dict(self) -> dict:
+        """Contract `TrajectorySet.ground[]` entry: node ids serialise as strings; `exit` omitted when None."""
+        pts = []
+        for q in self.points:
+            d = {"t_min": q["t_min"], "lat": q["lat"], "lon": q["lon"]}
+            if q.get("node") is not None:
+                d["node"] = str(q["node"])
+            pts.append(d)
+        out = {"callsign": self.callsign, "kind": self.kind, "wave": self.wave}
+        if self.exit is not None:
+            out["exit"] = self.exit
+        out.update({"stand": self.stand, "route_names": list(self.route_names), "points": pts,
+                    "waits": [{k: w[k] for k in ("lat", "lon", "from_min", "to_min", "reason")} for w in self.waits],
+                    "unimpeded_min": self.unimpeded_min, "taxi_min": self.taxi_min, "src": self.src})
+        return out
 
 
 def _osm_hold_for(g: TaxiGraph, node: int, strip: str) -> bool:
@@ -779,3 +816,321 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
                         out.append(f"{tr.callsign} inside the {strip} protected zone {t_in:.2f}-{t_out:.2f} "
                                    f"min during {kind} {cs} at {ev:.2f}")
     return out
+
+
+# --- wave integration (spec §6.4-6.6, §6.9): gate binding, per-flight taxi tiers, the per-wave taxi table ---
+#
+# Tiers per flight (ATC-TAXI-ROUTE evidence `tier`):
+#   real    - the wave's surface tier is real (`wave_tier`), the flight's runway end is in the OSM exits and its gate
+#             is bound to an OSM stand: exit by `choose_exit`, ROT, and the fastest taxi path (`unimpeded`) from that
+#             exit (or, if the stand is not reachable from it, the next exit of the end that reaches it). No exit
+#             reaching the stand is a rule failure; the metrics then use the generic estimate (`src: "synth"`).
+#   generic - the end is missing from OSM (e.g. ORD 14L/32R/14R, open in 2015), the wave tier is generic, or the gate
+#             is `synth`: a generic exit (the required roll, right-angle exit at 12 kt) and `generic_taxi_min`.
+#   none    - no runway coordinates (or a gate with no coordinates): v2's near/far `utility.taxi_min`, no ROT.
+
+SRC_ROUTED = "OpenStreetMap surface (ODbL), routed"
+SRC_GENERIC = "generic surface (straight line x1.4 at 15 kt)"
+SRC_NO_GEOMETRY = "ops rule (no geometry)"
+TIER_REACH = 0.80             # quality gate: each open end in OSM reaches >= 80 % of the wave's bound stands
+WAVE_CACHE_MAX = 64           # waves kept in the per-wave tier / taxi-table caches (FIFO)
+_PIN = "_surface"             # wave.__dict__ slot: (wave_key, GateGeo) pinned at build time (not a dataclass field)
+
+
+@dataclass
+class GateGeo:
+    """The wave's surface inputs, fixed at build time: the airport's taxi graph (None without an OSM surface) and the
+    gate -> stand binding (`gates_geo.bind_gates`). Shared and read-only (deepcopy returns the same object)."""
+    icao: str
+    graph: TaxiGraph | None
+    bind: dict[str, dict]
+    stand_label: dict[str, str]
+    osm_timestamp: str | None
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+@dataclass
+class TaxiInfo:
+    """Unimpeded taxi-in of one (runway end, gate, size): the plan-independent part of a ground track."""
+    tier: Literal["real", "generic", "none"]
+    runway: str | None
+    gate: str | None
+    stand: str
+    exit_label: str | None
+    exit: dict | None
+    rot_s: float | None           # None in the no-geometry tier
+    taxi_min: float               # unimpeded taxi (incl. 30 s to park), without the ROT
+    src: Literal["osm", "synth", "none"]
+    path: TaxiPath | None = None
+    no_path: str | None = None    # real tier: no exit of the end reaches the stand (ATC-TAXI-ROUTE fails)
+    line: tuple | None = None     # generic tier: ((lat, lon) runway midpoint, (lat, lon) gate)
+
+    @property
+    def total_min(self) -> float:
+        """ROT + taxi: exit-to-gate time after touchdown."""
+        return (self.rot_s or 0.0) / 60.0 + self.taxi_min
+
+    @property
+    def source(self) -> str:
+        return SRC_ROUTED if self.src == "osm" else SRC_NO_GEOMETRY if self.tier == "none" else SRC_GENERIC
+
+
+_LOCK = threading.Lock()
+_GEO: dict[tuple, GateGeo] = {}
+_TIER: dict[str, str] = {}
+_TABLE: dict[str, dict[tuple, TaxiInfo]] = {}
+_EMPTY = GateGeo("", None, {}, {}, None)
+
+
+def _put(cache: dict, k, v) -> None:
+    with _LOCK:
+        while len(cache) >= WAVE_CACHE_MAX:
+            cache.pop(next(iter(cache)), None)
+        cache[k] = v
+
+
+def gate_geo(icao: str, gates: list[tuple[str, bool]]) -> GateGeo:
+    """Bind the gate ids (id, remote) to OSM stands of the airport's surface. Reads the store: call at build time
+    (cached per airport and gate set)."""
+    key = (icao, tuple(gates))
+    hit = _GEO.get(key)
+    if hit is not None:
+        return hit
+    from backend.geo.gates_geo import bind_gates
+    doc = load_surface(icao)
+    if doc is None:
+        geo = GateGeo(icao, None, {}, {}, None)
+    else:
+        b = bind_gates(list(gates), doc)
+        ref = {str(s["id"]): str(s["ref"]) for s in doc.get("stands") or [] if s.get("ref") not in (None, "")}
+        labels = {gid: ref.get(x["stand"], x["stand"]) for gid, x in b.items()}
+        geo = GateGeo(icao, load_graph(icao), b, labels, (doc.get("header") or {}).get("osm_timestamp"))
+    _put(_GEO, key, geo)
+    return geo
+
+
+def apply_gate_geo(geo: GateGeo, gates: list, ref_latlon: tuple[float, float] | None) -> None:
+    """Set `lat/lon/geo_src` on the wave's Gate objects (build time, before the wave key exists). Without an OSM
+    surface every gate sits at the airport reference point (`synth`); without that either, gates stay unplaced."""
+    for g in gates:
+        b = geo.bind.get(g.id)
+        if b is not None:
+            g.lat, g.lon, g.geo_src = float(b["lat"]), float(b["lon"]), b["geo_src"]
+        elif ref_latlon is not None and tuple(ref_latlon) != (0.0, 0.0):
+            g.lat, g.lon, g.geo_src = float(ref_latlon[0]), float(ref_latlon[1]), "synth"
+
+
+def _geo(wave) -> GateGeo:
+    """The pinned GateGeo when it belongs to the wave's content key; else (an unpinned variant) bind again (reads
+    the store, cached); a wave whose gates carry no coordinates has no surface inputs."""
+    from backend.wave.route import wave_key
+    pin = wave.__dict__.get(_PIN)
+    if pin is not None and pin[0] == wave_key(wave):
+        return pin[1]
+    if not any(getattr(g, "geo_src", None) for g in wave.gates):
+        return _EMPTY
+    return gate_geo(wave.airport.icao, [(g.id, g.remote) for g in wave.gates])
+
+
+def _bound_nodes(bind: dict[str, dict]) -> list[int]:
+    return [int(b["node"]) for b in bind.values() if b.get("geo_src") != "synth" and int(b.get("node", -1)) >= 0]
+
+
+def _tier(g: TaxiGraph | None, runways, bind: dict[str, dict]) -> Literal["real", "generic"]:
+    """Spec §6.9 quality gate: real iff every open runway end present in `g.exits` reaches >= 80 % of the bound
+    stands (gates not `synth`). Reachable = an exit node of the end shares a taxi component (non-runway edges, the
+    edges the router uses) with the stand. No graph, no bound stand or no open end in OSM: generic."""
+    if g is None:
+        return "generic"
+    stands = _bound_nodes(bind)
+    ends = [r.id for r in runways if r.open and r.id in g.exits]
+    if not stands or not ends:
+        return "generic"
+    g.stand_components()
+    comp = g._trees["comp"]
+    for end in ends:
+        reach = {comp.get(e["node"]) for e in g.exits[end]}
+        if sum(1 for s in stands if comp.get(s) in reach) < TIER_REACH * len(stands) - 1e-9:
+            return "generic"
+    return "real"
+
+
+def wave_tier(wave, g: TaxiGraph | None) -> Literal["real", "generic"]:
+    """The wave's surface tier (spec §6.9), memoised on the wave key (`wave_tier.cache_clear()` also drops the taxi
+    table, which depends on it)."""
+    from backend.wave.route import wave_key
+    k = wave_key(wave)
+    hit = _TIER.get(k)
+    if hit is None:
+        hit = _tier(g, wave.airport.runways, _geo(wave).bind)
+        _put(_TIER, k, hit)
+    return hit
+
+
+def stand_node_for(wave, gate_id: str | None) -> int | None:
+    """Taxi-graph node of the OSM stand the gate is bound to; None for an unbound or `synth` gate."""
+    b = _geo(wave).bind.get(gate_id or "")
+    if b is None or b.get("geo_src") == "synth" or int(b.get("node", -1)) < 0:
+        return None
+    return int(b["node"])
+
+
+def final_gs_kt(wave, runway_end: str) -> float:
+    """Touchdown speed for the ROT: 140 kt final minus the METAR headwind on that runway (as the route's final)."""
+    from backend.wave.route import IAS_FINAL, MIN_GS_KT
+    rw = next((x for x in wave.runway_wind if x.runway == runway_end), None)
+    hw = (rw.headwind_kt - rw.tailwind_kt) if rw is not None else 0.0
+    return max(IAS_FINAL - hw, MIN_GS_KT)
+
+
+def _compute(wave, geo: GateGeo, tier_w: str, runway_end: str | None, gate_id: str | None,
+             size: Literal["narrow", "wide"]) -> TaxiInfo:
+    """One TaxiInfo (see the tiers above). `wave` only needs airport, runway_wind, metar and gates, so the builders
+    can call this before the wave's flights exist (crew floors)."""
+    rw = next((r for r in wave.airport.runways if r.id == runway_end), None) if runway_end else None
+    gate = next((x for x in wave.gates if x.id == gate_id), None) if gate_id else None
+    label = geo.stand_label.get(gate_id or "", "synth" if gate is not None else str(gate_id))
+    if (rw is None or None in (rw.le_lat, rw.le_lon, rw.he_lat, rw.he_lon) or gate is None
+            or gate.lat is None or gate.lon is None):
+        from backend.wave import utility   # lazy: utility -> trajectory -> surface
+        return TaxiInfo("none", runway_end, gate_id, label, None, None, None,
+                        utility.taxi_min(wave, runway_end, gate_id), "none")
+    g, b = geo.graph, geo.bind.get(gate.id)
+    wet = wave.metar is not None and wave.metar.surface == "wet"
+    v_td = final_gs_kt(wave, rw.id)
+    need = ROLL_M[size] * (WET_FACTOR if wet else 1.0)
+    generic_exit = {"node": None, "dist_m": need, "angle_deg": 90.0, "generic": True}
+    mid = ((rw.le_lat + rw.he_lat) / 2.0, (rw.le_lon + rw.he_lon) / 2.0)
+    line = (mid, (gate.lat, gate.lon))
+    if (g is not None and tier_w == "real" and rw.id in g.exits and b is not None and b.get("geo_src") != "synth"
+            and int(b.get("node", -1)) >= 0):
+        first = choose_exit(g, rw.id, size, wet)
+        seen, cands = set(), []
+        for e in [first] + list(g.exits[rw.id]):
+            if e["node"] not in seen:
+                seen.add(e["node"])
+                cands.append(e)
+        for e in cands:
+            try:
+                p = unimpeded(g, e["node"], int(b["node"]))   # module global: a monkeypatched surface.unimpeded applies
+            except NoPath:
+                continue
+            name = next((n for n in p.names if n), None)
+            return TaxiInfo("real", rw.id, gate.id, label, name or f"{rw.id} exit {e['dist_m']:.0f} m", e,
+                            rot_s(e, v_td), p.unimpeded_min, "osm", p)
+        return TaxiInfo("real", rw.id, gate.id, label, None, first, rot_s(first, v_td),
+                        generic_taxi_min(rw, gate.lat, gate.lon), "synth",
+                        no_path=f"no taxi route from any exit of {rw.id} to gate {gate.id} (stand {label}) on the "
+                                f"OSM surface", line=line)
+    return TaxiInfo("generic", rw.id, gate.id, label, None, generic_exit, rot_s(generic_exit, v_td),
+                    generic_taxi_min(rw, gate.lat, gate.lon), "synth", line=line)
+
+
+def taxi_info(wave, runway_end: str | None, gate_id: str | None, size: Literal["narrow", "wide"]) -> TaxiInfo:
+    """Memoised per wave key in the per-wave taxi table (filled at build time by `precompute`, so the hot path only
+    reads it). Never reads the store for a wave built by the builders (its graph is pinned)."""
+    from backend.wave.route import wave_key
+    k = wave_key(wave)
+    tab = _TABLE.get(k)
+    if tab is None:
+        tab = {}
+        _put(_TABLE, k, tab)
+    key = (runway_end, gate_id, size)
+    hit = tab.get(key)
+    if hit is None:
+        geo = _geo(wave)
+        hit = tab[key] = _compute(wave, geo, wave_tier(wave, geo.graph), runway_end, gate_id, size)
+    return hit
+
+
+def min_unimpeded_taxi(wave, callsign: str, runway_end: str, gate_id: str | None = None) -> float:
+    """ROT + unimpeded taxi (minutes) from `runway_end` to the flight's gate (the scheduled gate unless `gate_id` is
+    given); the generic estimate when the end is missing from OSM, v2's near/far taxi without runway geometry."""
+    f = wave.flight(callsign)
+    return taxi_info(wave, runway_end, gate_id or f.scheduled_gate, f.gate_size).total_min
+
+
+def floor_taxi(wave, geo: GateGeo, gate_id: str, size: Literal["narrow", "wide"]) -> float | None:
+    """Build-time crew floor term: the minimum over open runway ends of ROT + unimpeded taxi to `gate_id` (None
+    without an open runway). `wave` may be a flight-less proto wave (airport, runway_wind, metar, gates)."""
+    tier_w = _tier(geo.graph, wave.airport.runways, geo.bind)
+    vals = [_compute(wave, geo, tier_w, r.id, gate_id, size).total_min for r in wave.airport.runways if r.open]
+    return min(vals) if vals else None
+
+
+def provenance(wave, geo: GateGeo):
+    """Provenance layer `surface`: real / generic per the wave's quality gate (spec §6.9)."""
+    from backend.wave.model import Provenance
+    if geo.graph is None:
+        return Provenance("surface", "generic", "no OpenStreetMap surface",
+                          "taxi = straight line runway midpoint -> gate x1.4 at 15 kt; gates at the airport "
+                          "reference point (synth)")
+    g = geo.graph
+    tier = _tier(g, wave.airport.runways, geo.bind)
+    open_ends = [r.id for r in wave.airport.runways if r.open]
+    missing = [e for e in open_ends if e not in g.exits]
+    bound = len(_bound_nodes(geo.bind))
+    det = (f"{tier} quality gate: every open runway end in OSM reaches >= {TIER_REACH:.0%} of the wave's "
+           f"{bound} OSM-bound stands" if tier == "real" else
+           f"generic: an open runway end in OSM reaches < {TIER_REACH:.0%} of the wave's {bound} OSM-bound stands "
+           f"(or none is bound); taxi is the straight-line estimate")
+    if missing:
+        det += f"; open ends missing from today's OSM ({', '.join(missing)}) use the straight-line estimate"
+    return Provenance("surface", tier, f"OpenStreetMap {geo.osm_timestamp or 'snapshot'}", det)
+
+
+def precompute(wave) -> None:
+    """Pin the wave's GateGeo on the object (as `route.precompute` pins routes) and fill its taxi table for every
+    open runway end x gate x the wave's aircraft sizes, so metrics, rules, moves and views only read dicts. Called by
+    every wave builder after `route.precompute`."""
+    from backend.wave.route import wave_key
+    geo = _geo(wave)
+    wave.__dict__[_PIN] = (wave_key(wave), geo)
+    sizes = sorted({f.gate_size for f in wave.flights})
+    for r in wave.airport.runways:
+        if r.open:
+            for size in sizes:
+                for gt in wave.gates:
+                    taxi_info(wave, r.id, gt.id, size)
+
+
+def _clear() -> None:
+    with _LOCK:
+        _TIER.clear()
+        _TABLE.clear()
+
+
+wave_tier.cache_clear = _clear
+taxi_info.cache_clear = _clear
+
+
+def arrival_track(wave, callsign: str, info: TaxiInfo, slot_min: float) -> GroundTrack | None:
+    """The unimpeded taxi-in of a wave flight landing at `slot_min` (no waits: hold-short scheduling is
+    ATC-TAXI-CONFLICT's): it leaves the runway at slot + ROT and parks at slot + ROT + taxi. Real tier: one point per
+    route node (`src: "osm"`), the last one repeated after the 30 s to park; generic: a straight line from the runway
+    midpoint to the gate (`src: "synth"`); None in the no-geometry tier (nothing is drawn)."""
+    if info.tier == "none" or info.rot_s is None:
+        return None
+    t0 = slot_min + info.rot_s / 60.0
+    names: list[str] = []
+    if info.path is not None:
+        g = _geo(wave).graph
+        p = info.path
+        pts, t = [], t0
+        for i, n in enumerate(p.nodes):
+            pts.append({"t_min": t, "lat": g.nodes[n][0], "lon": g.nodes[n][1], "node": n})
+            if i < len(p.nodes) - 1:
+                t += p.seg_s[i] / 60.0
+        pts.append({"t_min": t0 + p.unimpeded_min, "lat": g.nodes[p.nodes[-1]][0], "lon": g.nodes[p.nodes[-1]][1],
+                    "node": p.nodes[-1]})
+        for nm in p.names:
+            if nm and (not names or names[-1] != nm):
+                names.append(nm)
+    else:
+        (la0, lo0), (la1, lo1) = info.line
+        pts = [{"t_min": t0, "lat": la0, "lon": lo0, "node": None},
+               {"t_min": t0 + info.taxi_min, "lat": la1, "lon": lo1, "node": None}]
+    return GroundTrack(callsign, "arrival", True, info.exit_label, info.stand, names, pts, [], info.taxi_min,
+                       info.taxi_min, info.src)

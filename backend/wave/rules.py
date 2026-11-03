@@ -9,9 +9,9 @@ import math
 import re
 from collections import Counter
 
-from backend.wave import holding, route, trajectory, wind
+from backend.wave import holding, route, surface, trajectory, wind
 from backend.wave.model import FlightMetrics, JointPlan, RuleCheck, Wave
-from backend.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics_map, taxi_min, turnaround_min
+from backend.wave.utility import MAX_SPEED_REDUCTION_MIN, TAXI_FAR_MIN, fuel_info, metrics_map, turnaround_min
 
 SRC_WB = "challenge2_operational_constraints.xlsx"
 SRC_WAKE = f"{SRC_WB} wake_separation (min_separation_nm at 140 kt, simplified FAA JO 7110.65)"
@@ -30,6 +30,7 @@ EPS_MIN = 1e-6   # float tolerance (min) on slot >= earliest and hold <= extra f
 OVERTIME_MULT = 1.5
 REMOTE_STAND_POSITIONS = 2   # assumption: aircraft on the remote stand (RS) at overlapping times
 SRC_RWY = "airport runway status"
+SRC_TAXI_OSM = surface.SRC_ROUTED
 WET_VIS_SM = 3.0
 WEATHER_FACTOR_BAD = 1.25
 _RWY_RE = re.compile(r"^(\d{1,2})([LRC]?)$")
@@ -68,13 +69,13 @@ LIMITS = [
     {"limit": "spare fuel on arrival", "value": "45 min of holding (workbook default) unless the wave states it",
      "source": "workbook", "note": "fuel.extra_min of each flight as built by the wave builder"},
     {"limit": "flight crew max duty", "value": "13 h from report time", "source": "workbook",
-     "note": "report = scheduled departure - 60 min (assumption); PLT-CREW-DUTY: landing slot + taxi-in (or "
-     "alternate arrival for a diversion) must be within the duty end. A flight whose earliest possible in-block "
-     "(minimum over the open runways of the runway-dependent earliest landing + taxi to the plan's gate, the "
-     "scheduled gate for a diversion; replaces v2's ETA + taxi, and far taxi for diversions) "
-     "is already past the duty end is an unavoidable duty bust (data): reported in the check detail, never a "
-     "violation. Otherwise the rule fails iff the plan's arrival is past the duty end. Skipped when the departure "
-     "time is unknown"},
+     "note": "report = scheduled departure - 60 min (assumption); PLT-CREW-DUTY: in-block (landing slot + ROT + "
+     "taxi-in, or the alternate arrival for a diversion) must be within the duty end. A flight whose earliest "
+     "possible in-block (minimum over the open runways of the runway-dependent earliest landing + ROT + unimpeded "
+     "routed taxi to the plan's gate, the scheduled gate for a diversion; replaces v2's ETA + taxi, and far taxi for "
+     "diversions) is already past the duty end is an unavoidable duty bust (data): reported in the check detail, "
+     "never a violation. Otherwise the rule fails iff the plan's arrival is past the duty end. Skipped when the "
+     "departure time is unknown"},
     {"limit": "ground crew shift / overtime", "value": "8 h shift, overtime cost x1.5", "source": "workbook",
      "note": "overtime is allowed (GND-CREW-DUTY reports it, never vetoes) and costs 1.5x in Ground utility; "
      "changed from v1 where any overtime was illegal"},
@@ -90,10 +91,23 @@ LIMITS = [
      "of the capacity cap; crosswind/tailwind limits from FAA Order 8400.9 / AFM"},
     {"limit": "remote stand", "value": "1 stand, 2 positions", "source": "assumption",
      "note": "not in workbook; spare_gates from workbook remain binding; exempt from gate notice"},
-    {"limit": "taxi-in time", "value": "6 min near / 10 min far; remote stand far + 10 min bus", "source": "assumption",
-     "note": "no gate coordinates or taxiway network in the data (OSM gates have names only): runway and pier "
-             "are paired by halves of the airport's runway list and piers; feeds in-block time, delay, "
-             "connections and gate occupancy; ATC-TAXI-ROUTE reports it, no taxiway closures modelled"},
+    {"limit": "taxi route", "value": "fastest route on the OpenStreetMap taxiway graph, runway exit to the gate's "
+     "stand; in-block = landing slot + ROT + taxi", "source": "real data",
+     "note": "taxiways, stands, runway exits and holding positions from OSM (ODbL); gates bound to OSM stands (ref, "
+             "then nearest within 150 m, else a generic stand); 20 kt, 10 kt on taxilanes and turns > 30 deg, +30 s to "
+             "park (assumptions); exit = first forward exit past the required roll (narrow 1,500 m, wide 2,000 m, "
+             "x1.15 wet), exits whose taxi network holds no stand skipped; ROT = 2d / (v_td + v_exit), v_exit 25 kt "
+             "(exit <= 45 deg) or 12 kt; ATC-TAXI-ROUTE fails when no exit of the runway end reaches the stand. "
+             "Quality gate per wave: every open runway end in OSM reaches >= 80 % of the wave's bound stands, else "
+             "the wave uses the generic estimate (straight line runway midpoint -> gate x1.4 at 15 kt, generic exit at "
+             "the required roll and 12 kt; assumption). Runways without coordinates keep v2's 6 min near / 10 min "
+             "far. Remote stand: + 10 min bus. No taxiway closures modelled"},
+    {"limit": "runway ends missing from OSM", "value": "generic straight-line taxi", "source": "assumption",
+     "note": "open in 2015 but not in today's OSM; taxi uses the straight-line generic estimate"},
+    {"limit": "runway hold clearance", "value": f"{surface.RUNWAY_HOLD_CLEARANCE_M:g} m from a crossed runway's "
+     f"centreline", "source": "assumption",
+     "note": "taxiing aircraft never wait closer than this to a runway they cross, except at an OSM holding position "
+             f"off the pavement; on the pavement = within {surface.RUNWAY_ON_PAVEMENT_M:g} m of the centreline"},
     {"limit": "speed reduction cap", "value": f"{MAX_SPEED_REDUCTION_MIN:g} min", "source": "assumption",
      "note": "maximum en-route speed reduction a pilot may use to absorb delay"},
     {"limit": "turnaround / gate occupancy", "value": "airport min_turnaround_min", "source": "workbook",
@@ -480,17 +494,52 @@ def _stack_checks(wave: Wave, plan: JointPlan) -> dict[str, RuleCheck]:
     return out
 
 
-def _earliest_in_block(wave: Wave, f, gate: str | None) -> tuple[float, str | None]:
+def _earliest_in_block(wave: Wave, f, gate: str | None) -> tuple[float, str | None, float]:
     """Earliest possible in-block (no speed reduction, no ground delay) minimised over open runways:
-    min over open r of trajectory.earliest(f, r) + taxi(r, gate) (M1: v2 taxi heuristic). Without an open
-    runway: ETA + far taxi."""
+    min over open r of trajectory.earliest(f, r) + ROT + unimpeded taxi from r to `gate`
+    (`surface.min_unimpeded_taxi`; v2 near/far taxi without runway geometry). Returns (in-block, runway, the
+    minimum over open runways of ROT + unimpeded taxi). Without an open runway: ETA + far taxi."""
     best = (f.eta_earliest_min + TAXI_FAR_MIN, None)
+    taxi = math.inf
     for r in wave.airport.runways:
         if r.open:
-            t = trajectory.earliest(wave, f.callsign, r.id) + taxi_min(wave, r.id, gate)
+            tx = surface.min_unimpeded_taxi(wave, f.callsign, r.id, gate)
+            taxi = min(taxi, tx)
+            t = trajectory.earliest(wave, f.callsign, r.id) + tx
             if best[1] is None or t < best[0]:
                 best = (t, r.id)
-    return best
+    return best[0], best[1], (taxi if math.isfinite(taxi) else TAXI_FAR_MIN)
+
+
+def _taxi_route_check(wave: Wave, a, f, g, cs: str) -> RuleCheck:
+    """ATC-TAXI-ROUTE (spec §6.6): a connected taxi route from an exit of the assigned runway end to the gate's stand.
+    Fails iff the surface tier is real and no exit of the end reaches the stand. Generic tier (end missing from OSM,
+    generic wave, synth gate) and the no-geometry tier pass and say which estimate applies."""
+    tx = surface.taxi_info(wave, a.runway, a.gate, f.gate_size)
+    p = tx.path
+    route_s = " ".join(dict.fromkeys(n for n in p.names if n)) if p is not None else ""
+    cross = sorted(dict.fromkeys(st for _, st in p.crossings)) if p is not None else []
+    ev = {"runway": str(a.runway), "exit": tx.exit_label or ("generic" if tx.tier != "none" else "none"),
+          "gate": str(a.gate), "stand": tx.stand, "route": route_s or "none",
+          "crossings": ", ".join(cross) if cross else "none", "unimpeded_min": round(tx.taxi_min, 2),
+          "tier": tx.tier}
+    if tx.rot_s is not None:
+        ev["rot_s"] = round(tx.rot_s, 1)
+    dest = "remote stand" if g is not None and g.remote else f"gate {a.gate}"
+    if tx.no_path:
+        return RuleCheck("ATC-TAXI-ROUTE", "ATC", False, f"{cs}: {tx.no_path}", SRC_TAXI_OSM, ev, cs)
+    if tx.tier == "real":
+        det = (f"{cs}: taxi {a.runway} exit {tx.exit_label} -> {dest} (stand {tx.stand}) via {route_s or 'unnamed'}"
+               f", {tx.taxi_min:.1f} min unimpeded" + (f", crosses {', '.join(cross)}" if cross else ""))
+    elif tx.tier == "generic":
+        g_ = surface._geo(wave).graph
+        why = ("runway end not in today's OSM" if g_ is not None and a.runway not in g_.exits else
+               "gate not bound to an OSM stand" if surface.stand_node_for(wave, a.gate) is None else
+               "surface below the quality gate" if g_ is not None else "no OSM surface")
+        det = f"{cs}: taxi {a.runway} -> {dest} {tx.taxi_min:.1f} min, straight-line estimate ({why})"
+    else:
+        det = f"{cs}: taxi route {a.runway} -> {dest} available ({tx.taxi_min:g} min); no runway geometry"
+    return RuleCheck("ATC-TAXI-ROUTE", "ATC", True, det, tx.source, ev, cs)
 
 
 def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
@@ -512,7 +561,7 @@ def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
             return RuleCheck("PLT-CREW-DUTY", "PILOT", False, f"{cs}: no in-block time to check crew duty",
                              SRC_DUTY, {"crew_duty_end_min": end}, cs)
         what = f"in-block T{arr:+g}"
-    earliest, e_rwy = _earliest_in_block(wave, f, a.gate if a.action == "land" else f.scheduled_gate)
+    earliest, e_rwy, taxi = _earliest_in_block(wave, f, a.gate if a.action == "land" else f.scheduled_gate)
     unavoidable = earliest > end + 1e-9
     ok = arr <= end + 1e-9 or unavoidable
     if arr <= end + 1e-9:
@@ -526,7 +575,7 @@ def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
     return RuleCheck("PLT-CREW-DUTY", "PILOT", ok, f"{cs}: {what} {tail}", SRC_DUTY,
                      {"arrival_min": round(arr, 1), "crew_duty_end_min": round(end, 1),
                       "earliest_arrival_min": round(earliest, 1), "earliest_runway": e_rwy or "none",
-                      "unavoidable_bust": "yes" if unavoidable else "no"}, cs)
+                      "taxi": round(taxi, 2), "unavoidable_bust": "yes" if unavoidable else "no"}, cs)
 
 
 def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = None) -> list[RuleCheck]:
@@ -585,13 +634,9 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
                                               {"hold_fix": "none", "laps": 0, "level_ft": "none", "holders": 0,
                                                "levels": holding.STACK_LEVELS}, cs))
 
-        # ATC-TAXI-ROUTE (no taxiway closures modelled in wave data: informational pass)
+        # ATC-TAXI-ROUTE
         g = gates.get(a.gate or "")
-        tx = taxi_min(wave, a.runway, a.gate)
-        dest = "remote stand" if g is not None and g.remote else "pier " + (g.pier if g else "?")
-        out.append(RuleCheck("ATC-TAXI-ROUTE", "ATC", True,
-                             f"{cs}: taxi route {a.runway} -> {dest} available ({tx:g} min); no taxiway closures in data",
-                             SRC_OPS, {"runway": str(a.runway), "gate": str(a.gate), "taxi_min": tx}, cs))
+        out.append(_taxi_route_check(wave, a, f, g, cs))
 
         # ATC-WIND-LIMITS
         if metar is None:

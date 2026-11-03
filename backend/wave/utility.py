@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import math
 
+from backend.wave import surface
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Wave, WaveFlight
 
 # ---------------------------------------------------------------- physical constants
 HOLD_BURN_KG_MIN = {"SUPER": 180.0, "HEAVY": 110.0, "B757": 70.0, "LARGE": 45.0, "SMALL": 25.0}
 SPEED_REDUCTION_BURN_FRACTION = 0.20   # absorbing delay en route burns ~20% of holding fuel
-TAXI_NEAR_MIN = 6.0
+TAXI_NEAR_MIN = 6.0                    # no-geometry tier only (no runway coordinates): v2 near/far taxi
 TAXI_FAR_MIN = 10.0
 GENERIC_TAXI_IN_MIN = 6.0              # taxi-in reference when neither the row nor the airport has a TAXI_IN
 REMOTE_BUS_MIN = 10.0                  # passengers bussed from the remote stand
@@ -23,7 +24,8 @@ MAX_SPEED_REDUCTION_MIN = 8.0
 
 # ---------------------------------------------------------------- utility normalisation caps
 HOLD_CAP_MIN = 20.0          # ATC: mean hold per flight at which the holding penalty saturates
-TAXI_EXTRA_CAP_MIN = TAXI_FAR_MIN - TAXI_NEAR_MIN   # ATC: extra taxi beyond near
+TAXI_EXTRA_CAP_MIN = TAXI_FAR_MIN - TAXI_NEAR_MIN   # ATC, no-geometry tier: extra taxi beyond near
+TAXI_ROUTED_CAP_MIN = 10.0   # ATC, surface tiers: taxi beyond the best unimpeded taxi over the open runways (spec §6.5)
 DELAY_CAP_MIN = 60.0         # PILOT: own delay at which the delay penalty saturates
 OVERTIME_CAP_MIN = 30.0      # GROUND: mean paid overtime (overtime x OVERTIME_MULT) per flight
 OVERTIME_MULT = 1.5          # workbook: ground crew overtime costs 1.5x after the 8 h shift
@@ -107,8 +109,9 @@ def _group(items: list[str], item: str) -> int:
 
 
 def taxi_min(wave: Wave, runway: str | None, gate_id: str | None) -> float:
-    """Near/far heuristic: the first half of the airport's runway list pairs with the first half of
-    the (alphabetical) terminal piers. Remote stand is always far."""
+    """v2 near/far heuristic, used only in the no-geometry tier (no runway coordinates, `surface.taxi_info` tier
+    "none"): the first half of the airport's runway list pairs with the first half of the (alphabetical) terminal
+    piers. Remote stand is always far."""
     gate = _gate(wave, gate_id)
     if gate is None or runway is None or gate.remote:
         return TAXI_FAR_MIN
@@ -119,7 +122,9 @@ def taxi_min(wave: Wave, runway: str | None, gate_id: str | None) -> float:
 
 
 def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
-    """One flight's metrics given its AirTrack from the plan's TrajectorySet (None when not drawn)."""
+    """One flight's metrics given its AirTrack from the plan's TrajectorySet (None when not drawn). In-block (spec
+    §6.5, v3-taxi) = slot + ROT + unimpeded taxi to the gate (`surface.taxi_info`, the same object the ground track
+    is drawn from); slot + v2 near/far taxi in the no-geometry tier."""
     f = wave.flight(a.callsign)
     pax_total = sum(int(c.get("pax", 0)) for c in f.connections)
     burn = hold_burn(f)
@@ -152,7 +157,13 @@ def _flight_metrics(wave: Wave, a: Assignment, track) -> FlightMetrics:
     # route extra may be negative (a shorter route than nominal) but never takes fuel below zero
     fuel = (hold + max(extra, -hold)) * burn + a.speed_reduction_min * burn * SPEED_REDUCTION_BURN_FRACTION
     gate = _gate(wave, a.gate)
-    in_block = slot + taxi_min(wave, a.runway, a.gate)
+    tx = surface.taxi_info(wave, a.runway, a.gate, f.gate_size)
+    if tx.tier == "none":
+        in_block = slot + tx.taxi_min
+    else:
+        in_block = slot + tx.total_min
+        path.update({"exit": tx.exit_label, "rot_s": tx.rot_s, "taxi_unimpeded_min": tx.taxi_min,
+                     "taxi_wait_min": 0.0, "taxi_min": tx.taxi_min})
     pax_ready = in_block + (REMOTE_BUS_MIN if gate is not None and gate.remote else 0.0)
     protected = sum(int(c.get("pax", 0)) for c in f.connections
                     if float(c["departs_min"]) - pax_ready >= MIN_CONNECT_MIN)
@@ -173,8 +184,9 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
     -hold_min)) x burn + SR x burn x 0.20`; path fields (`hold_laps`, `hold_fix`, `hold_level_ft`,
     `lap_min`, `vector_min`, `route_min`, `route_extra_min`) are copied unrounded from the AirTrack.
     No-geometry tier (no route for the assigned runway): v2's `hold = max(0, slot - ETA - SR - GD)`, no
-    route term, path fields left at their defaults. Taxi path fields stay unset until the surface model
-    feeds them."""
+    route term, path fields left at their defaults. Taxi fields (`exit`, `rot_s`, `taxi_unimpeded_min`,
+    `taxi_wait_min` = 0 until hold-short waits are scheduled, `taxi_min`) come from `surface.taxi_info` (unrounded);
+    unset in the no-geometry taxi tier."""
     from backend.wave import trajectory   # lazy: build / rules / moves import this module (import cycle)
     tracks = {t.callsign: t for t in trajectory.build(wave, plan).air if t.wave}
     return {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None)
@@ -183,6 +195,18 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
 
 def _clip(x: float) -> float:
     return min(max(x, 0.0), 1.0)
+
+
+def _taxi_extra(wave: Wave, a: Assignment) -> float:
+    """ATC taxi term of one landing, normalised (spec §6.5): (taxi - best unimpeded taxi for its gate over the open
+    runways) / 10 min; no-geometry tier: v2's (near/far taxi - 6) / 4. Taxi here excludes the ROT on both sides."""
+    size = wave.flight(a.callsign).gate_size
+    tx = surface.taxi_info(wave, a.runway, a.gate, size)
+    if tx.tier == "none":
+        return (tx.taxi_min - TAXI_NEAR_MIN) / TAXI_EXTRA_CAP_MIN
+    alts = [t.taxi_min for t in (surface.taxi_info(wave, r.id, a.gate, size) for r in wave.airport.runways if r.open)
+            if t.tier != "none"]
+    return max(0.0, tx.taxi_min - min(alts, default=tx.taxi_min)) / TAXI_ROUTED_CAP_MIN
 
 
 def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
@@ -199,11 +223,11 @@ def agent_terms(wave: Wave, plan: JointPlan, agent_id: str,
             counts[a.runway or "?"] = counts.get(a.runway or "?", 0) + 1
         # concentration of wave landings on one runway: 0 when spread, 1 when all on one
         load = (max(counts.values()) - 1) / (len(landing) - 1) if len(landing) > 1 else 0.0
-        taxi_extra = sum(taxi_min(wave, a.runway, a.gate) - TAXI_NEAR_MIN for a in landing) / n
+        taxi_extra = sum(_taxi_extra(wave, a) for a in landing) / n
         div = sum(1 for a in asg if a.action == "divert") / n
         return {"holding": -W_ATC["holding"] * _clip(mean_hold / HOLD_CAP_MIN),
                 "runway_load": -W_ATC["runway_load"] * _clip(load),
-                "taxi": -W_ATC["taxi"] * _clip(taxi_extra / TAXI_EXTRA_CAP_MIN),
+                "taxi": -W_ATC["taxi"] * _clip(taxi_extra),
                 "diversions": -W_ATC["diversions"] * _clip(div)}
     if agent_id == "GROUND":
         over = sum(mm[a.callsign].overtime_min for a in asg) / n

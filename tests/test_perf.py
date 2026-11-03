@@ -76,3 +76,28 @@ def test_evaluate_p95_under_3ms_ord():
     p95 = statistics.quantiles(ms, n=20)[18]
     print(f"evaluate p95 on ORD: {p95:.2f} ms")
     assert p95 <= 3.0
+
+
+def test_evaluate_p95_on_ord_replay_wave():
+    """Spec §6.8 budget: utility.evaluate p95 <= 3 ms on the ORD replay wave, over distinct plans (each plan is
+    memoised on (wave key, plan id), so repeating one plan would measure a cache hit)."""
+    import time
+    from backend.wave import build, moves, surface, trajectory, utility
+    w = build.build_wave("F2015-270287")
+    p = moves.fcfs_plan(w)
+    plans, seen, frontier = [], {p.id}, [p]
+    while len(plans) < 150 and frontier:
+        q = frontier.pop(0)
+        for ag in utility.negotiators(w):
+            for m in moves._candidates(w, q, ag):
+                r = moves.apply(w, q, m)
+                if r.id not in seen:
+                    seen.add(r.id); plans.append(r); frontier.append(r)
+    trajectory.build.cache_clear(); surface.precompute(w)     # plan caches cold, the per-wave taxi table warm
+    ts = []
+    for q in plans[:150]:
+        t = time.perf_counter(); utility.evaluate(w, q); ts.append((time.perf_counter() - t) * 1000)
+    ts.sort()
+    p95 = ts[int(len(ts) * 0.95)]
+    print(f"evaluate p95 {p95:.3f} ms over {len(ts)} plans")
+    assert len(ts) >= 100 and p95 <= 3.0

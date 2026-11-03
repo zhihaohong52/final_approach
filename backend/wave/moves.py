@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from backend.wave import route, rules, trajectory, wind
+from backend.wave import route, rules, surface, trajectory, wind
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Move, Wave
 from backend.wave.rules import has_slot, reciprocal, strip_of, strip_sequence, wake_gap_min, weather_factor
 from backend.wave.utility import agent_utility, hold_burn, metrics_map, turnaround_min
@@ -227,6 +227,11 @@ def _hold_label(wave: Wave, after: JointPlan, cs: str, h) -> str:
             f"(base {alt_str(h.base_ft)}, {mins:.1f} min, ~{kg:.0f} kg)")
 
 
+def _taxi(wave: Wave, cs: str, runway: str | None, gate: str | None) -> float:
+    """Unimpeded taxi minutes (no ROT) for move labels (spec §6.7), from the per-wave taxi table."""
+    return surface.taxi_info(wave, runway, gate, _flight(wave, cs).gate_size).taxi_min
+
+
 def _own_violations(checks) -> int:
     """Violations of rules a hold may be justified by (ATC-*, PLT-*); GND-* are Ground's to fix."""
     return sum(1 for c in checks if not c.passed and c.rule.startswith(HOLD_JUSTIFYING))
@@ -277,8 +282,10 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                     continue   # never offer landing against the flow already in use on that strip
                 # route delta: earliest landing on rw minus on the current runway (same SR / GD)
                 dr = (_min_slot(wave, replace(a, runway=rw)) - _min_slot(wave, a)) if a.runway else 0.0
+                tx = _taxi(wave, a.callsign, rw, a.gate)
                 mv.append(_move("ATC", "change_runway", [a.callsign], {"runway": rw},
-                                f"Move {a.callsign} from {a.runway} to runway {rw} ({dr:+.1f} min route)"))
+                                f"Move {a.callsign} from {a.runway} to runway {rw} ({dr:+.1f} min route, "
+                                f"taxi {tx:.0f} min)"))
             if a.runway and has_slot(a):
                 for d in SHIFT_STEPS:
                     mv.append(_move("ATC", "shift_slot", [a.callsign], {"minutes": d},
@@ -323,11 +330,13 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                        and ib < (mm[o.callsign].in_block_min or 0) + turn for o in landing):
                     continue
                 mv.append(_move("GROUND", "reassign_gate", [a.callsign], {"gate": g.id},
-                                f"Reassign {a.callsign} from gate {a.gate} to {g.id}"))
+                                f"Reassign {a.callsign} from gate {a.gate} to {g.id} "
+                                f"(taxi {_taxi(wave, a.callsign, a.runway, g.id):.0f} min)"))
             rs = next((g for g in wave.gates if g.remote), None)
             if rs is not None and a.gate != rs.id:
                 mv.append(_move("GROUND", "remote_stand", [a.callsign], {"gate": rs.id},
-                                f"Send {a.callsign} to remote stand {rs.id} (bussing)"))
+                                f"Send {a.callsign} to remote stand {rs.id} (bussing, "
+                                f"taxi {_taxi(wave, a.callsign, a.runway, rs.id):.0f} min)"))
         for i, a in enumerate(landing):
             for b in landing[i + 1:]:
                 ga, gb = gates.get(a.gate or ""), gates.get(b.gate or "")
@@ -337,8 +346,10 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 if (fa.gate_size == "wide" and gb.size != "wide" and not gb.remote) or \
                    (fb.gate_size == "wide" and ga.size != "wide" and not ga.remote):
                     continue
+                ta, tb = _taxi(wave, a.callsign, a.runway, b.gate), _taxi(wave, b.callsign, b.runway, a.gate)
                 mv.append(_move("GROUND", "swap_gates", [a.callsign, b.callsign], {},
-                                f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate})"))
+                                f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) "
+                                f"(taxi {ta:.0f}/{tb:.0f} min)"))
     else:
         cs = agent_id.split(":", 1)[1]
         a = plan.get(cs)

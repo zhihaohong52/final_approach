@@ -79,14 +79,14 @@ def test_queue_lands_at_real_wheels_on():
         assert q.slot_min == pytest.approx(float(r["wheels_on"]) - t0, abs=0.01)
 
 
-def test_crew_floor_uses_taxi_in_ref():
-    from backend.wave import build, constraints
-    from backend.wave.utility import taxi_in_ref
+def test_crew_floor_uses_routed_taxi():
+    from backend.wave import build, constraints, surface
     for wid in ("F2015-270287", "F2015-58926", "F2015-69315", "F2015-75", "F2015-77162"):
         w = build.build_wave(wid)
         turn = float(constraints.airport(w.airport.iata).min_turnaround_min)
-        for f in w.flights:   # §6.1: floor = earliest landing + taxi_in_ref + turnaround (was + TYPICAL_TAXI_MIN)
-            assert f.crew_shift_end_min >= f.eta_earliest_min + taxi_in_ref(w, f.callsign) + turn - 1e-9
+        for f in w.flights:   # §6.1 (v3-taxi): floor = earliest landing + min over open runways of ROT + unimpeded
+            t = min(surface.min_unimpeded_taxi(w, f.callsign, r.id) for r in w.airport.runways if r.open)
+            assert f.crew_shift_end_min >= f.eta_earliest_min + t + turn - 1e-9   # taxi + turnaround (T21: taxi_in_ref)
 
 
 def test_airport_taxi_median_and_generic_fallback():

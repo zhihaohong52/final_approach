@@ -25,6 +25,9 @@ Pure assembly over the per-wave route cache (`route.routes_for_wave`, read-only)
     `TrajectorySet.stack_violations`, never raised. Laps are drawn at the level assigned on entry (the
     step-down is not drawn).
   * fixed traffic (queue arrivals): `wave=False`, zero laps, the nominal route timed to land at its slot.
+  * ground (spec §6.4, v3-taxi): one unimpeded taxi-in per landing wave flight (`surface.arrival_track`, no waits:
+    hold-short scheduling is ATC-TAXI-CONFLICT's), from slot + ROT to the in-block slot + ROT + taxi; none in the
+    no-geometry tier.
 Nothing here decides legality: the rules read these objects.
 """
 from __future__ import annotations
@@ -33,8 +36,9 @@ import math
 import threading
 from dataclasses import dataclass, field
 
-from backend.wave import holding, route
+from backend.wave import holding, route, surface
 from backend.wave.model import JointPlan, Wave
+from backend.wave.surface import GroundTrack
 from backend.wave.version import ENGINE_VERSION
 
 CACHE_MAX = 4096
@@ -102,7 +106,7 @@ class TrajectorySet:
     plan_id: str
     engine_version: str
     air: list[AirTrack]
-    ground: list = field(default_factory=list)
+    ground: list[GroundTrack] = field(default_factory=list)
     conflicts: list = field(default_factory=list)
     stack_violations: dict[str, list[str]] = field(default_factory=dict)   # hold fix -> messages (internal)
 
@@ -449,7 +453,17 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
         air.append(AirTrack(cs, is_wave, rwy, pts[0]["t_min"], pts, hold, r.t_route_min, extra, laps, vec, lap,
                             draw.fix if hold is not None else None, level if hold is not None else None,
                             r.tier, r.entry_fix, fix_min, notes))
-    return TrajectorySet(plan.id, ENGINE_VERSION, air, stack_violations=violations)
+    ground: list[GroundTrack] = []
+    sizes = {f.callsign: f.gate_size for f in wave.flights}
+    for a in plan.assignments:
+        if a.action != "land" or not a.runway or a.callsign not in sizes or a.slot_min is None \
+                or not math.isfinite(a.slot_min):
+            continue
+        g = surface.arrival_track(wave, a.callsign, surface.taxi_info(wave, a.runway, a.gate, sizes[a.callsign]),
+                                  float(a.slot_min))
+        if g is not None:
+            ground.append(g)
+    return TrajectorySet(plan.id, ENGINE_VERSION, air, ground, stack_violations=violations)
 
 
 _CACHE: dict[tuple[str, str], TrajectorySet] = {}
@@ -472,6 +486,7 @@ def _clear() -> None:
     _NOMINAL.clear()
     _LAPS.clear()
     _HOLDS.clear()
+    surface.taxi_info.cache_clear()   # the per-wave taxi table (recomputed from the pinned graph, no store read)
 
 
 build.cache_clear = _clear

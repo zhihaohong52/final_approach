@@ -86,16 +86,17 @@ def test_runway_closed_reason_cites_faa(monkeypatch):
 
 
 def test_crew_shift_not_infeasible_by_construction():
-    """Crew shift end is anchored to the delayed ETA: landing at the earliest ETA with the taxi-in reference
+    """Crew shift end is anchored to the delayed ETA: landing at the earliest ETA with the unimpeded taxi-in
     never breaches GND-CREW-DUTY (regression: ~70% of real flights did before any move)."""
-    from backend.wave.utility import TURNAROUND_MIN, taxi_in_ref
+    from backend.wave import surface
+    from backend.wave.utility import TURNAROUND_MIN
     idx = build._index()
     for wid in idx["wave_id"].head(25):
         w = build.build_wave(wid)
-        for f in w.flights:   # §6.1: the floor uses taxi_in_ref (airport 2015 median for 2024 rows), not the old +6
-            t = taxi_in_ref(w, f.callsign)
-            assert f.crew_shift_end_min >= f.eta_earliest_min + t + TURNAROUND_MIN
-            assert f.crew_shift_end_min <= f.eta_earliest_min + t + TURNAROUND_MIN + 90
+        for f in w.flights:   # §6.1 (v3-taxi): floor = ETA + min over open runways of ROT + unimpeded taxi to the gate
+            t = min(surface.min_unimpeded_taxi(w, f.callsign, r.id) for r in w.airport.runways if r.open)
+            assert f.crew_shift_end_min >= f.eta_earliest_min + t + TURNAROUND_MIN - 1e-9
+            assert f.crew_shift_end_min <= f.eta_earliest_min + t + TURNAROUND_MIN + 90 + 1e-9
 
 
 def test_wide_body_gate_exists():

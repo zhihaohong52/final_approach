@@ -49,7 +49,7 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from backend.decide import DEFAULT_CHAIN, Decider, DecisionResult
-from backend.wave import baseline, fallback, moves, route, rules, trajectory, wind
+from backend.wave import baseline, fallback, moves, route, rules, surface, trajectory, wind
 from backend.wave.model import JointPlan, Move, Wave
 from backend.wave.utility import (agent_terms, agent_utility, evaluate, focus_callsign, hold_burn, metrics_map,
                                negotiators)
@@ -166,6 +166,18 @@ def _path_line(wave: Wave, a) -> str:
     return f"{head} · hold {h.fix} base {h.base_ft:,} · lap {h.lap_min:.1f} min = {kg:.0f} kg"
 
 
+def _taxi_line(wave: Wave, a) -> str:
+    """Per-flight taxi line (spec §6.7): `{exit} → {stand} {unimpeded:.1f} min`, from the per-wave taxi table."""
+    if a.action != "land" or not a.runway:
+        return "no taxi (not landing)"
+    tx = surface.taxi_info(wave, a.runway, a.gate, wave.flight(a.callsign).gate_size)
+    if tx.tier == "none":
+        return f"{a.runway} → {a.gate} {tx.taxi_min:.1f} min (near/far estimate, no runway geometry)"
+    stand = tx.stand if tx.stand == a.gate else f"{a.gate}/{tx.stand}"
+    line = f"{tx.exit_label or a.runway + ' exit'} → {stand} {tx.taxi_min:.1f} min"
+    return line + (" (straight-line estimate)" if tx.src == "synth" else "")
+
+
 def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
     role = _role(agent)
     if role == "ATC":
@@ -182,14 +194,15 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
                 "queue": [[q.callsign, q.wake, q.runway, q.slot_min] for q in wave.queue][:20],
                 "wave": [[a.callsign, wave.flight(a.callsign).wake, a.action, a.runway, a.slot_min]
                          for a in plan.assignments],
-                "path": {a.callsign: _path_line(wave, a) for a in plan.assignments}}
+                "path": {a.callsign: _path_line(wave, a) for a in plan.assignments},
+                "taxi": {a.callsign: _taxi_line(wave, a) for a in plan.assignments}}
     if role == "GROUND":
         mm = metrics_map(wave, plan)
         return {"gates": [[g.id, g.size, "remote" if g.remote else g.pier,
                            [[b["from_min"], b["to_min"]] for b in g.busy][:4]] for g in wave.gates][:24],
                 "flights": [{"cs": a.callsign, "size": wave.flight(a.callsign).gate_size,
                              "gate": a.gate, "scheduled_gate": wave.flight(a.callsign).scheduled_gate,
-                             "in_block": mm[a.callsign].in_block_min,
+                             "in_block": mm[a.callsign].in_block_min, "taxi": _taxi_line(wave, a),
                              "crew_shift_end": wave.flight(a.callsign).crew_shift_end_min,
                              "next_dep": wave.flight(a.callsign).next_departure_min}
                             for a in plan.assignments]}
@@ -201,7 +214,7 @@ def _view(wave: Wave, plan: JointPlan, agent: str) -> dict:
             "sched_in_block": f.sched_min, "fuel": f.fuel, "connections": f.connections[:5],
             "assignment": {"action": a.action, "runway": a.runway, "slot": a.slot_min, "gate": a.gate,
                            "speed_reduction": a.speed_reduction_min, "ground_delay": a.ground_delay_min},
-            "path": _path_line(wave, a),
+            "path": _path_line(wave, a), "taxi": _taxi_line(wave, a),
             "metrics": {"hold": m.hold_min, "fuel_kg": m.fuel_kg, "delay": m.delay_min,
                         "pax_protected": m.pax_protected, "pax_total": m.pax_total}}
 

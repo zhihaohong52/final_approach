@@ -237,7 +237,7 @@ def _gates(row_id: int, iata: str, lim: constraints.AirportLimits) -> tuple[list
 # ---------------------------------------------------------------- flights
 
 def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bool, gates: list[Gate],
-            used: set[str], lim: constraints.AirportLimits) -> WaveFlight:
+            used: set[str], lim: constraints.AirportLimits, taxi_floor=None) -> WaveFlight:
     cs = r["callsign"]
     rng = B._rng(PREFIX, str(row_id), cs)
     tail = r["tail"] if isinstance(r.get("tail"), str) else None
@@ -278,7 +278,9 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     turn = float(lim.min_turnaround_min)
     shift = constraints.RULES["ground_shift_h"] * 60
     elapsed = rng.random() * shift
-    floor = eta_earliest + taxi_ref + turn   # never infeasible by construction (as build.py; §6.1, T24: routed taxi)
+    floor_taxi = taxi_floor(gate, size) if taxi_floor is not None else None
+    # never infeasible by construction (as build.py; §6.1): + ROT + unimpeded routed taxi, best open runway (v3-taxi)
+    floor = eta_earliest + (taxi_ref if floor_taxi is None else floor_taxi) + turn
     crew_end = max(sched_min + shift - elapsed, floor)
     duty_end = dep_min - 60 + constraints.RULES["crew_duty_h"] * 60
     prov += [Provenance("fuel", "simulated", constraints.SOURCE,
@@ -312,6 +314,8 @@ def build_from_row(row_id: int) -> Wave:
         w = _build_from_row(row_id)
         from backend.wave import route   # lazy: keeps this module's import graph unchanged
         route.precompute(w)          # routes (CIFP reads) pinned on the wave: the hot path never hits the store
+        from backend.wave import surface
+        surface.precompute(w)        # taxi graph + gate binding pinned, per-wave taxi table filled (spec §6.8)
         return w
 
 
@@ -358,14 +362,14 @@ def _build_from_row(row_id: int) -> Wave:
     gates, gate_note = _gates(int(row_id), iata, lim)
     used: set[str] = set()
     wid = f"{PREFIX}{int(row_id)}"
-    neg = neg.sort_values("sched_min", kind="stable")
-    flights = [_flight(int(row_id), iata, date, hour, r, r["callsign"] == focus_cs, gates, used, lim)
-               for r in neg.to_dict("records")]
-
     ap = B._airports().get(iata, {})
     coords = B._airport_coords(iata) or (0.0, 0.0)
     airport = Airport(iata=iata, icao=_icao(iata), name=str(ap.get("AIRPORT", iata)),
                       lat=coords[0], lon=coords[1], runways=runways)
+    surf, floor = B._surface_inputs(wid, airport, f"{date}T{hour:02d}:00:00", metar, rwinds, gates)
+    neg = neg.sort_values("sched_min", kind="stable")
+    flights = [_flight(int(row_id), iata, date, hour, r, r["callsign"] == focus_cs, gates, used, lim, taxi_floor=floor)
+               for r in neg.to_dict("records")]
     limits = (f"{lim.size_class}: {lim.active_runways} runways, {lim.gates} gates (wave uses "
               f"{len(gates) - 1}), {lim.max_runway_ops_per_hour} ops/h, turnaround {lim.min_turnaround_min} min, "
               f"{lim.spare_gates} spare gates")
@@ -378,6 +382,7 @@ def _build_from_row(row_id: int) -> Wave:
         Provenance("gates", "simulated", constraints.SOURCE, f"{limits}; {gate_note}"),
         Provenance("gate_occupancy", "simulated", constraints.SOURCE, f"only {lim.spare_gates} gates free at "
                    f"window start; seed={wid}"),
+        surf,
     ]
     from backend.wave import ground_traffic   # appends the ground_traffic provenance (real BTS 2015 movements / partial)
     return ground_traffic.annotate(Wave(id=wid, airport=airport, window_start=f"{date}T{hour:02d}:00:00", metar=metar,

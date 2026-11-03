@@ -247,7 +247,8 @@ def test_shift_and_change_runway_labels_mention_path():
     assert sh and all(m.label in (f"Vector {m.callsigns[0]} +2 min (path stretch)",
                                   f"Vector {m.callsigns[0]} -2 min (path stretch)") for m in sh)
     cr = [m for m in c if m.kind == "change_runway"]
-    assert cr and all(m.label.endswith(" min route)") for m in cr)
+    # spec §6.7 (v3-taxi): the route delta, then the unimpeded taxi from the new runway to the gate
+    assert cr and all(" min route, taxi " in m.label and m.label.endswith(" min)") for m in cr)
 
 
 def test_hold_label_counts_wake_push_as_vector(monkeypatch):

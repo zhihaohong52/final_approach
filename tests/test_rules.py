@@ -495,10 +495,12 @@ def test_crew_duty_unavoidable_uses_best_open_runway():
     """'Unavoidable' compares the duty end with the earliest in-block over every open runway, not the
     assigned runway: a flight on a far runway that could have made it on another one fails."""
     from dataclasses import replace as _r
-    from backend.wave.utility import metrics_map, taxi_min
+    from backend.wave import surface
+    from backend.wave.utility import metrics_map
     w = build.build_wave(ORD); p = fcfs_plan(w); a = p.assignments[0]
     far = _far_runway(w, a.callsign)
-    best = min(trajectory.earliest(w, a.callsign, r.id) + taxi_min(w, r.id, a.gate)
+    # v3-taxi: earliest in-block = earliest landing + ROT + unimpeded routed taxi to the gate (was + v2 taxi_min)
+    best = min(trajectory.earliest(w, a.callsign, r.id) + surface.min_unimpeded_taxi(w, a.callsign, r.id, a.gate)
                for r in w.airport.runways if r.open)
     q = p.with_assignment(replace(a, runway=far, slot_min=trajectory.earliest(w, a.callsign, far)))
     arr = metrics_map(w, q)[a.callsign].in_block_min

@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -524,3 +525,135 @@ def test_osm_hold_on_the_runway_is_not_a_wait_spot():
     old = _hand_track(g, p, "AA1", 0.0, p.nodes.index(at[-30]), t76 + 4.5)
     msgs = verify_separation([old], runway_events=res.runway_events, g=g)
     assert any("R protected zone" in m and "UA9" in m for m in msgs)
+
+
+# --- Task 24: routed taxi drives in-block; real ATC-TAXI-ROUTE; gate coordinates ---
+
+from backend.wave import moves, rules, surface, trajectory   # noqa: E402
+from backend.wave.moves import fcfs_plan   # noqa: E402
+from backend.wave.utility import metrics_map   # noqa: E402
+
+
+def _by(checks, rule, cs):
+    return next(c for c in checks if c.rule == rule and c.callsign == cs)
+
+
+@pytest.fixture
+def fresh_taxi():
+    """The NoPath test monkeypatches surface.unimpeded: drop every derived taxi cache before and after."""
+    trajectory.build.cache_clear(); surface.wave_tier.cache_clear()
+    yield
+    trajectory.build.cache_clear(); surface.wave_tier.cache_clear()
+
+
+def test_in_block_is_slot_plus_rot_plus_taxi():
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    ts = trajectory.build(w, p); mm = metrics_map(w, p)
+    assert any(x.wave for x in ts.ground)
+    for g in (x for x in ts.ground if x.wave):
+        a = p.get(g.callsign)
+        assert mm[a.callsign].in_block_min == pytest.approx(a.slot_min + mm[a.callsign].rot_s / 60 + g.taxi_min, abs=0.05)
+        assert g.points[-1]["t_min"] == pytest.approx(mm[a.callsign].in_block_min, abs=0.05)   # in_block_min is rounded to 0.1
+
+
+def test_taxi_route_rule_cites_route():
+    w = build.build_wave("F2015-270287"); c = _by(rules.check(w, fcfs_plan(w)), "ATC-TAXI-ROUTE", w.focus)
+    assert c.passed and c.evidence["tier"] == "real" and c.evidence["route"] and c.source.startswith("OpenStreetMap")
+
+
+def test_taxi_route_fails_when_stand_unreachable(monkeypatch, fresh_taxi):
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    gate = p.get(w.focus).gate
+    real = surface.unimpeded
+    def fake(g, exit_node, stand):
+        if stand == surface.stand_node_for(w, gate):
+            raise surface.NoPath(gate)
+        return real(g, exit_node, stand)
+    monkeypatch.setattr(surface, "unimpeded", fake)
+    trajectory.build.cache_clear(); surface.wave_tier.cache_clear()
+    c = _by(rules.check(w, p), "ATC-TAXI-ROUTE", w.focus)
+    assert not c.passed and gate in c.detail
+
+
+def test_crew_floor_uses_routed_taxi():
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    c = _by(rules.check(w, p), "PLT-CREW-DUTY", w.focus)
+    assert "taxi" in c.evidence and c.evidence["taxi"] == pytest.approx(
+        min(surface.min_unimpeded_taxi(w, w.focus, r.id) for r in w.airport.runways if r.open), abs=0.05)
+
+
+def test_change_runway_label_has_taxi():
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    ms = [m for m in moves._candidates(w, p, "ATC") if m.kind == "change_runway"]
+    assert ms and all("taxi" in m.label and len(m.label) <= 120 for m in ms)
+
+
+def test_gates_have_geo_on_replay_hub():
+    w = build.build_wave("F2015-270287")
+    assert all(g.lat is not None and g.geo_src for g in w.gates)
+
+
+# --- Task 24: tiers, provenance, serialisation (ours) ---
+
+def test_wave_tier_and_surface_provenance_on_ord():
+    w = build.build_wave("F2015-270287")
+    assert surface.wave_tier(w, surface.load_graph("KORD")) == "real"
+    pv = next(p for p in w.provenance if p.layer == "surface")
+    assert pv.status == "real" and pv.source.startswith("OpenStreetMap 20")
+
+
+def test_runway_end_missing_from_osm_uses_generic_taxi():
+    # ORD 14L (open in 2015) is not in today's OSM: straight-line generic estimate, src synth, still passes
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    a = p.get(w.focus)
+    assert "14L" in {r.id for r in w.airport.runways if r.open} and "14L" not in surface.load_graph("KORD").exits
+    q = p.with_assignment(replace(a, runway="14L"))
+    c = _by(rules.check(w, q), "ATC-TAXI-ROUTE", w.focus)
+    assert c.passed and c.evidence["tier"] == "generic" and c.source.startswith("generic surface")
+    g = next(x for x in trajectory.build(w, q).ground if x.callsign == w.focus)
+    assert g.src == "synth" and g.route_names == []
+    rw = w.runway("14L"); gt = w.gate(a.gate)
+    assert g.taxi_min == pytest.approx(surface.generic_taxi_min(rw, gt.lat, gt.lon))
+
+
+def test_no_geometry_tier_keeps_v2_taxi():
+    from tests.fixtures import make_wave
+    from backend.wave.utility import taxi_min
+    w = make_wave(); p = fcfs_plan(w); mm = metrics_map(w, p)
+    assert trajectory.build(w, p).ground == []
+    for a in p.assignments:
+        assert mm[a.callsign].in_block_min == pytest.approx(a.slot_min + taxi_min(w, a.runway, a.gate), abs=0.05)
+        assert mm[a.callsign].rot_s is None
+    c = _by(rules.check(w, p), "ATC-TAXI-ROUTE", "DL100")
+    assert c.passed and c.evidence["tier"] == "none" and c.source == "ops rule (no geometry)"
+
+
+def test_ground_track_serialises_node_as_string():
+    import json
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    d = trajectory.build(w, p).to_dict()
+    json.dumps(d)
+    g = next(x for x in d["ground"] if x["callsign"] == w.focus)
+    assert g["src"] == "osm" and all(isinstance(q["node"], str) for q in g["points"] if "node" in q)
+    assert g["waits"] == [] and g["taxi_min"] == g["unimpeded_min"]
+
+
+def test_taxi_points_are_monotonic_and_start_after_rot():
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w); mm = metrics_map(w, p)
+    for g in trajectory.build(w, p).ground:
+        ts = [q["t_min"] for q in g.points]
+        assert ts == sorted(ts)
+        a = p.get(g.callsign)
+        assert ts[0] == pytest.approx(a.slot_min + mm[a.callsign].rot_s / 60)
+
+
+def test_hot_path_taxi_is_warm_after_build():
+    # the per-wave taxi table is built at wave-build time: evaluating a plan never runs a Dijkstra
+    import time
+    w = build.build_wave("F2015-270287"); p = fcfs_plan(w)
+    trajectory.build.cache_clear(); surface.wave_tier.cache_clear()
+    surface.precompute(w)
+    t = time.perf_counter()
+    from backend.wave.utility import evaluate
+    evaluate(w, p)
+    assert time.perf_counter() - t < 0.25

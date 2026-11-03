@@ -425,7 +425,9 @@ def _gate_free(g: Gate, t: float) -> bool:
 # ---------------------------------------------------------------- flights
 
 def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrupted: bool,
-                  gates: list[Gate], used: set[str], origin_known: bool = True) -> WaveFlight:
+                  gates: list[Gate], used: set[str], origin_known: bool = True, taxi_floor=None) -> WaveFlight:
+    """`taxi_floor(gate_id, gate_size)`: ROT + unimpeded routed taxi to the gate, minimised over the open runways
+    (`surface.floor_taxi`, spec §6.1); the crew floor falls back to the taxi-in reference without it."""
     cs = r["callsign"]
     rng = _rng(wave_id, cs)
     tail = r.get("tail") if isinstance(r.get("tail"), str) else None
@@ -475,15 +477,17 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
     prov += [Provenance("fuel", "simulated", "seeded model", f"seed={wave_id}+{cs}"),
              Provenance("crew", "simulated", "seeded model",
                         "shift end = earliest turnaround end (earliest landing incl. late-aircraft/carrier delay "
-                        "+ taxi-in reference + turnaround) + 0-90 min margin: the roster already knows the inbound "
-                        "is late"),
+                        "+ ROT + unimpeded routed taxi to the gate, best open runway + turnaround) + 0-90 min margin: "
+                        "the roster already knows the inbound is late"),
              Provenance("connections", "simulated", "seeded model")]
     # Crew shift end is anchored to the earliest achievable turnaround end, not the schedule: with
     # multi-hour BTS late-aircraft delays a schedule-anchored shift made ~70% of flights breach
     # GND-CREW-DUTY before any move (no move can land a flight earlier than its ETA). Airlines
     # re-roster / reserve-crew a known-late inbound; the 0-90 min margin keeps holding, far taxi and
     # ground delay able to cause overtime. One randint at the same position keeps later draws stable.
-    crew_end = eta_earliest + taxi_ref + TURNAROUND_MIN + rng.randint(0, 90)   # §6.1 (T24: routed taxi)
+    floor_taxi = taxi_floor(gate, size) if taxi_floor is not None else None
+    crew_end = eta_earliest + (taxi_ref if floor_taxi is None else floor_taxi) + TURNAROUND_MIN \
+        + rng.randint(0, 90)   # §6.1: + ROT + unimpeded routed taxi (v3-taxi)
     return WaveFlight(
         callsign=cs, carrier=r["carrier"], airline=_airlines().get(r["carrier"], r["carrier"]),
         flight_no=int(r["flight_no"]), tail=tail, aircraft_type=atype, wake=wake, gate_size=size,
@@ -551,6 +555,9 @@ def build_wave(wave_id: str) -> Wave:
         w = _build_wave(wave_id)
         from backend.wave import route   # lazy: keeps this module's import graph unchanged
         route.precompute(w)          # routes (CIFP reads) pinned on the wave: the hot path never hits the store
+        from backend.wave import surface
+        surface.precompute(w)        # taxi graph + gate binding pinned, per-wave taxi table filled (spec §6.8); after
+                                     # annotate (which sets wave_key) so the table is keyed on the final wave
     if not (wave_id.startswith("F2015-") and w.metar is None):
         with _WAVES_LOCK:
             _WAVES[wave_id] = w
@@ -565,6 +572,17 @@ def _waves_cache_clear() -> None:
 
 
 build_wave.cache_clear = _waves_cache_clear     # type: ignore[attr-defined]
+
+
+def _surface_inputs(wave_id: str, airport: Airport, window_start: str, metar, rwinds, gates: list[Gate]):
+    """Build time (store reads): bind the gates to OSM stands (sets Gate.lat/lon/geo_src), and return the `surface`
+    provenance and the crew-floor taxi `floor(gate_id, size)` = min over open runways of ROT + unimpeded taxi."""
+    from backend.wave import surface
+    geo = surface.gate_geo(airport.icao, [(g.id, g.remote) for g in gates])
+    surface.apply_gate_geo(geo, gates, (airport.lat, airport.lon))
+    proto = Wave(id=wave_id, airport=airport, window_start=window_start, metar=metar, runway_wind=rwinds, queue=[],
+                 flights=[], gates=gates)
+    return surface.provenance(proto, geo), lambda gid, size: surface.floor_taxi(proto, geo, gid, size)
 
 
 def _build_wave(wave_id: str) -> Wave:
@@ -587,14 +605,14 @@ def _build_wave(wave_id: str) -> Wave:
     rwinds = wind.runway_wind(metar, runways)
 
     gates, real_gates = _make_gates(wave_id, iata)
-    used: set[str] = set()
-    flights = [_build_flight(wave_id, iata, date, hour, r, r["callsign"] in dis_cs, gates, used)
-               for r in neg.to_dict("records")]
-
     ap = _airports().get(iata, {})
     coords = _airport_coords(iata) or (0.0, 0.0)
     airport = Airport(iata=iata, icao=icao.icao_or_prefix(iata), name=str(ap.get("AIRPORT", iata)),
                       lat=coords[0], lon=coords[1], runways=runways)
+    surf, floor = _surface_inputs(wave_id, airport, f"{date}T{hour:02d}:00:00", metar, rwinds, gates)
+    used: set[str] = set()
+    flights = [_build_flight(wave_id, iata, date, hour, r, r["callsign"] in dis_cs, gates, used, taxi_floor=floor)
+               for r in neg.to_dict("records")]
     month = date[:7]
     prov = [
         Provenance("queue", "real", f"BTS On-Time {month}"),
@@ -606,6 +624,7 @@ def _build_wave(wave_id: str) -> Wave:
                     if any(g.id in ("W1", "W2") for g in gates) else None) if real_gates
          else Provenance("gates", "generic", "generic layout A1-A5, B1-B5")),
         Provenance("gate_occupancy", "simulated", "seeded model", f"seed={wave_id}"),
+        surf,
     ]
     focus = max((f for f in flights if f.disrupted), key=lambda f: f.delays["arr_delay"], default=None)
     from backend.wave import ground_traffic   # 2024 waves: queue arrivals only (movements cover 2015), badged partial
