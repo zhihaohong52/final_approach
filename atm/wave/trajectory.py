@@ -212,7 +212,8 @@ def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float
               draw: holding.HoldSpec, level_ft: float) -> list[dict]:
     """Points of route `r` with `laps` laps (each `lap_min`) at the hold fix and `vector_min` of stretch
     before the final, timed so the threshold is crossed at `slot`. Laps fly the racetrack of `draw` (the
-    stack's shared hold) at `level_ft`."""
+    stack's shared hold) at `level_ft`. After the laps no later point is drawn above `level_ft`: route
+    altitudes are capped at it (alt_src "interp") until the route itself falls below it."""
     pts = r.points
     n = len(pts)
     hold_min = laps * lap_min
@@ -221,6 +222,7 @@ def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float
     i_fin = _i_final(r)
     draw_vec = vector_min > MIN_VECTOR_DRAW_MIN
     out: list[dict] = []
+    cap: float | None = None          # the hold level, while the route after the hold is still above it
     for i, p in enumerate(pts):
         off = (hold_min if i > hi else 0.0) + (vector_min if i >= i_fin else 0.0)
         if i == i_fin and draw_vec:
@@ -229,11 +231,19 @@ def _assemble(wave: Wave, r: route.Route, slot: float, laps: int, lap_min: float
             gs = holding.tas_kt(route.IAS_IAF, q.alt_ft)
             hdg = (wave.runway(r.runway).heading_true + 180.0) % 360.0
             v = route._dest(q.lat, q.lon, hdg, gs * vector_min / 2.0 / 60.0)
-            out.append(_pt(t0 + vector_min / 2.0, v[0], v[1], q.alt_ft, "vector", None, "synth", "interp"))
-            out.append(_pt(t0 + vector_min, q.lat, q.lon, q.alt_ft, "vector", None, "synth", "interp"))
+            q_alt = q.alt_ft if cap is None else min(q.alt_ft, cap)
+            out.append(_pt(t0 + vector_min / 2.0, v[0], v[1], q_alt, "vector", None, "synth", "interp"))
+            out.append(_pt(t0 + vector_min, q.lat, q.lon, q_alt, "vector", None, "synth", "interp"))
         t = slot if i == n - 1 else appears + p.t_min + off
-        out.append(_pt(t, p.lat, p.lon, p.alt_ft, p.kind, p.fix, p.src, p.alt_src))
+        alt, alt_src = p.alt_ft, p.alt_src
+        if cap is not None:
+            if alt > cap:
+                alt, alt_src = cap, "interp"
+            else:
+                cap = None
+        out.append(_pt(t, p.lat, p.lon, alt, p.kind, p.fix, p.src, alt_src))
         if i == hi and laps > 0:
+            cap = float(level_ft)
             for k in range(laps):
                 for lat, lon, frac in _lap_cached(draw):
                     fix = draw.fix if frac >= 1.0 else None

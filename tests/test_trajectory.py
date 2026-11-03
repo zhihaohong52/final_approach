@@ -214,3 +214,21 @@ def test_shared_base_constraints_win_else_lowest_interp_floored():
                                                                        14000, "cifp", "interp"))]
     h = trajectory._shared_hold(pub, 0.0)
     assert h.src == "cifp" and h.turn == "L" and h.inbound_true == 270.0 and h.base_ft == 9000
+
+
+def test_no_climb_after_the_hold():
+    w = build.build_wave("F2015-69315")   # ATL: OZZZI shared base 10,000 ft, many routes reach it higher
+    p = fcfs_plan(w)
+    routes = route.routes_for_wave(w)
+    a = next(x for x in p.assignments
+             if routes[(x.callsign, x.runway)].points[routes[(x.callsign, x.runway)].hold_index].alt_ft
+             > trajectory.hold_for(w, routes[(x.callsign, x.runway)]).base_ft + 1000)
+    lap = trajectory.hold_for(w, routes[(a.callsign, a.runway)]).lap_min
+    slot = trajectory.earliest(w, a.callsign, a.runway) + 2 * lap + 0.5 * lap   # 2 laps and a vector stretch
+    t = next(x for x in trajectory.build(w, _reslot(p, a, slot_min=slot)).air if x.callsign == a.callsign)
+    assert t.laps == 2 and t.vector_min > 0
+    last_hold = max(i for i, q in enumerate(t.points) if q["kind"] == "hold")
+    after = [q["alt_ft"] for q in t.points[last_hold:]]
+    assert max(after) <= t.hold_level_ft
+    assert all(b <= a_ + 1e-9 for a_, b in zip(after, after[1:]))
+    assert any(q["alt_src"] == "interp" and q["alt_ft"] == t.hold_level_ft for q in t.points[last_hold + 1:])
