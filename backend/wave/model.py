@@ -156,6 +156,8 @@ class Wave(_Dict):
         d["geo_available"] = self.geo_available()
         if d["focus"] is None:
             del d["focus"]
+        from backend.wave import airlines   # lazy: airlines imports Wave from this module
+        d["airlines"] = airlines.describe(self)   # derived, never stored
         for f in d["flights"]:
             for k in ("crew_duty_end_min", "taxi_in_ref_min"):
                 if f.get(k) is None:
