@@ -266,3 +266,30 @@ def test_geo_surface_shape_and_ground_stands_are_drawn():
     for x in s["stands"]:
         if "gate" in x and gates.get(x["gate"], {}).get("lat") is not None and gates[x["gate"]].get("geo_src") != "synth":
             assert abs(gates[x["gate"]]["lat"] - x["lat"]) < 1e-5
+
+
+def test_stand_labels_unique_and_collision_proof():
+    from backend.wave import surface
+    sts = [{"id": "b", "ref": "A1"}, {"id": "a", "ref": "A1"}, {"id": "c", "ref": None}, {"id": "d", "ref": "A1/a"}]
+    # both colliding stands gate-bound: lowest id owns the ref, the other is disambiguated; no label repeats
+    lab = surface.stand_labels(sts, {"a", "b"})
+    assert lab["a"] == "A1" and lab["b"] == "A1/b" and lab["c"] == "c" and len(set(lab.values())) == 4
+    # a bound stand beats a lower-id unbound one
+    assert surface.stand_labels(sts, {"b"})["b"] == "A1"
+
+
+@pytest.mark.parametrize("wid", sorted(p.split("/")[-1][:-5] for p in glob.glob("data/replay/*.json")))
+def test_replay_wave_gate_labels_agree_between_tracks_and_map(wid):
+    from backend.wave import wavegeo
+    w = build.build_wave(wid)
+    gg = wavegeo.surface._geo(w)
+    sp = wavegeo.surface_part(w)
+    if sp is None or not gg.bind:
+        pytest.skip("no surface")
+    labels = {x["id"] for x in sp["stands"]}
+    assert len(labels) == len(sp["stands"])
+    if sp["status"] == "real":
+        assert {gg.stand_label[g] for g, b in gg.bind.items() if b["geo_src"] != "synth"} <= labels
+    else:
+        assert sp["stands"] == []
+    assert all(abs(v - round(v, 6)) < 1e-12 for t in sp["taxiways"] for pt in t["line"] for v in pt)

@@ -503,7 +503,7 @@ flies a CIFP STAR and approach. `surface` is the OSM airport surface (`null` whe
 ref shared by several stands labels the gate-bound one, the others keep their OSM id) with the wave `gate` bound
 to it and its `geo_src` (`osm` when no wave gate uses it), `holding_positions` (`HP<node>`, `runway` = the OSM
 strip when known), `status` = the wave's taxi tier (`real`/`generic`), `source` = `OpenStreetMap <date>`,
-`attribution` = "© OpenStreetMap contributors". ORD: about 330 KB JSON, about 77 KB gzipped.
+`attribution` = "© OpenStreetMap contributors". A `generic`-tier airport (quality gate failed) returns `status: "generic"` with `stands: []`; `surface` is `null` only when the airport has no OSM surface. A ref shared by several stands is made unique as `<ref>/<osm id>` for all but one stand, identically in `stands[].id` and `ground[].stand`. ORD: about 330 KB JSON, about 77 KB gzipped.
 
 `ETag` is the sha1 of the JSON body, so it changes with the engine version and with any procedures/route
 data change: `"<sha1>"` for the identity body, `"<sha1>-gz"` for the gzipped one (`Cache-Control: no-cache`:

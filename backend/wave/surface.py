@@ -901,6 +901,20 @@ def _put(cache: dict, k, v) -> None:
         cache[k] = v
 
 
+def stand_labels(stands: list[dict], bound: set[str]) -> dict[str, str]:
+    """OSM stand id -> unique label: the stand's `ref` (else its id). A ref shared by several stands labels one owner
+    (the lowest-id gate-bound stand, else the lowest id); every other stand of that ref is `ref/osm-id`. Used by both the
+    ground tracks' `stand` and the drawn stands (`wavegeo`), so they always agree."""
+    sts = sorted(stands, key=lambda x: str(x["id"]))
+    owner: dict[str, str] = {}
+    for st in sts:
+        sid, lab = str(st["id"]), str(st.get("ref") or st["id"])
+        if lab not in owner or (sid in bound and owner[lab] not in bound):
+            owner[lab] = sid
+    return {str(st["id"]): (str(st.get("ref") or st["id"]) if owner[str(st.get("ref") or st["id"])] == str(st["id"])
+                            else f"{st.get('ref') or st['id']}/{st['id']}") for st in sts}
+
+
 def gate_geo(icao: str, gates: list[tuple[str, bool]]) -> GateGeo:
     """Bind the gate ids (id, remote) to OSM stands of the airport's surface. Reads the store: call at build time
     (cached per airport and gate set)."""
@@ -914,8 +928,8 @@ def gate_geo(icao: str, gates: list[tuple[str, bool]]) -> GateGeo:
         geo = GateGeo(icao, None, {}, {}, None)
     else:
         b = bind_gates(list(gates), doc)
-        ref = {str(s["id"]): str(s["ref"]) for s in doc.get("stands") or [] if s.get("ref") not in (None, "")}
-        labels = {gid: ref.get(x["stand"], x["stand"]) for gid, x in b.items()}
+        names = stand_labels(doc.get("stands") or [], {str(x["stand"]) for x in b.values() if x.get("geo_src") != "synth"})
+        labels = {gid: names.get(x["stand"], x["stand"]) for gid, x in b.items()}
         geo = GateGeo(icao, load_graph(icao), b, labels, (doc.get("header") or {}).get("osm_timestamp"))
     _put(_GEO, key, geo)
     return geo

@@ -638,7 +638,7 @@ def _json_response(request: Request, obj=None, body: bytes | None = None, etag: 
 
 @app.get("/api/wave/{wave_id}/geo")
 def get_wave_geo(wave_id: str, request: Request):
-    """v2.2 WaveGeo: the procedures the engine flies at this wave (surface null in M1). ETag = sha1 of the
+    """v2.2 WaveGeo: the procedures and surface the engine uses at this wave. ETag = sha1 of the
     JSON body (so a data reseed changes it), "-gz" suffixed for the gzipped variant."""
     try:
         w = WB.build_wave(wave_id)

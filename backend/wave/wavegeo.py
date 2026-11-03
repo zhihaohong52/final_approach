@@ -15,7 +15,7 @@ use ("never draw a path the engine did not use"):
     datastore); "" / "synthetic" when the airport has none. `status` is "real" iff some route is `star+iap`.
   * `surface` (`surface_part`): the OSM drawing layer of the airport (taxiways, runways), every stand (labelled as the
     ground tracks label them: OSM `ref`, else id) with the wave gate bound to it (`surface._geo`, the same binding the
-    taxi times use), the holding positions (node id, runway strip when known). `status` is the wave's taxi tier
+    taxi times use; stands are listed only for a `real` tier), the holding positions (node id, runway strip when known). `status` is the wave's taxi tier
     (`surface.wave_tier`). null when the airport has no OSM surface.
 Pure assembly over read-only caches; nothing here decides legality.
 """
@@ -118,6 +118,10 @@ def procedures(wave: Wave) -> dict:
             "routes": list(routes.values()), "holds": holds}
 
 
+def _line(pts: list) -> list[list[float]]:
+    return [[_r(a), _r(b)] for a, b in pts]
+
+
 def surface_part(wave: Wave) -> dict | None:
     doc = store.load_surface(wave.airport.icao)
     if doc is None:
@@ -129,19 +133,12 @@ def surface_part(wave: Wave) -> dict | None:
     for gid, b in sorted(gg.bind.items()):
         if b.get("geo_src") != "synth" and b.get("stand") not in (None, "synth"):
             gate_of.setdefault(str(b["stand"]), (gid, b["geo_src"]))
-    # Stand label = what the ground tracks call it (OSM `ref`, else id). A ref shared by several stands labels the
-    # gate-bound one (else the first by id); the others keep their unique OSM id.
-    sts = sorted(doc.get("stands") or [], key=lambda x: str(x["id"]))
-    owner: dict[str, str] = {}
-    for st in sts:
-        lab = str(st.get("ref") or st["id"])
-        if lab not in owner or (str(st["id"]) in gate_of and owner[lab] not in gate_of):
-            owner[lab] = str(st["id"])
+    status = surface.wave_tier(wave, gg.graph)
+    names = surface.stand_labels(doc.get("stands") or [], set(gate_of))
     stands = []
-    for st in sts:
+    for st in sorted(doc.get("stands") or [], key=lambda x: str(x["id"])) if status == "real" else []:
         sid = str(st["id"])
-        lab = str(st.get("ref") or sid)
-        d = {"id": lab if owner[lab] == sid else sid, "lat": _r(st["lat"]), "lon": _r(st["lon"])}
+        d = {"id": names[sid], "lat": _r(st["lat"]), "lon": _r(st["lon"])}
         if sid in gate_of:
             d["gate"], d["geo_src"] = gate_of[sid]
         else:
@@ -156,10 +153,10 @@ def surface_part(wave: Wave) -> dict | None:
             d["runway"] = h["strip"]
         holding_positions.append(d)
     ts = str(hdr.get("osm_timestamp") or "")[:10]
-    return {"source": f"OpenStreetMap {ts}".strip(), "status": surface.wave_tier(wave, gg.graph),
+    return {"source": f"OpenStreetMap {ts}".strip(), "status": status,
             "attribution": hdr.get("attribution") or "© OpenStreetMap contributors",
-            "taxiways": [{"name": t.get("name"), "kind": t["kind"], "line": t["line"]} for t in draw.get("taxiways") or []],
-            "runways": [{"ids": list(r["ids"]), "line": r["line"], "width_m": r.get("width_m")} for r in draw.get("runways") or []],
+            "taxiways": [{"name": t.get("name"), "kind": t["kind"], "line": _line(t["line"])} for t in draw.get("taxiways") or []],
+            "runways": [{"ids": list(r["ids"]), "line": _line(r["line"]), "width_m": r.get("width_m")} for r in draw.get("runways") or []],
             "stands": stands, "holding_positions": holding_positions}
 
 
