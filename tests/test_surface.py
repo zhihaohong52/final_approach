@@ -5,8 +5,9 @@ import pytest
 from atm.geo.osm_surface import build_surface
 from atm.wave import build
 from atm.wave.model import Runway
-from atm.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations, TaxiGraph, _from_doc, choose_exit, generic_taxi_min,
-                              load_graph, rot_s, schedule, unimpeded, verify_separation)
+from atm.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations,
+                              TaxiGraph, _from_doc, choose_exit, generic_taxi_min, load_graph, rot_s, schedule,
+                              unimpeded, verify_separation)
 
 
 def _doc():
@@ -434,3 +435,56 @@ def test_verifier_needs_events_and_graph_together(mini):
         verify_separation([], runway_events={"18/36": []})
     with pytest.raises(ValueError):
         verify_separation([], g=mini)
+
+
+# --- round 3: OSM holds snapped onto the runway pavement are not holding positions ---
+
+def _hand_track(g, p, cs, t0, wait_idx, wait_to):
+    """A track along `p` from t0 at unimpeded speed, with one wait at index `wait_idx` until `wait_to` (old bug)."""
+    pts, t = [], t0
+    for i, nd in enumerate(p.nodes):
+        pts.append({"t_min": t, "node": nd, "lat": g.nodes[nd][0], "lon": g.nodes[nd][1]})
+        if i == wait_idx:
+            t = wait_to
+            pts.append({"t_min": t, "node": nd, "lat": g.nodes[nd][0], "lon": g.nodes[nd][1]})
+        if i < len(p.nodes) - 1:
+            t += p.seg_s[i] / 60
+    return GroundTrack(cs, "arrival", True, None, "", [], pts, [], 0.0, 0.0, "osm")
+
+
+def test_osm_hold_on_the_runway_does_not_end_the_vacate_stretch_ord_889():
+    from atm.wave.surface import on_runway
+    g = load_graph("KORD")
+    assert 889 in g.holds and on_runway(g, 889, "04R/22L")                    # snapped 4 m off the centreline
+    stands = sorted(g.stands.values(), key=lambda s: s["node"])
+    p = next(pp for s in stands[::20] for pp in [unimpeded(g, 8, s["node"])] if pp.nodes[1] == 889)
+    t46 = sum(p.seg_s[:2]) / 60
+    res = Reservations({46: [(0.0, t46 + 3.0, "BLOCK")]}, {}, {"04R/22L": [(2.0, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert all(w["node"] != 889 for w in s.waits) and s.waits[0]["node"] == 8
+    assert s.exit_clear_min > 2.0                                              # T31 fails it: still on 04R/22L
+    ev = res.runway_events
+    msgs = verify_separation([track(s, "AA1")], runway_events=ev, g=g)
+    assert any("vacating 04R/22L" in m and "UA9" in m for m in msgs)
+    # the old behaviour, by hand: off node 8 at 0.07, waiting on the hold at 889 through UA9's landing
+    old = _hand_track(g, p, "AA1", 0.0, 1, 3.57)
+    assert any("UA9" in m for m in verify_separation([old], runway_events=ev, g=g))
+
+
+def test_osm_hold_on_the_runway_is_not_a_wait_spot_sfo_899():
+    from atm.wave.surface import _crossing_zones, strip_distance_m
+    g = load_graph("KSFO")
+    stands = sorted(g.stands.values(), key=lambda s: s["node"])
+    p = next(pp for s in stands[::max(1, len(stands) // 15)] for pp in [unimpeded(g, 884, s["node"])]
+             if 899 in pp.nodes[1:])
+    i = p.nodes.index(899)
+    t898 = sum(p.seg_s[:i + 1]) / 60
+    res = Reservations({898: [(0.0, t898 + 4.0, "BLOCK")]}, {}, {"10R/28L": [(t898 + 2.0, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and [w["node"] for w in s.waits] == [900]
+    assert strip_distance_m(g, 900, "10R/28L") == pytest.approx(75.6, abs=0.5)
+    assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
+    # the old behaviour, by hand: waiting on hold 899 (30.6 m from the centreline) through the landing
+    old = _hand_track(g, p, "AA1", 0.0, i, t898 + 4.5)
+    msgs = verify_separation([old], runway_events=res.runway_events, g=g)
+    assert any("10R/28L protected zone" in m and "UA9" in m for m in msgs)

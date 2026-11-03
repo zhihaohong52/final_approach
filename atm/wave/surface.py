@@ -398,7 +398,8 @@ _MAX_ITER = 200000
 @dataclass
 class Reservations:
     """Ground reservation table, times in minutes. `node_busy[n]` and `edge_dir[(u, v)]` hold `(from, to, callsign)`
-    intervals (an edge entry is a traversal from u to v); `runway_events[strip]` holds `(t, "landing"|"takeoff", cs)`."""
+    intervals (an edge entry is a traversal from u to v); `runway_events[strip]` holds
+    `(t, "landing"|"takeoff", cs)`."""
     node_busy: dict[int, list[tuple[float, float, str]]]
     edge_dir: dict[tuple[int, int], list[tuple[float, float, str]]]
     runway_events: dict[str, list[tuple[float, str, str]]]
@@ -430,8 +431,14 @@ class GroundTrack:
     src: str
 
 
+def _osm_hold_for(g: TaxiGraph, node: int, strip: str) -> bool:
+    """An OSM holding position for `strip` (or for no named strip) that is off the strip's pavement. Some OSM holds
+    were snapped onto runway nodes by the surface builder; those are on the runway and never a place to hold."""
+    return node in g.holds and g.holds[node] in (None, strip) and not on_runway(g, node, strip)
+
+
 def _in_zone(g: TaxiGraph, node: int, strip: str) -> bool:
-    if node in g.holds and g.holds[node] in (None, strip):
+    if _osm_hold_for(g, node, strip):
         return False
     return strip_distance_m(g, node, strip) < RUNWAY_HOLD_CLEARANCE_M
 
@@ -447,8 +454,8 @@ def _crossing_zones(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, s
     the aircraft never stops inside the zone; overlapping zones (strips close together) merge onto the earlier hold.
     When the route starts inside the zone, h = 0 and `start_in` is True.
     The route's first stretch inside the zone of the runway it starts on (vacating, up to index `vacate`, the first
-    node outside it) is a no-wait stretch too: waits there go to the first node, and a crossing zone that starts
-    inside it merges onto index 0.
+    node outside it and off every runway's pavement) is a no-wait stretch too: waits there go to the first node,
+    and a crossing zone that starts inside it merges onto index 0.
     Returns (hold per index, [(c, strip, h, ze, start_in)], vacate)."""
     n = len(nodes)
     hold: list[int | None] = [None] + list(range(n - 1))
@@ -457,7 +464,9 @@ def _crossing_zones(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, s
     own = runway_strips_at(g, nodes[0]) if n else set()
     if own:
         vacate = 1
-        while vacate < n - 1 and any(_in_zone(g, nodes[vacate], st) for st in own):
+        # ... and never ends on any runway's pavement (an exit that runs straight onto a parallel runway)
+        while vacate < n - 1 and (any(_in_zone(g, nodes[vacate], st) for st in own)
+                                  or any(on_runway(g, nodes[vacate], st) for st in runway_strips(g))):
             vacate += 1
         vacate = min(vacate, n - 1)
         for i in range(1, vacate + 1):
@@ -472,7 +481,7 @@ def _crossing_zones(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, s
         while h > 0 and _in_zone(g, nodes[h], strip):
             h -= 1
         osm = next((i for i in range(c - 1, max(0, c - HOLD_LOOKBACK) - 1, -1)
-                    if nodes[i] in g.holds and g.holds[nodes[i]] in (None, strip)), None)
+                    if _osm_hold_for(g, nodes[i], strip)), None)
         if osm is not None and osm < h:
             h = osm
         ze = c + 1
@@ -652,7 +661,10 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
         between two nodes outside the zone counts on its own. Stretches that only run parallel (none of these) are
         not checked. The stretch the track starts on, on the runway it starts on (vacating), counts only from leaving
         the first node and only if it crosses after the first on-pavement run; for any other strip the dwell at the
-        first node counts."""
+        first node counts. OSM holding positions on the pavement do not end a zone.
+    (4) with `runway_events` and `g`: a track that starts on a runway leaves that runway's zone, and every runway's
+        pavement, before another flight's landing or takeoff on it (from its first point; the scheduler leaves this to
+        the runway-vacate rule on `exit_clear_min`, so a track can be ok and still be flagged here)."""
     if (runway_events is None) != (g is None):
         raise ValueError("verify_separation: pass runway_events and g together")
     hw = headway_s / 60.0
@@ -697,13 +709,31 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
             continue
         nv = len(vis)
         first_rw = {name for _, _, kind, name, _ in g.adj.get(vis[0][0], ()) if kind == "runway" and name}
+        if first_rw:
+            # (4) vacating: out of the zone of the runway it starts on, and off every runway's pavement, before another
+            # flight lands or takes off on that runway (the check T31 makes with exit_clear_min)
+            all_rw = {name for es in g.adj.values() for _, _, k_, name, _ in es if k_ == "runway" and name}
+            x = 0
+            while x < nv - 1 and (any(not (vis[x][0] in g.holds and g.holds[vis[x][0]] in (None, st)
+                                               and not on_runway(g, vis[x][0], st))
+                                          and strip_distance_m(g, vis[x][0], st) < RUNWAY_HOLD_CLEARANCE_M
+                                          for st in first_rw)
+                                      or any(on_runway(g, vis[x][0], st) for st in all_rw)):
+                x += 1
+            t_a, t_b = vis[0][1], vis[x][1]
+            for strip in sorted(first_rw):
+                for ev, kind, cs in sorted(runway_events.get(strip, ())):
+                    if cs != tr.callsign and kind in window and t_a - _TOL <= ev < t_b - _TOL:
+                        out.append(f"{tr.callsign} still vacating {strip} ({t_a:.2f}-{t_b:.2f} min) at {kind} "
+                                   f"{cs} at {ev:.2f}")
         for strip in sorted(runway_events):
             evs = [(ev, kind, cs) for ev, kind, cs in sorted(runway_events[strip]) if cs != tr.callsign
                    and kind in window]
             if not evs or not any(name == strip for es in g.adj.values() for _, _, k_, name, _ in es
                                   if k_ == "runway"):
                 continue
-            zone = [not (nd in g.holds and g.holds[nd] in (None, strip))
+            # an OSM hold ends the zone only when it is off the pavement (some were snapped onto runway nodes)
+            zone = [not (nd in g.holds and g.holds[nd] in (None, strip) and not on_runway(g, nd, strip))
                     and strip_distance_m(g, nd, strip) < RUNWAY_HOLD_CLEARANCE_M for nd, _, _ in vis]
             pave = [on_runway(g, nd, strip) for nd, _, _ in vis]
             if strip in first_rw:          # the first on-pavement run of the runway it starts on is vacating
