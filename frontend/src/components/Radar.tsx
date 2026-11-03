@@ -47,7 +47,7 @@ interface Blip { cs: string; x: number; y: number; tone: Tone; l1: string; l2: s
 export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false, fill = false }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, boxH], setSize] = useState([960, 0]);
-  const [range, setRange] = useState(20);
+  const [userRange, setRange] = useState<number | null>(null);   // null = Auto: 20 NM, wider while a hold is on the scope
   const [hoverFix, setHoverFix] = useState<string | null>(null);
   useEffect(() => {
     const el = box.current;
@@ -68,14 +68,30 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   const toNm = nmProjector(lat0, lon0);                  // the same plane as the surface map, in NM
   const nm = (lat: number, lon: number): [number, number] => { const [e, n] = toNm(lat, lon); return [e, -n]; };   // screen y points south
   const cx = W / 2, cy = H / 2;
-  const S = (Math.min(W, H) / 2 - 18) / range;         // px per NM: the chosen range fits the short side
-  const step = range / 5;
-  const rings = Array.from({ length: Math.ceil(Math.hypot(W, H) / 2 / S / step) }, (_, i) => (i + 1) * step);
-  const P = (p: [number, number]): [number, number] => [cx + p[0] * S, cy + p[1] * S];
   // visible extent in NM from the centre; the top band is kept clear for the clock and range controls
   const keyed = window.innerWidth > 760;                 // styles.css shows the colour key and overlays the header above 760px
   const TOP = keyed ? 64 : 12, BOTTOM = keyed ? (stack ? 76 : 60) : 30;   // stacked notes: the colour key sits above two note lines
-  const lim = { l: -(cx - 16) / S, r: (W - cx - 16) / S, t: -(cy - TOP) / S, b: (H - cy - BOTTOM) / S };
+  const scaleOf = (r: number) => (Math.min(W, H) / 2 - 18) / r;   // px per NM: the range fits the short side
+  const limOf = (r: number) => { const k = scaleOf(r); return { l: -(cx - 16) / k, r: (W - cx - 16) / k, t: -(cy - TOP) / k, b: (H - cy - BOTTOM) / k }; };
+  // Auto range: the smallest scope that holds every hold pattern flown at this moment (with a margin), else 20 NM
+  const holdNow: XY[] = [];
+  if (geo && paths && !pathsNote) {
+    const tsA = scanFloor(t, SCAN_MIN);
+    for (const a of paths.air) {
+      const hs = a.points.filter((p) => p.kind === "hold");
+      if (hs.length && tsA >= hs[0].t_min - 1 && tsA <= hs[hs.length - 1].t_min + 0.5)
+        for (const p of hs) holdNow.push(nm(p.lat, p.lon));
+    }
+  }
+  const autoRange = holdNow.length
+    ? RANGES.find((r) => { const q = limOf(r); return holdNow.every(([x, y]) => x * 1.12 >= q.l && x * 1.12 <= q.r && y * 1.12 >= q.t && y * 1.12 <= q.b); }) ?? RANGES[RANGES.length - 1]
+    : 20;
+  const range = userRange ?? autoRange;
+  const S = scaleOf(range);
+  const step = range / 5;
+  const rings = Array.from({ length: Math.ceil(Math.hypot(W, H) / 2 / S / step) }, (_, i) => (i + 1) * step);
+  const P = (p: [number, number]): [number, number] => [cx + p[0] * S, cy + p[1] * S];
+  const lim = limOf(range);
 
   // one strip per physical runway (the two ends share coordinates, swapped)
   const key = (e: End) => [e.le_lat, e.le_lon, e.he_lat, e.he_lon].map((v) => v.toFixed(4));
@@ -240,7 +256,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   blips.sort((a, b) => (a.tone === "fixed" ? 0 : 1) - (b.tone === "fixed" ? 0 : 1));
 
   // racetracks in screen space, with their "{fix} ×{levels} · {lo}-{hi}k" label above the pattern
-  const holdDraw = racetracks.map(({ h, i }) => {
+  const holdDraw0 = racetracks.map(({ h, i }) => {
     const pts = h.polygon.map(([la, lo]) => P(nm(la, lo)));
     const u = holdsUsed.get(i)!;
     const lv = [...u.levels].sort((a, b) => a - b);
@@ -250,8 +266,26 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     return { h, i, pts, lv, n: u.n, x: (f ? P(nm(f.lat, f.lon)) : top)[0], y: top[1] - 6, text: `${h.fix} ×${lv.length} · ${lo === hi ? lo : `${lo}-${hi}`}k` };
   });
 
+  // the wind compass sits bottom right unless a target, a fix or a racetrack would be under it; then the next free spot
+  type Rect = [number, number, number, number];
+  const hit = (a: Rect, b: Rect) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+  const solids: XY[] = [...blips.map((b): XY => [b.x, b.y]), ...fixSyms.map((f): XY => P(nm(f.lat, f.lon))), ...holdDraw0.flatMap((d) => d.pts)];
+  const windSpots: XY[] = [[W - 74, H - (stack ? 118 : 76)], [W - 74, H - (stack ? 118 : 76) - 120], [W - 74, cy], [74, cy + 70]];
+  const windBox = (c: XY): Rect => [c[0] - 50, c[1] - 26, 100, 76];
+  const wind = windSpots.find((c) => { const r = windBox(c); return !solids.some(([x, y]) => x > r[0] - 12 && x < r[0] + r[2] + 12 && y > r[1] - 12 && y < r[1] + r[3] + 12); }) ?? windSpots[0];
+  const fixedOverlays: Rect[] = [windBox(wind), [cx - 10, 2, 20, 16]];   // the wind compass and the N mark
+  // hold labels: above the pattern, else below it, whichever clears the overlays
+  const holdDraw = holdDraw0.map((d) => {
+    const w = d.text.length * 6.8, top = d.y;
+    const at = (y: number): Rect => [d.x - w / 2, y - 11, w, 14];
+    const bottom = Math.max(...d.pts.map((p) => p[1])) + 16;
+    const y = [top, bottom].find((yy) => !fixedOverlays.some((o) => hit(at(yy), o) > 0)) ?? top;
+    return { ...d, y };
+  });
+
   // data blocks: try four corners, keep the one that collides least with blocks and labels already placed
   const placed: [number, number, number, number][] = [
+    ...fixedOverlays,
     ...holdDraw.map((d): [number, number, number, number] => [d.x - d.text.length * 3.4, d.y - 11, d.text.length * 6.8, 14]),
     ...fixLabels.filter((l) => !l.hold).map((l): [number, number, number, number] => [l.x + 6, l.y - 15, l.id.length * 6.8, 13]),
   ];
@@ -263,8 +297,8 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
       const lx = b.x + sx * LEAD * 0.7, ly = b.y + sy * LEAD * 0.7;
       const r: [number, number, number, number] = [sx > 0 ? lx + 2 : lx - w - 2, sy < 0 ? ly - h : ly, w, h];
       const off = r[0] < 2 || r[0] + r[2] > W - 2 || r[1] < TOP - 8 || r[1] + r[3] > H - BOTTOM + 6 ? 1000 : 0;
-      const hit = placed.reduce((s, p) => s + Math.max(0, Math.min(r[0] + r[2], p[0] + p[2]) - Math.max(r[0], p[0])) * Math.max(0, Math.min(r[1] + r[3], p[1] + p[3]) - Math.max(r[1], p[1])), 0);
-      if (hit + off < score) { score = hit + off; best = [sx, sy]; }
+      const over = placed.reduce((s, p) => s + hit(r, p), 0);
+      if (over + off < score) { score = over + off; best = [sx, sy]; }
     }
     const lx = b.x + best[0] * LEAD * 0.7, ly = b.y + best[1] * LEAD * 0.7;
     const r: [number, number, number, number] = [best[0] > 0 ? lx + 2 : lx - w - 2, best[1] < 0 ? ly - h : ly, w, h];
@@ -282,8 +316,9 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   const approachDirs = [...usedEnds].map((id) => approach(id, 1)?.u).filter(Boolean) as [number, number][];
   const diag = ([[1, -1], [-1, -1], [1, 1], [-1, 1]] as [number, number][]).map(([dx, dy]) => [dx * 0.707, dy * 0.707] as [number, number])
     .sort((p, q) => Math.max(...approachDirs.map((u) => p[0] * u[0] + p[1] * u[1]), -1) - Math.max(...approachDirs.map((u) => q[0] * u[0] + q[1] * u[1]), -1))[0];
-  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1]; const underWind = x > W - 140 && y > H - (stack ? 158 : 116);   // the wind compass box, bottom right
-    return x > 24 && x < W - 24 && y > TOP && y < H - BOTTOM && !underWind; };
+  const ringLabel = (r: number) => { const x = cx + r * S * diag[0], y = cy + r * S * diag[1];
+    const box: Rect = [diag[0] < 0 ? x - 26 : x, diag[1] < 0 ? y - 14 : y, 26, 14];   // the number, with its offset
+    return x > 24 && x < W - 24 && y > TOP && y < H - BOTTOM && !placed.some((p) => hit(box, p) > 0); };
 
   return (
     <div ref={box} className={`radar${wide || fill ? " fill" : ""}`}>
@@ -409,7 +444,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
           );
         })}
 
-        <g transform={`translate(${W - 74} ${H - (stack ? 118 : 76)})`}>{/* narrow: lifted clear of the full-width notes below */}
+        <g transform={`translate(${wind[0]} ${wind[1]})`}>{/* bottom right (lifted when narrow) unless something is under it */}
           <circle r={22} fill="none" stroke="#2a2d33" />
           {calm ? <text className="ring" textAnchor="middle" y={4}>calm</text>
             : dir == null ? <text className="ring" textAnchor="middle" y={4}>VRB</text>

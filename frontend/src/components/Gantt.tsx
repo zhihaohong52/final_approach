@@ -111,8 +111,10 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   const times = plans.flatMap((p) => land(p).flatMap((a) => [a.slot_min ?? 0, a.metrics.in_block_min ?? 0]));
   const lastPlan = plans.flatMap((p) => land(p).map((a) => (a.metrics.in_block_min ?? a.slot_min ?? 0) + turn));
   const lastQueue = wave.queue.map((q) => q.slot_min + 2);
-  const firstPlan = times.length ? Math.min(...times) : 0;
-  const START = firstPlan > 45 ? Math.floor((firstPlan - 15) / 15) * 15 : Math.min(0, Math.floor((Math.min(0, ...times) - 3) / 15) * 15);
+  // the axis also covers the start of every hold in the shown plan, so a lap is on the scrubber
+  const holdStart = (paths?.air ?? []).flatMap((a) => a.points.filter((p) => p.kind === "hold").slice(0, 1).map((p) => p.t_min));
+  const firstPlan = times.length ? Math.min(...times, ...holdStart) : 0;
+  const START = firstPlan > 45 ? Math.floor((firstPlan - 15) / 15) * 15 : Math.min(0, Math.floor((Math.min(0, ...times, ...holdStart) - 3) / 15) * 15);
   const lastAll = Math.max(START, ...lastPlan, ...(firstPlan > 45 ? [] : lastQueue));
   const END = Math.min(START + 180, Math.max(START + 75, Math.ceil((lastAll + 3) / 15) * 15));
   const inView = (from: number, to: number) => to >= START && from <= END;

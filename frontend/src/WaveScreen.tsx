@@ -387,6 +387,10 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const focusDown = focusA?.action === "land" ? focusA.slot_min ?? focusAir?.points[focusAir.points.length - 1]?.t_min ?? null : null;
   const canBoth = wideScreen && !!surf;
   const choice = effectiveChoice({ choice: panel, surface: surf?.status ?? null, canBoth });
+  // a replay names the run that was recorded (its own mode and model), not the picker's default
+  const chipLabel = replay && result
+    ? (result.mode === "formulas" ? "Formulas" : config?.models.find((x) => x.id === result.model)?.label ?? result.model ?? MODE_LABEL[result.mode as Mode])
+    : mode === "formulas" ? "Formulas" : config?.models.find((x) => x.id === model)?.label ?? MODE_LABEL[mode];
   const shownPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);
@@ -436,7 +440,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
           <FlightPicker airport={wave.airport.iata} onPick={(id) => loadWave(id)} />
           <button className="btn text" onClick={async () => loadWave((await api.randomWave()).id)}>Random</button>
           <details className="settings">
-            <summary className="btn text"><span className="lbl">{mode === "formulas" ? "Formulas" : config?.models.find((x) => x.id === model)?.label ?? MODE_LABEL[mode]}{replay ? " · replay" : ""}</span></summary>
+            <summary className="btn text"><span className="lbl">{chipLabel}{replay ? " · replay" : ""}</span></summary>
             <div className="menu right">
               <div className="field">Decision mode
                 <div className="seg" role="group" aria-label="Decision mode">

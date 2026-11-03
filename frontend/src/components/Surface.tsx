@@ -411,6 +411,10 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
     standLabels.set(st.id, { cs: x.callsign, box });
   }
   taken.push(...[...standLabels.values()].map((l) => l.box));
+  // taxiway names on the selected track are drawn text too: one that would sit on a label already kept is dropped, and data blocks keep clear of the rest
+  const twBox = (l: { name: string; at: XY }): Box => { const [px, py] = P(l.at); return [px - l.name.length * 3.3, py - 16, px + l.name.length * 3.3, py - 2]; };
+  for (let i = twLabels.length - 1; i >= 0; i--) if (twLabels.slice(0, i).some((o) => overlap(twBox(o), twBox(twLabels[i])) > 0) || taken.some((b) => overlap(b, twBox(twLabels[i])) > 0)) twLabels.splice(i, 1);
+  for (const l of twLabels) { const [px, py] = P(l.at); taken.push([px - l.name.length * 3.3, py - 16, px + l.name.length * 3.3, py - 2]); }
   // data blocks in priority order: selected, focus, then the rest; each takes the first free corner
   const rank = (cs: string) => (cs === selected ? 0 : cs === focus ? 1 : 2);
   const blocks = new Map<string, { lx: number; ly: number; ey: number; east: boolean; l2: string }>();
