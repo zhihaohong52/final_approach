@@ -135,7 +135,9 @@ LIMITS = [
              "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "
              "(the departure waits at the holding point: FCFS, the crosser came first); the runway choice uses the "
              "same time. It matches the holding-point throughput of the ground scheduler (30 s node headway + 30 s "
-             "line-up buffer)"},
+             "line-up buffer). Known limitation: with one free departure parallel (ORD in this model) or a busy one "
+             "(ATL 09L) more departures than 1/min queue, so takeoffs run late (ORD 45 of 160, ATL 108 of 175 on the "
+             "replays); real 2015 operations used more departure runways"},
 ]
 
 

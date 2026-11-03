@@ -44,8 +44,18 @@ log = logging.getLogger(__name__)
 
 
 
-def _warm() -> None:
-    """Load the flights.csv index and the demo list in the background so the first page load is fast."""
+_WARM_THREAD: threading.Thread | None = None
+
+
+def _warm() -> threading.Thread | None:
+    """Load the flights.csv index and the demo list in a daemon thread so the first page load is fast: the demo list
+    builds every replay wave, which fills build_wave's LRU (each build also schedules the wave's fixed ground
+    traffic, ~0.1-1 s). Never blocks startup or requests; failures are logged, not raised. ATM_WARM=0 turns it
+    off (the test suite sets it)."""
+    global _WARM_THREAD
+    if os.environ.get("ATM_WARM", "1") == "0":
+        return None
+
     def run():
         try:
             from .wave import flights2015
@@ -53,8 +63,10 @@ def _warm() -> None:
             _replay_summaries()
             _bts_waves(None, None, 50)
         except Exception:  # noqa: BLE001 - warming is best effort
-            pass
-    threading.Thread(target=run, daemon=True).start()
+            log.warning("startup warm-up failed", exc_info=True)
+    _WARM_THREAD = threading.Thread(target=run, name="warm-replays", daemon=True)
+    _WARM_THREAD.start()
+    return _WARM_THREAD
 
 
 @asynccontextmanager
