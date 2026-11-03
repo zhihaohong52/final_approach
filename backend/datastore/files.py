@@ -74,6 +74,54 @@ def _movements(iata: str) -> tuple[pd.DataFrame | None, str | None]:
     return df, col
 
 
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _movements_text(iata: str) -> str | None:
+    """The decompressed text of one airport's movements file (None without one), memoised on its path, size and
+    mtime. ~30 ms for ORD where parsing it into a frame of strings takes ~250 ms (and ~10x the memory)."""
+    p = REF / "movements2015" / f"{iata}.csv.gz"
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return _read_text(p, st.st_size, st.st_mtime_ns)
+
+
+@functools.lru_cache(maxsize=4)
+def _read_text(p: Path, size: int, mtime_ns: int) -> str:
+    import gzip
+    return gzip.decompress(p.read_bytes()).decode()
+
+
+def _day_block(text: str, date: str) -> bytes | None | bool:
+    """The rows of `date` cut straight from the file text: exactly what `pack.gzip_csv` of the frame path writes
+    (header + those rows, "\n"-terminated), or None when the date has no rows. False when this text cannot be cut
+    safely, so the caller takes the frame path: the date is not the first column, a field may be quoted (a `"`),
+    a "\r" line end, duplicate or empty header names, or the date's rows are not contiguous."""
+    head = text[:text.find("\n")] if "\n" in text else text
+    cols = head.split(",")
+    if not _ISO_DAY.fullmatch(date) or cols[0] not in pack.MOVEMENT_DATE_COLS or len(set(cols)) != len(cols) \
+            or not all(cols) or '"' in text or "\r" in text:
+        return False
+    key = f"\n{date},"
+    start = text.find(key)
+    if start < 0:
+        return None
+    pos, n = start + 1, 0
+    while text.startswith(key[1:], pos):
+        nl = text.find("\n", pos)
+        pos = len(text) if nl < 0 else nl + 1
+        n += 1
+    if n != text.count(key):
+        return False                       # rows of this date elsewhere too: not sorted by date
+    block = text[start + 1:pos]
+    commas = len(cols) - 1
+    if any(line.count(",") != commas for line in block.rstrip("\n").split("\n")):
+        return False                       # a short or long row (the frame path pads or rejects it)
+    return (head + "\n" + block + ("" if block.endswith("\n") else "\n")).encode()
+
+
 @functools.lru_cache(maxsize=2)
 def _dest_frame(dest: str) -> pd.DataFrame | None:
     p = CH2 / "flights" / f"{dest}.csv.gz"
@@ -171,6 +219,11 @@ class FileStore:
         return p.read_bytes() if p.is_file() else None
 
     def movements_day(self, iata: str, date: str) -> bytes | None:
+        text = _movements_text(iata.upper())
+        if text is not None:
+            got = _day_block(text, date)
+            if got is not False:
+                return None if got is None else pack.gzip_bytes(got)
         df, col = _movements(iata.upper())
         if df is None or col is None:
             return None

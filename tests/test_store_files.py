@@ -121,3 +121,37 @@ def test_movements_day_rows_for_date(tmp_path, monkeypatch):
         assert FileStore().movements_day("XXX", "2015-02-01") is None
     finally:
         files._movements.cache_clear()
+
+
+def test_movements_day_text_path_is_byte_identical_to_the_frame_path(tmp_path, monkeypatch):
+    """The fast path (rows cut from the file text) gives exactly pack.gzip_csv of the frame path, and steps aside
+    (False) whenever it could differ: unsorted dates, a quote, a short row, a non-date first column."""
+    import gzip
+    from backend.datastore import files, pack
+    d = tmp_path / "movements2015"
+    d.mkdir()
+    monkeypatch.setattr(files, "REF", tmp_path)
+    cases = {
+        "AAA": b"date,kind,tail,taxi\n2015-01-01,arrival,N1,\n2015-01-01,departure,,7\n2015-01-02,arrival,N2,3\n",
+        "BBB": b"date,tail\n2015-01-01,N1\n2015-01-02,N2\n2015-01-01,N3\n",           # unsorted
+        "CCC": b'date,tail\n2015-01-01,"N,1"\n',                                      # quoted field
+        "DDD": b"date,tail,x\n2015-01-01,N1\n",                                        # short row
+        "EEE": b"tail,date\nN1,2015-01-01\n",                                          # date not first
+        "FFF": b"date,tail\n2015-01-01,N1\n2015-01-02,N2",                             # no final newline
+    }
+    for iata, raw in cases.items():
+        (d / f"{iata}.csv.gz").write_bytes(gzip.compress(raw))
+    files._movements.cache_clear()
+    try:
+        for iata in cases:
+            df, col = files._movements(iata)
+            for day in ("2015-01-01", "2015-01-02", "2015-03-01", ""):
+                sub = df[df[col] == day]
+                want = None if sub.empty else pack.gzip_csv(sub)
+                assert FileStore().movements_day(iata, day) == want, (iata, day)
+        text = files._movements_text
+        assert files._day_block(text("AAA"), "2015-01-01") not in (False, None)
+        assert files._day_block(text("FFF"), "2015-01-02") not in (False, None)
+        assert all(files._day_block(text(k), "2015-01-01") is False for k in ("BBB", "CCC", "DDD", "EEE"))
+    finally:
+        files._movements.cache_clear()

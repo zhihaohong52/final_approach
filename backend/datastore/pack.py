@@ -26,7 +26,11 @@ def source_sha256(paths: list[Path], script_version: str) -> str:
 
 def gzip_csv(df: pd.DataFrame) -> bytes:
     """CSV (no index) gzipped with mtime=0, so the same frame always gives the same bytes."""
-    raw = df.to_csv(index=False).encode()
+    return gzip_bytes(df.to_csv(index=False).encode())
+
+
+def gzip_bytes(raw: bytes) -> bytes:
+    """`raw` gzipped with mtime=0 (deterministic bytes)."""
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as f:
         f.write(raw)
