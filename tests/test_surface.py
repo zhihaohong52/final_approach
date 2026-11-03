@@ -5,7 +5,7 @@ import pytest
 from atm.geo.osm_surface import build_surface
 from atm.wave import build
 from atm.wave.model import Runway
-from atm.wave.surface import (GroundTrack, NoPath, Reservations, TaxiGraph, _from_doc, choose_exit, generic_taxi_min,
+from atm.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations, TaxiGraph, _from_doc, choose_exit, generic_taxi_min,
                               load_graph, rot_s, schedule, unimpeded, verify_separation)
 
 
@@ -351,3 +351,86 @@ def test_verifier_edge_overlap_is_exact(mini):
     b = tr("B", [(0.9995, 2), (2.0, 1)])
     msgs = verify_separation([a, b], headway_s=0.0)
     assert any("opposite" in m for m in msgs)
+
+
+# --- round 2: geometric crossings, start-in-zone, vacate stretch, guard ---
+
+def _route_via(g, end, pred):
+    stands = sorted(g.stands.values(), key=lambda s: s["node"])
+    for e in g.exits[end][:3]:
+        for st in stands[::max(1, len(stands) // 15)]:
+            try:
+                p = unimpeded(g, e["node"], st["node"])
+            except NoPath:
+                continue
+            if pred(p):
+                return p
+    raise AssertionError("no such route")
+
+
+def test_constants_exported():
+    assert RUNWAY_HOLD_CLEARANCE_M == 90.0 and RUNWAY_ON_PAVEMENT_M == 45.0
+
+
+def test_untagged_crossing_found_geometrically_ord_1886():
+    # KORD taxiway SS meets 09R/27L at node 1886, but its OSM edges carry no strip tag
+    g = load_graph("KORD")
+    p = _route_via(g, "09L", lambda p: 1886 in p.nodes[1:-1])
+    assert (1886, "09R/27L") in p.crossings
+
+
+def test_ksea_untagged_crossing_waits_at_the_osm_hold():
+    # KSEA taxiway N crosses 16L/34R with no shared node (node 71 is 1 m from the centreline)
+    from atm.wave.surface import strip_distance_m
+    g = load_graph("KSEA")
+    p = _route_via(g, "16R", lambda p: 71 in p.nodes and 72 in p.nodes)
+    assert any(st == "16L/34R" for _, st in p.crossings)
+    i71 = p.nodes.index(71)
+    t71 = sum(p.seg_s[:i71]) / 60
+    res = Reservations({72: [(0.0, t71 + 6, "BLOCK")]}, {}, {"16L/34R": [(t71 + 3, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and s.waits
+    for w in s.waits:
+        assert w["node"] != 71
+        assert g.holds.get(w["node"], "-") in (None, "16L/34R") or strip_distance_m(g, w["node"], "16L/34R") >= 90
+    assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
+
+
+def test_starting_inside_another_strips_zone_fails_ord_27c():
+    # KORD exit 27C node 1715 lies 60 m from 04L/22R and the route crosses 04L/22R next: it cannot back out
+    g = load_graph("KORD")
+    p = _route_via(g, "27C", lambda p: p.nodes[0] == 1715 and any(st == "04L/22R" for _, st in p.crossings))
+    res = Reservations({}, {}, {"04L/22R": [(1.0, "landing", "UA9")]})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert not s.ok and "04L/22R" in s.reason and "UA9" in s.reason
+    assert any("04L/22R" in m and "UA9" in m
+               for m in verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g))
+    quiet = schedule(g, p, 0.0, Reservations({}, {}, {"04L/22R": [(9.0, "landing", "UA9")]}), "AA1")
+    assert quiet.ok
+
+
+def test_no_wait_in_the_vacate_stretch_and_exit_clear_is_off_the_runway_zone():
+    # starting on runway R at x=0: nodes 20 m and 50 m off it are still in its zone; a conflict at 120 m waits at 0
+    xs = [0, 20, 50, 120, 400]
+    g, at = _line_graph(xs, {"R": 0})
+    p = _line_path(g, at, xs)
+    assert p.crossings == []                                      # vacating the runway it starts on is not a crossing
+    res = Reservations({at[120]: [(0.0, 2.0, "BLOCK")]}, {}, {})
+    s = schedule(g, p, 0.0, res, "AA1")
+    assert s.ok and [w["node"] for w in s.waits] == [at[0]]
+    assert s.exit_clear_min == pytest.approx(next(q["t_min"] for q in s.points if q["node"] == at[120]))
+
+
+def test_guard_trip_reserves_nothing(mini, monkeypatch):
+    import atm.wave.surface as S
+    monkeypatch.setattr(S, "_MAX_ITER", 2)
+    res = Reservations({}, {}, {"18/36": [(t / 2, "landing", f"L{t}") for t in range(0, 80)]})
+    s = schedule(mini, path_across_1836(mini), 0.0, res, "AA1")
+    assert not s.ok and "converge" in s.reason and res.node_busy == {} and res.edge_dir == {}
+
+
+def test_verifier_needs_events_and_graph_together(mini):
+    with pytest.raises(ValueError):
+        verify_separation([], runway_events={"18/36": []})
+    with pytest.raises(ValueError):
+        verify_separation([], g=mini)
