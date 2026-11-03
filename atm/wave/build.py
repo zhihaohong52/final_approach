@@ -475,7 +475,8 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list) -> list[QueueAr
         out.append(QueueArrival(
             callsign=r["callsign"], aircraft_type=(ac or {}).get("type_icao") or None,
             wake=(ac or {}).get("wake") or "LARGE", runway=best[i % len(best)].id,
-            slot_min=float(r["sched_min"])))
+            slot_min=float(r["sched_min"]),
+            origin=str(r["origin"]) if isinstance(r.get("origin"), str) and r["origin"] else None))
     return out
 
 
