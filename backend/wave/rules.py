@@ -121,14 +121,18 @@ LIMITS = [
      "note": "fixed ground traffic (real BTS 2015 departures, wheels-off T-30..T+120): mixed mode iff no open runway "
              "end parallel to the majority FCFS arrival runway (heading within 10 deg, same direction, another strip) "
              "is free of arrivals; then departures share the arrival runway, else every free parallel end is a "
-             "departure runway. In WHEELS_OFF order each departure takes the candidate minimising pushback + "
-             "unimpeded taxi to that end + queue wait behind the takeoffs already assigned there (departure takeoff "
-             "spacing); ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
+             "departure runway. In pushback order each departure is trial-scheduled (hold-short scheduler, crossing "
+             "waits and queues included) to every candidate and takes the earliest expected takeoff: leaving the "
+             "holding point, never before WHEELS_OFF, spaced from the strip's other takeoffs (departure takeoff "
+             "spacing); a schedule that is not ok, or a takeoff inside an already scheduled crossing's window, ranks "
+             "last; ties to the threshold nearest its (seeded, simulated) stand, then runway id. Pushback = "
              "WHEELS_OFF - TAXI_OUT; the departure holds 30 s at the holding point (line-up buffer); takeoff at "
-             "WHEELS_OFF, later only if taxi waits delay it"},
+             "WHEELS_OFF, later only if taxi waits delay it. Known limitation: arrival runways are v2's FCFS choice "
+             "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
+             "ATL lands on the outboard runways (08L, 09R, 10) and departs from 08R/09L"},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
-     "note": "used only to choose a departure's runway (expected queue wait); it matches the holding-point "
-             "throughput of the ground scheduler (30 s node headway + 30 s line-up buffer)"},
+     "note": "used only to choose a departure's runway (expected takeoff in the trial schedule); it matches the "
+             "holding-point throughput of the ground scheduler (30 s node headway + 30 s line-up buffer)"},
 ]
 
 

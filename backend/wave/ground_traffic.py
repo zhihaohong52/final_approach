@@ -11,9 +11,10 @@ vetoed). Pure and deterministic; no model decides anything here.
 - Departure runway (assumption, `rules.LIMITS` "departure runway"): the airport is mixed-mode, and departures use the
   arrival flow's runway (the majority `moves.fcfs_runways` end), unless an open end parallel to it (heading within
   10 degrees, same direction, another strip) carries no arrivals; then every such free end is a departure runway.
-  Departures, in WHEELS_OFF order, each take the candidate with the earliest expected takeoff: pushback + unimpeded
-  taxi to that end + queue wait behind the takeoffs already assigned there at one a minute (TAKEOFF_SPACING_MIN);
-  ties go to the threshold nearest the stand, then the runway id.
+  A provisional end (pushback + unimpeded taxi + queue wait at one takeoff a minute, TAKEOFF_SPACING_MIN, in
+  WHEELS_OFF order) places the takeoff event before scheduling; then, in FCFS order, each departure is
+  trial-scheduled to every candidate end against a copy-on-write view of the reservations and keeps the earliest
+  expected takeoff (`_settle_runway`); ties go to the threshold nearest the stand, then the runway id.
 """
 from __future__ import annotations
 
@@ -56,6 +57,10 @@ class FixedMover:
     label: str = ""               # reservation / runway-event / track callsign: `callsign`, or "<cs> (dep)" for a
                                   # departure whose callsign is also a wave or queue arrival's (own events are skipped
                                   # by callsign, so a shared one would hide a real conflict)
+
+    # departures with several candidate runway ends: [(end, entry node, strip, distance stand -> threshold)]; the end
+    # is settled by trial scheduling in FCFS order (`_compute`)
+    options: list = field(default_factory=list, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.label = self.label or self.callsign
@@ -306,6 +311,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
         # the end's runway entry + queue wait behind the takeoffs already assigned there (TAKEOFF_SPACING_MIN);
         # ties -> nearest threshold to the stand, then id
         rows = []
+        opts = []
         for rid in cands:
             ent = _entry_node(g, rid, main) if g is not None and st is not None else None
             taxi_u = None
@@ -315,6 +321,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
             if taxi_u is None:
                 rows.append(((math.inf, dist(rid), rid), rid, ent, None))
                 continue
+            opts.append((rid, ent, _strip_key(g, rid), dist(rid)))
             push = ev - (float(m.taxi_min) if m.taxi_min is not None else taxi_u)
             ready = push + taxi_u
             wait = max(0.0, last_to.get(rid, -math.inf) + TAKEOFF_SPACING_MIN - ready)
@@ -344,9 +351,86 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
             stats["no_taxi_out"] += 1
             taxi = path.unimpeded_min if path is not None else 0.0
         label = f"{cs} (dep)" if cs in wave_cs else cs
-        out.append(FixedMover(cs, "departure", rwy or "", snode, ev - taxi, path, ev, strip, skey, why, label))
+        out.append(FixedMover(cs, "departure", rwy or "", snode, ev - taxi, path, ev, strip, skey, why, label,
+                              opts if path is not None and len(opts) > 1 else []))
     out.sort(key=lambda m: (m.t_start_min, m.callsign))
     return out, mode, mv is not None, stats
+
+
+class _CowTable(dict):
+    """Copy-on-write view of a reservation table for trial scheduling: reads fall through to `base`, and the first
+    write to a key copies its list (schedule() only uses get and setdefault)."""
+
+    def __init__(self, base: dict):
+        super().__init__()
+        self.base = base
+
+    def get(self, k, d=None):
+        return super().get(k, d) if k in self else self.base.get(k, d)
+
+    def setdefault(self, k, d=None):
+        if k not in self:
+            self[k] = list(self.base.get(k, ()))
+        return self[k]
+
+
+def _takeoff_slot(events, t: float) -> float:
+    """Earliest time >= t at least TAKEOFF_SPACING_MIN from every other takeoff on the strip (expected queue)."""
+    tos = sorted(e[0] for e in events if e[1] == "takeoff")
+    for x in tos:
+        if x > t - TAKEOFF_SPACING_MIN + _TOL and x < t + TAKEOFF_SPACING_MIN - _TOL:
+            t = x + TAKEOFF_SPACING_MIN
+    return t
+
+
+def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[str, float, float]]:
+    """(strip, from leaving the hold, to reaching the first node past the zone) for each runway crossing of a
+    scheduled path, read back from its points (one arrival point per node, plus a departure point after a wait)."""
+    nodes, pts = path.nodes, s.points
+    n = len(nodes)
+    arr, dep = [0.0] * n, [0.0] * n
+    k = 0
+    for i in range(n):
+        arr[i] = dep[i] = pts[k]["t_min"]
+        if i < n - 1 and k + 1 < len(pts) and pts[k + 1]["node"] == nodes[i] and nodes[i + 1] != nodes[i]:
+            dep[i] = pts[k + 1]["t_min"]
+            k += 1
+        k += 1
+    _, zones, _ = surface._crossing_zones(g, nodes, path.crossings)
+    return [(strip, dep[h], arr[ze]) for _, strip, h, ze, _ in zones]
+
+
+def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
+                   spans: dict[str, list[tuple[float, float]]]) -> None:
+    """Trial-schedule the departure to each candidate end against a copy-on-write view of the current reservations
+    and keep the end with the earliest actual takeoff, ok=True first; ties to the threshold nearest the stand, then
+    the runway id. The takeoff is the expected one: the time it leaves the holding point (never before WHEELS_OFF),
+    then spaced TAKEOFF_SPACING_MIN from the strip's other takeoffs. A candidate whose takeoff would fall in the
+    crossing window of an already scheduled mover on that strip ranks with the ok=False ones. Moves its
+    pre-inserted takeoff event to the chosen strip."""
+    events = {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()}
+    best = None
+    for rid, entry, strip, d in m.options:
+        try:
+            path = m.path if rid == m.runway else departure_path(g, m.stand_node, entry, strip)
+        except NoPath:
+            continue
+        view = Reservations(_CowTable(res.node_busy), _CowTable(res.edge_dir), events)
+        s = surface.schedule(g, path, m.t_start_min, view, m.label)
+        t = _takeoff_slot(events.get(strip, ()), max(m.event_min, s.points[-1]["t_min"]))
+        before, after = surface.GAP_MIN["takeoff"]
+        bad = not s.ok or any(a < t + after + _TOL and t - before - _TOL < b for a, b in spans.get(strip, ()))
+        key = (bad, t, d, rid)
+        if best is None or key < best[0]:
+            best = (key, rid, strip, path)
+    if best is None or best[1] == m.runway:
+        return
+    old = res.runway_events[m.strip]
+    old.remove((m.event_min, "takeoff", m.label))
+    lst = res.runway_events.setdefault(best[2], [])
+    lst.append((m.event_min, "takeoff", m.label))
+    lst.sort()
+    m.runway, m.strip, m.path = best[1], best[2], best[3]
 
 
 def _compute(wave: Wave) -> FixedTraffic:
@@ -363,9 +447,12 @@ def _compute(wave: Wave) -> FixedTraffic:
     tracks: list[GroundTrack] = []
     failures: list[tuple[str, str]] = []
     shifted = 0
+    spans: dict[str, list[tuple[float, float]]] = {}      # strip -> crossing windows of scheduled movers
     for m in movers:
         if m.path is None or g is None:
             continue
+        if m.options:
+            _settle_runway(g, m, res, spans)
         # schedule() does not skip the mover's own runway event: hide it (shared node/edge tables, filtered events)
         view = Reservations(res.node_busy, res.edge_dir,
                             {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
@@ -383,6 +470,8 @@ def _compute(wave: Wave) -> FixedTraffic:
                 shifted += 1
         if s.reason == "hold-short search did not converge":
             continue                     # nothing was reserved: no track to draw or verify
+        for strip, a, b in _crossing_spans(g, m.path, s):
+            spans.setdefault(strip, []).append((a, b))
         names = [n for i, n in enumerate(m.path.names) if n and (i == 0 or m.path.names[i - 1] != n)]
         tracks.append(GroundTrack(m.label, m.kind, False, m.runway, m.stand, names, s.points, s.waits,
                                   m.path.unimpeded_min, s.points[-1]["t_min"] - m.t_start_min, m.path.src))
