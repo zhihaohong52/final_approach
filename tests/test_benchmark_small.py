@@ -2,7 +2,8 @@ from atm.wave.benchmark import main
 
 SUMMARY_KEYS = {"consensus_rate_pct", "mean_rounds", "fallback_rate_pct", "rule_violations_in_agreed_plans",
                 "delay_min", "fuel_kg", "pax_protected_pct", "overtime_min", "agreement_with_formula_pct", "brier",
-                "latency_p50_ms", "latency_p95_ms", "error_rate_pct", "cost_usd_per_wave"}
+                "latency_p50_ms", "latency_p95_ms", "error_rate_pct", "cost_usd_per_wave",
+                "lap_share_pct", "taxi_wait_min", "max_prompt_chars"}
 
 
 def test_small_benchmark(tmp_path):
@@ -100,3 +101,97 @@ def test_high_fallback_arm_with_better_delay_loses():
     assert sel["winner"] == "steady"
     assert any("fast missed consensus >= 90%: 68.0%" in r for r in sel["reasons"])
     assert any("fast outcomes partly from solver fallback on 16/50 waves" in r for r in sel["reasons"])
+
+
+def test_engine_history_and_attribution(tmp_path):
+    from atm.wave import benchmark as B
+    prev = {"engine_version": "v2", "baseline": {"delay_min": 10.0, "fuel_kg": 1.0}, "arms": [{"model": "formula", "summary": {"delay_min": 8.0, "fuel_kg": 1.0}}]}
+    cur = {"engine_version": "v3-air", "baseline": {"delay_min": 12.0, "fuel_kg": 3.0}, "arms": [{"model": "formula", "summary": {"delay_min": 9.0, "fuel_kg": 2.0}}]}
+    a = B.attribution(prev, cur)
+    assert a["physics_delta"]["delay_min"] == 2.0 and a["negotiation_delta"]["formula"]["delay_min"] == -3.0
+
+
+def test_report_has_engine_version_and_lap_share(tmp_path):
+    from atm.wave import benchmark as B
+    from atm.wave.version import ENGINE_VERSION
+    rep = B.main(["--fixtures", "--n", "3", "--arms", "formula", "--no-ablation", "--outage-n", "0",
+                  "--concurrency", "2", "--out", str(tmp_path)])
+    assert rep["engine_version"] == ENGINE_VERSION and "lap_share_pct" in rep["baseline"]
+    assert "lap_share_pct" in rep["arms"][0]["summary"] and isinstance(rep["regressions"], list)
+    md = (tmp_path / "BENCHMARK.md").read_text()
+    assert "## Engine history" in md and "## Attribution" in md and "32,000" in md
+    assert any(r["engine_version"] == "v2" and r["arm"] == "baseline" for r in rep["engine_history"])
+    assert rep["arms"][0]["summary"]["max_prompt_chars"] == 0   # formula arm
+
+
+def _res(outcome, laps):
+    a = [{"callsign": f"X{i}", "metrics": {"hold_laps": n}} for i, n in enumerate(laps)]
+    return {"result": {"outcome": outcome, "final_plan": {"assignments": a}}}
+
+
+def test_lap_share_pct():
+    from atm.wave.benchmark import lap_share_pct
+    runs = {"a": _res("consensus", [0, 2]), "b": _res("consensus", [0, 0]), "c": _res("fallback", [3]),
+            "d": {"error": "boom"}}
+    assert lap_share_pct(runs) == 50.0
+    assert lap_share_pct({}) == 0.0
+
+
+def test_veto_counts():
+    from atm.wave.benchmark import veto_counts
+    chk = lambda r, p=False: {"rule": r, "passed": p}   # noqa: E731
+    log = [{"type": "AGENT_TURN", "body": {"rejected": [{"violations": [chk("R1"), chk("R2"), chk("R1")]},
+                                                        {"violations": [chk("R1", True)]}]}},
+           {"type": "TRIAGE", "body": {}}]
+    assert veto_counts({"a": {"result": {"log": log}}, "b": {"error": "x"}}) == {"R1": 2, "R2": 1}
+
+
+def test_engine_history_reads_archive(tmp_path):
+    import json
+    from atm.wave.benchmark import engine_history
+    arm = {"model": "formula", "n_ok": 3, "summary": {"delay_min": 8.0, "fuel_kg": 1.0, "pax_protected_pct": 50.0,
+           "overtime_min": 0.0, "consensus_rate_pct": 100.0, "rule_violations_in_agreed_plans": 0}}
+    (tmp_path / "engine-v2").mkdir()
+    (tmp_path / "engine-v2" / "benchmark.json").write_text(json.dumps(
+        {"engine_version": "v2", "baseline": {"delay_min": 10.0, "n_feasible": 2}, "arms": [arm]}))
+    cur = {"engine_version": "v3-air", "baseline": {"delay_min": 12.0, "lap_share_pct": 5.0, "n_feasible": 3},
+           "arms": [{**arm, "summary": {**arm["summary"], "lap_share_pct": 20.0}}]}
+    rows = engine_history(tmp_path, cur)
+    assert [(r["engine_version"], r["arm"]) for r in rows] == [
+        ("v2", "baseline"), ("v2", "formula"), ("v3-air", "baseline"), ("v3-air", "formula")]
+    assert rows[0]["delay_min"] == 10.0 and rows[0]["lap_share_pct"] is None
+    assert rows[3]["lap_share_pct"] == 20.0 and rows[3]["n_feasible"] == 3
+
+
+def test_frozen_v2_archive():
+    import json
+    from atm.wave.benchmark import ROOT
+    d = ROOT / "eval" / "archive" / "engine-v2"
+    assert json.loads((d / "benchmark.json").read_text())["engine_version"] == "v2"
+    assert (d / "BENCHMARK.md").read_text().startswith("# Benchmark")
+
+
+def test_max_prompt_chars_tracks_choice(monkeypatch):
+    from atm.decide import Decider
+    from atm.wave import benchmark as B
+    from atm.wave.fixtures import make_wave
+    seen = {}
+    real = B.negotiate_wave
+
+    def fake(wave, mode, chain=None, **kw):
+        Decider(chain=["formula"]).choice({"k": "v" * 10}, "i" * 5, {"a": "b" * 3}, lambda: "a")
+        return real(wave, mode, chain=chain, **kw)
+    monkeypatch.setattr(B, "negotiate_wave", fake)
+    out = B.run_arm("model-arm", [make_wave()], ["openrouter:m", "formula"], "decision", 1, "t")
+    assert B.PROMPT_MAX["model-arm"] > 0
+
+
+import pytest
+
+
+@pytest.mark.live_db   # opt-in: ATM_LIVE_DB=1 and DATABASE_TEST_URL; the v2 row survives as non-current history
+def test_frozen_v2_row_is_not_current(live_db_url):
+    import psycopg
+    with psycopg.connect(live_db_url) as c:
+        cur = c.execute("select count(*) from eval.benchmark_reports where is_current").fetchone()[0]
+    assert cur == 1

@@ -31,11 +31,17 @@ from atm.wave import rules
 from atm.wave.graph import negotiate_wave
 from atm.wave.model import Assignment, JointPlan
 from atm.wave.utility import evaluate
+from atm.wave.version import ENGINE_VERSION
 
 ROOT = Path(__file__).resolve().parents[2]
 DEAD_MODEL = "openrouter:invalid/model-does-not-exist"
 P95_LIMIT_MS, ERR_LIMIT_PCT, CONSENSUS_LIMIT_PCT = 1000, 2.0, 90.0
 TOTAL_KEYS = ("delay_min", "fuel_kg", "pax_protected_pct", "overtime_min")
+PROMPT_BUDGET_CHARS = 32000   # spec §6.7: 8k tokens at chars/4
+PROMPT_MAX: dict[str, int] = {}   # arm tag -> largest state + instructions + options any Decider.choice call received
+HISTORY_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min",
+                "consensus_rate_pct", "rule_violations_in_agreed_plans")
+ATTRIBUTION_KEYS = ("delay_min", "fuel_kg", "lap_share_pct", "taxi_wait_min", "pax_protected_pct", "overtime_min")
 
 
 def log(msg: str) -> None:
@@ -144,9 +150,17 @@ def arm_parts(arm: str) -> tuple[str, str]:
 
 
 def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int, tag: str) -> dict[str, dict]:
-    from atm.decide import _reset_breakers
+    from atm.decide import Decider, _reset_breakers, _stringify
     _reset_breakers()
     out: dict[str, dict] = {}
+    PROMPT_MAX[arm] = 0
+    real_choice = Decider.choice
+
+    def choice(self, state, instructions, options, formula):
+        if chain != ["formula"]:   # the formula arm sends no prompt
+            n = len(json.dumps(_stringify(state))) + len(instructions) + len(json.dumps(options))
+            PROMPT_MAX[arm] = max(PROMPT_MAX[arm], n)
+        return real_choice(self, state, instructions, options, formula)
 
     def one(w):
         t0 = time.monotonic()
@@ -159,8 +173,12 @@ def run_arm(arm: str, waves: list, chain: list[str], mode: str, concurrency: int
             out[w.id] = {"error": f"{type(e).__name__}: {e}"[:300]}
             log(f"[{tag}] {w.id}: EXCEPTION {e}")
 
-    with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
-        list(ex.map(one, waves))
+    Decider.choice = choice   # not thread-safe across arms: arms run one after another
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, concurrency)) as ex:
+            list(ex.map(one, waves))
+    finally:
+        Decider.choice = real_choice
     return out
 
 
@@ -233,7 +251,34 @@ def status_quo_feasible(wave, result: dict) -> bool:
     return rules.feasible(wave, plan_from_dict(result["baseline"]["plan"]))
 
 
-def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list, common: set[str]) -> tuple[dict, dict]:
+def _plan_laps(assignments: list[dict]) -> bool:
+    return any((a.get("metrics") or {}).get("hold_laps", 0) >= 1 for a in assignments)
+
+
+def lap_share_pct(results: dict[str, dict]) -> float:
+    """% of agreed plans (outcome consensus) with at least one wave-flight holding lap. results: wave id -> run."""
+    plans = [x["result"]["final_plan"]["assignments"] for x in results.values()
+             if "result" in x and x["result"].get("outcome") == "consensus"]
+    return pct(sum(_plan_laps(p) for p in plans), len(plans))
+
+
+def veto_counts(results: dict[str, dict]) -> dict[str, int]:
+    """Per rule, the failed checks in the agents' rejected (engine-vetoed) proposals."""
+    c: Counter = Counter()
+    for x in results.values():
+        for m in x.get("result", {}).get("log", []):
+            for rj in (m.get("body") or {}).get("rejected", []):
+                c.update(v["rule"] for v in rj.get("violations", []) if not v.get("passed", False))
+    return dict(sorted(c.items()))
+
+
+def taxi_wait_mean(plans: list[list[dict]]) -> float:
+    """Mean over plans of the summed taxi_wait_min of their assignments."""
+    return mean([sum((a.get("metrics") or {}).get("taxi_wait_min", 0.0) for a in p) for p in plans])
+
+
+def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list, common: set[str],
+              max_prompt_chars: int = 0) -> tuple[dict, dict]:
     """Returns (contract summary, extras for selection/markdown)."""
     N = len(waves)
     ok = [(wid, x["result"]) for wid, x in runs.items() if "result" in x]
@@ -256,6 +301,8 @@ def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list,
     }
     for k in TOTAL_KEYS:
         s[k] = mean([r["evaluation"]["totals"][k] for r in com])
+    s["lap_share_pct"] = lap_share_pct(runs)
+    s["taxi_wait_min"] = taxi_wait_mean([r["final_plan"]["assignments"] for r in com])
     has_model = bool(model_lat)
     s.update({
         "agreement_with_formula_pct": pct(sum(agree), len(agree)),
@@ -264,6 +311,7 @@ def summarize(runs: dict[str, dict], formula_runs: dict[str, dict], waves: list,
         "latency_p95_ms": percentile(model_lat, 0.95) if has_model else None,
         "error_rate_pct": pct(errs, len(metas) + len(failed)),
         "cost_usd_per_wave": 0.0,
+        "max_prompt_chars": max_prompt_chars,
     })
     return s, {"n_ok": len(ok), "failed_ids": failed, "p95_all_ms": percentile(all_lat, 0.95) if all_lat else None,
                "model_decisions": len(model_lat)}
@@ -427,6 +475,95 @@ def run_outage(winner_arm: str | None, waves: list, n: int, concurrency: int) ->
     return out, notes
 
 
+# ---------------------------------------------------------------- engine history / attribution
+
+def _row(version: str, arm: str, s: dict, n_ok: int | None, n_feasible: int | None) -> dict:
+    return {"engine_version": version, "arm": arm, **{k: s.get(k) for k in HISTORY_KEYS}, "n_feasible": n_feasible}
+
+
+def _rows(rep: dict, version: str) -> list[dict]:
+    b = rep["baseline"]
+    rows = [_row(version, "baseline", {**b, "consensus_rate_pct": None, "rule_violations_in_agreed_plans": None},
+                 None, b.get("n_feasible"))]
+    for a in rep["arms"]:
+        s = a["summary"]
+        nf = a["n_ok"] - s["rule_violations_in_agreed_plans"] if "n_ok" in a else None
+        rows.append(_row(version, a["model"], s, a.get("n_ok"), nf))
+    return rows
+
+
+def load_archive(archive_dir: Path) -> list[dict]:
+    """Frozen reports under archive_dir/<name>/benchmark.json, sorted by directory name; a report without
+    engine_version is v2."""
+    out = []
+    for f in sorted(Path(archive_dir).glob("*/benchmark.json")):
+        try:
+            r = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        r.setdefault("engine_version", "v2")
+        out.append(r)
+    return out
+
+
+def engine_history(archive_dir: Path, current: dict) -> list[dict]:
+    """One row per (engine version, arm), baseline included: archived versions first, the current report last.
+    Metrics a version did not record are None."""
+    cv = current.get("engine_version", ENGINE_VERSION)
+    rows: list[dict] = []
+    for r in load_archive(archive_dir):
+        if r["engine_version"] != cv:
+            rows += _rows(r, r["engine_version"])
+    return rows + _rows(current, cv)
+
+
+def _num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def attribution(prev: dict, cur: dict) -> dict:
+    """physics_delta = baseline(cur) - baseline(prev): what the engine change did to the status quo itself.
+    negotiation_delta[arm] = arm(cur) - baseline(cur): what negotiation adds under the current engine."""
+    cb, pb = cur["baseline"], prev["baseline"]
+    phys = {k: round(cb[k] - pb[k], 3) for k in ATTRIBUTION_KEYS if _num(cb.get(k)) and _num(pb.get(k))}
+    neg = {a["model"]: {k: round(a["summary"][k] - cb[k], 3) for k in ATTRIBUTION_KEYS
+                        if _num(a["summary"].get(k)) and _num(cb.get(k))} for a in cur["arms"]}
+    return {"physics_delta": phys, "negotiation_delta": neg}
+
+
+def per_wave_table(arm_runs: dict[str, dict], common: set[str]) -> dict[str, dict]:
+    """wave id -> {delay_min, fuel_kg, cause} of the agreed plan; cause names the lap / vector / taxi-wait time."""
+    out = {}
+    for wid in sorted(common):
+        r = arm_runs[wid]["result"]
+        asg = r["final_plan"]["assignments"]
+        m = lambda k: sum((a.get("metrics") or {}).get(k, 0.0) or 0.0 for a in asg)   # noqa: E731
+        out[wid] = {"delay_min": r["evaluation"]["totals"]["delay_min"], "fuel_kg": r["evaluation"]["totals"]["fuel_kg"],
+                    "cause": f"hold {m('hold_min'):.1f} min ({int(m('hold_laps'))} lap(s)), vector "
+                             f"{m('vector_min'):.1f} min, taxi wait {m('taxi_wait_min'):.1f} min"}
+    return out
+
+
+def find_regressions(cur_pw: dict[str, dict[str, dict]], prev_pw: dict | None, sq: dict[str, float]) -> list[dict]:
+    """Waves where an arm got worse. Against the previous engine's per-wave table (delay and fuel) when the archived
+    report has one, else against the same run's feasible status quo (delay only)."""
+    out = []
+    for arm, waves in cur_pw.items():
+        for wid, v in waves.items():
+            if prev_pw is not None:
+                p = (prev_pw.get(arm) or {}).get(wid)
+                pairs = [(k, p[k], v[k]) for k in ("delay_min", "fuel_kg")] if p else []
+                src = "previous engine"
+            else:
+                pairs = [("delay_min", sq[wid], v["delay_min"])] if wid in sq else []
+                src = "status quo (previous engine has no per-wave table)"
+            for k, a, b in pairs:
+                if b > a + 1e-9:
+                    out.append({"wave_id": wid, "arm": arm, "metric": k, "v_prev": a, "v_cur": b,
+                                "cause": f"vs {src}: {v['cause']}"})
+    return out
+
+
 # ---------------------------------------------------------------- failures / markdown
 
 def collect_failures(label: str, runs: dict, waves: list) -> list[dict]:
@@ -502,6 +639,41 @@ def markdown(rep: dict) -> str:
           "not run" if ab is None else f"{ab}% of formula-arm final plans are infeasible under the real rules "
           "when the engine is disabled.", "", "## Failures", ""]
     L += [f"- `{f['wave_id']}` ({f['model']}): {f['reason']}" for f in rep["failures"]] or ["- none"]
+    L += ["", "## Prompt budget", "",
+          f"Largest agent prompt (state + instructions + options) per arm, against the {PROMPT_BUDGET_CHARS:,}-char "
+          "(8k-token) budget:", ""]
+    L += [f"- {a['label']}: {a['summary'].get('max_prompt_chars', 0):,} chars "
+          f"({'within' if a['summary'].get('max_prompt_chars', 0) <= PROMPT_BUDGET_CHARS else 'OVER'} budget)"
+          for a in rep["arms"]]
+    L += ["", "## Engine veto counts", ""]
+    L += [f"- {a['label']}: " + (", ".join(f"{r} {n}" for r, n in a.get("veto_counts", {}).items()) or "none")
+          for a in rep["arms"]]
+    L += ["", "## Engine history", "",
+          "| engine | arm | delay min | fuel kg | lap share % | taxi wait min | pax prot % | overtime min "
+          "| consensus % | violations | n feasible |", "|" + "---|" * 11]
+    for h in rep.get("engine_history", []):
+        L.append("| " + " | ".join(_f(h[k]) for k in ("engine_version", "arm", "delay_min", "fuel_kg", "lap_share_pct",
+                                                        "taxi_wait_min", "pax_protected_pct", "overtime_min",
+                                                        "consensus_rate_pct", "rule_violations_in_agreed_plans",
+                                                        "n_feasible")) + " |")
+    L += ["", "## Attribution", ""]
+    at = rep.get("attribution")
+    if not at:
+        L.append("No earlier engine version is archived; nothing to attribute.")
+    else:
+        sg = lambda v: f"{v:+g}"   # noqa: E731
+        L += [f"Engine {at['from']} to {at['to']}.", "",
+              "Physics (status quo under the new engine minus under the old): "
+              + (", ".join(f"{k} {sg(v)}" for k, v in at["physics_delta"].items()) or "n/a"), "",
+              "Negotiation (arm minus status quo, same engine); headline claims come from these deltas:", ""]
+        L += [f"- {arm}: " + (", ".join(f"{k} {sg(v)}" for k, v in d.items()) or "n/a")
+              for arm, d in at["negotiation_delta"].items()]
+    rg = rep.get("regressions", [])
+    L += ["", f"Regressions ({len(rg)}):", ""]
+    L += [f"- `{r['wave_id']}` ({r['arm']}) {r['metric']} {r['v_prev']} to {r['v_cur']}; {r['cause']}"
+          for r in rg[:20]] or ["- none"]
+    if len(rg) > 20:
+        L.append(f"- ... and {len(rg) - 20} more in benchmark.json")
     L += ["", "## Limits", "",
           "- Several data layers are simulated (gates, fuel, crew, connections, aircraft types), see per-wave provenance.",
           "- Brier is against the formula verdict (utility >= reservation), not human judgement.",
@@ -547,6 +719,9 @@ def main(argv: list[str] | None = None) -> dict:
     ok_f = [formula_runs[w]["result"] for w in common]
     sq_f = [formula_runs[w]["result"] for w in sq_ok]
     base = {k: mean([r["baseline"]["evaluation"]["totals"][k] for r in ok_f]) for k in keys}
+    base["lap_share_pct"] = lap_share_pct({w: {"result": {"outcome": "consensus", "final_plan": formula_runs[w]["result"]["baseline"]["plan"]}}
+                                           for w in common})
+    base["taxi_wait_min"] = taxi_wait_mean([r["baseline"]["plan"]["assignments"] for r in ok_f])
     base["n_feasible"] = len(sq_ok)
     base["infeasible_ids"] = sq_bad
     base["feasible_only"] = {k: mean([r["baseline"]["evaluation"]["totals"][k] for r in sq_f]) for k in keys}
@@ -557,10 +732,10 @@ def main(argv: list[str] | None = None) -> dict:
     arms, failures = [], list(build_fail)
     for arm in arm_list:
         prov, model = arm_parts(arm)
-        summ, extra = summarize(all_runs[arm], formula_runs, waves, common)
+        summ, extra = summarize(all_runs[arm], formula_runs, waves, common, PROMPT_MAX.get(arm, 0))
         arm_delay = mean([all_runs[arm][w]["result"]["evaluation"]["totals"]["delay_min"] for w in sq_ok])
         arms.append({"model": model, "provider": prov, "label": model, "summary": summ,
-                     "delay_min_vs_feasible_status_quo": arm_delay, **extra,
+                     "delay_min_vs_feasible_status_quo": arm_delay, "veto_counts": veto_counts(all_runs[arm]), **extra,
                      **arm_vs_optimiser({w: all_runs[arm][w]["result"]["evaluation"]["totals"]["delay_min"]
                                          for w in common}, sq_delay, set(sq_ok), opt, common)})
         failures += collect_failures(model, all_runs[arm], waves)
@@ -584,6 +759,16 @@ def main(argv: list[str] | None = None) -> dict:
         "outage_test": outage,
         "selection": selection, "failures": failures, "wave_ids": [w.id for w in waves],
     }
+    report = {"engine_version": ENGINE_VERSION, **report}
+    report["per_wave"] = {model: per_wave_table(all_runs[arm], common)
+                          for arm in arm_list for model in [arm_parts(arm)[1]]}
+    archive = [r for r in load_archive(ROOT / "eval" / "archive") if r["engine_version"] != ENGINE_VERSION]
+    prev = archive[-1] if archive else None
+    report["regressions"] = find_regressions(report["per_wave"], (prev or {}).get("per_wave"),
+                                             {w: sq_delay[w] for w in sq_ok})
+    report["engine_history"] = engine_history(ROOT / "eval" / "archive", report)
+    report["attribution"] = ({"from": prev["engine_version"], "to": ENGINE_VERSION, **attribution(prev, report)}
+                             if prev else None)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "benchmark.json").write_text(json.dumps(report, indent=2))
