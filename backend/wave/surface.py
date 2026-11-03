@@ -166,6 +166,9 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     # of a fresh tuple per dict value) roughly halves its memory; the returned structure is unchanged
     canon: dict[tuple, tuple] = {}
     names: dict[tuple, tuple] = {}
+    # (p, u, v) -> turn at u > TURN_SLOW_DEG: pure geometry, shared by every tree of the graph (each hub build grows
+    # ~20 trees over the same turns)
+    slow_turn = g._trees.setdefault("turn_slow", {})
     start = (root, -1)
     canon[start] = start
     dist = {start: 0.0}
@@ -182,7 +185,14 @@ def _tree(g: TaxiGraph, root: int) -> dict:
         for v, length, kind, name, strip in g.adj.get(u, ()):
             if kind == "runway":
                 continue
-            slow = kind == "taxilane" or (p >= 0 and _heading_turn(g, p, u, v) > TURN_SLOW_DEG)
+            if kind == "taxilane":
+                slow = True
+            elif p < 0:
+                slow = False
+            else:
+                slow = slow_turn.get((p, u, v))
+                if slow is None:
+                    slow = slow_turn[(p, u, v)] = _heading_turn(g, p, u, v) > TURN_SLOW_DEG
             nt = t + length / ((SLOW_KT if slow else TAXI_KT) * KT)
             ns = (v, u)
             if ns in done or nt >= dist.get(ns, math.inf):
@@ -382,24 +392,41 @@ def merge_crossings(g: TaxiGraph, nodes: list[int], tagged: list[tuple[int, str]
             k = c + 1
     start_on = runway_strips_at(g, nodes[0]) if n else set()
     out: list[tuple[int, str]] = []
+    elen = []                                 # straight edge lengths, computed exactly as in _edge_crosses_strip
+    for i in range(n - 1):
+        u, v = nodes[i], nodes[i + 1]
+        lat0, lon0 = g.nodes[u]
+        kx, ky = _local(g, lat0)
+        elen.append(math.hypot((g.nodes[v][1] - lon0) * kx, (g.nodes[v][0] - lat0) * ky))
     for strip in runway_strips(g):
-        d = [strip_distance_m(g, nd, strip) for nd in nodes]
+        sd = g._trees.setdefault(("strip_dist", strip), {})    # node -> distance (same values, fewer lookups)
+        d = []
+        for nd in nodes:
+            x = sd.get(nd)
+            if x is None:
+                x = sd[nd] = strip_distance_m(g, nd, strip)
+            d.append(x)
         if min(d, default=math.inf) > 5000.0:
             continue
         cand: list[tuple[int, int, float]] = [(c, 0, d[c]) for c, st in idx_tag if st == strip]   # (index, prio, d)
+        # on_runway(node) needs d < RUNWAY_ON_PAVEMENT_M: test that first (same result, far fewer calls)
+        pave = [d[i] < RUNWAY_ON_PAVEMENT_M and on_runway(g, nodes[i], strip) for i in range(n)]
         i = 0
         while i < n:
-            if not on_runway(g, nodes[i], strip):
+            if not pave[i]:
                 i += 1
                 continue
             j = i
-            while j + 1 < n and on_runway(g, nodes[j + 1], strip):
+            while j + 1 < n and pave[j + 1]:
                 j += 1
             if not (i == 0 and strip in start_on):
                 c = min(range(i, j + 1), key=lambda x: (d[x], x))
                 cand.append((c, 1, d[c]))
             i = j + 1
         for i in range(n - 1):
+            # _edge_crosses_strip's own first test (the edge cannot reach the centreline), done here without the call
+            if d[i] + d[i + 1] > 2.0 * elen[i] + 1.0:
+                continue
             if edge_crosses_strip(g, nodes[i], nodes[i + 1], strip):
                 c = i if d[i] <= d[i + 1] else i + 1
                 cand.append((c, 2, d[c]))

@@ -107,8 +107,9 @@ LIMITS = [
              "give-way "
              "waits of the plan's hold-short pass (ATC-TAXI-CONFLICT); no ramp or gate waits, so it can sit below BTS "
              "TAXI_IN (FCFS medians on the replays with the 2015 movements, ROT + taxi + waits vs taxi-in reference: "
-             "ORD 4.4 / 15.5, MIA 5.0 / 4.0, ATL 7.0 / 6.5, DFW 16.4 / 13.5, DEN 6.4 / 5.5 min); see the taxi "
-             "validation (Task 27)"},
+             "ORD 4.4 / 15.5, MIA 5.0 / 4.0, ATL 7.0 / 6.5, DFW 16.4 / 13.5, DEN 6.4 / 5.5 min; DFW is above the "
+             "reference because three arrivals wait head-on against a 36R departure stream on their fixed route, no "
+             "rerouting: see 'departure holding bay'); see the taxi validation (Task 27)"},
     {"limit": "ground node headway", "value": f"{surface.HEADWAY_S:g} s", "source": "assumption",
      "note": "ATC-TAXI-CONFLICT (FAA JO 7110.65 §3-7-2: ground control issues the route and hold-short "
              "instructions): wave flights move along their fixed route (no rerouting) in runway-exit order and wait "
@@ -150,8 +151,10 @@ LIMITS = [
     {"limit": "landing / takeoff gap on one runway", "value": "1 min", "source": "assumption",
      "note": "mixed mode (fixed departures sharing the arrival runway): a fixed takeoff stays 1 min from "
              "every landing on its strip (the arrival has vacated, or the departure is airborne before the arrival "
-             "crosses the threshold). Wave landings against fixed takeoffs on the same strip are checked only through "
-             "the runway-vacate rule (a takeoff while the wave flight is still on the runway)"},
+             "crosses the threshold). A wave landing against fixed takeoffs on the same strip: a takeoff while the "
+             "wave flight is still on the runway fails the runway-vacate rule; a takeoff less than 1 min before the "
+             "landing is landing priority (informational fixed_departure_holds, see 'fixed departures vs plan "
+             "landings')"},
     {"limit": "departure holding bay", "value": "3 aircraft per holding point, resequenced by takeoff time; "
      "beyond that the queue backs up upstream", "source": "assumption",
      "note": "real ATC resequences departures at the runway (holding bays let an aircraft with an earlier slot pass "
@@ -166,7 +169,11 @@ LIMITS = [
              "5.0 / 21.0 / 43.7, 8.5 / 22.5, 0; DFW 5.0 / 18.0 / 39.0, 2.3 / 12.6, 0; DEN 9.3 / 22.4 / 23.2, "
              "0 / 7.0, 0. Pushback is WHEELS_OFF - TAXI_OUT, and BTS TAXI_OUT already contains the real queue, so "
              "the bay wait stands for that queue. Wave arrivals giving way to a departure on a shared taxiway (FCFS "
-             "plans): DFW 3 (max 21.0 min), ATL 2 (max 1.3 min), other replays 0"},
+             "plans): DFW 3, ATL 2 (max 1.3 min), other replays 0. Known limitation: the DFW waits (MQ2833 21.0, "
+             "AA2441 13.6, AA260 7.6 min, all at node 107) are head-on waits on the arrival's fixed route against a "
+             "stream of 36R departures (9-10 departures on its route edges, opposite direction, during each wait); "
+             "with no rerouting the arrival waits for a gap, and its ROT + taxi + wait exceeds its own BTS TAXI_IN "
+             "(19.3 / 15.0, 13.5 / 9.0, 26.7 / 16.0 min)"},
     {"limit": "runway ends missing from OSM", "value": "generic straight-line taxi", "source": "assumption",
      "note": "open in 2015 but not in today's OSM; taxi uses the straight-line generic estimate"},
     {"limit": "runway hold clearance", "value": f"{surface.RUNWAY_HOLD_CLEARANCE_M:g} m from a crossed runway's "

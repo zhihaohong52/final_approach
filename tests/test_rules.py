@@ -600,8 +600,8 @@ def _bench_ids():
 
 def _ord_plan_with_crossing():
     """ORD fixture wave (F2015-270287, movements fixture day), FCFS plan, with one wave flight A moved to a runway
-    whose taxi route crosses another strip and a second wave flight B landing on that strip 0.5 min after A would reach the crossing unimpeded, so A must hold
-    short. A is `assignments[0]`."""
+    whose taxi route crosses another strip and a second wave flight B landing on that strip 0.5 min after A would
+    reach the crossing unimpeded, so A must hold short. A is `assignments[0]`."""
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
     flow = set(moves_fcfs_runways(w).values())
@@ -633,7 +633,8 @@ def moves_fcfs_runways(w):
 
 @pytest.mark.usefixtures("_fixture_movements")
 def test_taxi_wait_costs_the_atc_taxi_term():
-    """Spec §6.5: the ATC taxi term is (taxi_min - best unimpeded) / 10 with taxi_min = unimpeded + waits (review T31)."""
+    """Spec §6.5: the ATC taxi term is (taxi_min - best unimpeded) / 10 with taxi_min = unimpeded + waits
+    (review T31)."""
     from backend.wave import utility
     w, p = _ord_plan_with_crossing()
     cs = p.assignments[0].callsign
@@ -649,7 +650,8 @@ def test_taxi_wait_costs_the_atc_taxi_term():
 
 @pytest.mark.usefixtures("_fixture_movements")
 def test_taxi_wait_feeds_in_block():
-    w, p = _ord_plan_with_crossing()      # helper: pick a wave flight whose route crosses a strip with a landing 0.5 min after its exit
+    # helper: a wave flight whose route crosses a strip with a landing 0.5 min after its exit
+    w, p = _ord_plan_with_crossing()
     m = metrics_map(w, p)[p.assignments[0].callsign]
     assert m.taxi_wait_min > 0 and m.taxi_min == pytest.approx(m.taxi_unimpeded_min + m.taxi_wait_min, abs=1e-6)
     assert m.in_block_min == pytest.approx(p.assignments[0].slot_min + m.rot_s / 60.0 + m.taxi_min, abs=0.05)
@@ -782,7 +784,8 @@ def test_stack_labels_come_from_the_trajectory_set():
 
 
 def _fixed_landing_hits(w, ts):
-    """(fixed label, wave landing callsign) of every verifier message on a fixed track during a wave flight's landing."""
+    """(fixed label, wave landing callsign) of every verifier message on a fixed track during a wave flight's
+    landing."""
     from backend.wave import ground_traffic
     g = surface._geo(w).graph
     wave_cs = {f.callsign for f in w.flights}

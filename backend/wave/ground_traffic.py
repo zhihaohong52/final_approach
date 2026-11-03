@@ -491,7 +491,7 @@ def _spacing_events(events, settled: set[str] | None) -> list:
 # holding bay at each departure holding point (assumption, LIMITS): departures waiting for their takeoff stand off
 # the taxiway, so one with an earlier takeoff passes them; at most this many at once, else the queue backs up upstream
 BAY_CAPACITY = 3
-HOLD_QUEUE_MAX_RETRY = 50     # re-schedules of one departure waiting upstream for room in the bay     # re-schedules of one departure behind later arrivals at its holding point
+HOLD_QUEUE_MAX_RETRY = 50     # re-schedules of one departure waiting upstream for room in the bay
 
 
 def _bay_free_at(bay, t_in: float, t_out: float) -> tuple[float, str] | None:
@@ -545,16 +545,32 @@ def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
     runway id. The takeoff is the one `_compute` will record: `_takeoff_time` from the time it leaves the holding
     point (never before WHEELS_OFF). Moves its pre-inserted takeoff event to the chosen strip."""
     events = {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()}
+    spacing = {}
+
+    def takeoff(strip: str, t: float) -> float:
+        if strip not in spacing:
+            spacing[strip] = _spacing_events(events.get(strip, ()), settled)
+        return _takeoff_time(spacing[strip], spans.get(strip, ()), t)
+
+    # Pruning (same result as trying every candidate): `_takeoff_time` is non-decreasing in its start time and a
+    # schedule never reaches the holding point before the unimpeded travel time (waits only add), so a candidate whose
+    # lower-bound key is already worse than the best ok key cannot win; candidates are tried in lower-bound order.
+    lb0 = sorted(((takeoff(strip, m.event_min), d, rid), rid, entry, strip, d) for rid, entry, strip, d in m.options)
     best = None
-    for rid, entry, strip, d in m.options:
+    for (t0, _, _), rid, entry, strip, d in lb0:
+        if best is not None and not best[0][0] and (False, t0, d, rid) > best[0]:
+            continue
         try:
             path = m.path if rid == m.runway else departure_path(g, m.stand_node, entry, strip)
         except NoPath:
             continue
+        travel = sum(path.seg_s[:-1]) / 60.0
+        if best is not None and not best[0][0] and \
+                (False, takeoff(strip, max(m.event_min, m.t_start_min + travel)), d, rid) > best[0]:
+            continue
         view = Reservations(_CowTable(res.node_busy), _CowTable(res.edge_dir), events)
         s = surface.schedule(g, path, m.t_start_min, view, m.label)
-        t = _takeoff_time(_spacing_events(events.get(strip, ()), settled), spans.get(strip, ()),
-                          max(m.event_min, s.points[-1]["t_min"]))
+        t = takeoff(strip, max(m.event_min, s.points[-1]["t_min"]))
         key = (not s.ok, t, d, rid)
         if best is None or key < best[0]:
             best = (key, rid, strip, path)
@@ -675,7 +691,8 @@ def _compute(wave: Wave) -> FixedTraffic:
                                   m.path.unimpeded_min, points[-1]["t_min"] - m.t_start_min, m.path.src))
     # Safety net: re-check every track's runway gaps against the final events with the independent verifier (one
     # track at a time: checks 3 and 4 only). Takeoffs are held clear of scheduled crossings above, so a broken
-    # crossing gap should not occur; if one does it is a failure; an arrival still vacating at another fixed movement's takeoff or landing
+    # crossing gap should not occur; if one does it is a failure; an arrival still vacating at another fixed
+    # movement's takeoff or landing
     # comes from the data's own times (queue slots, real WHEELS_OFF) and is counted, never hidden.
     stats["vacating"] = []
     if g is not None:
@@ -799,7 +816,8 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
                      f"landing or a crossing")
     hs = hold_stats(ft)
     if hs["n"]:
-        parts.append(f"departures waiting for takeoff in the holding bay (at most {BAY_CAPACITY}, then queued upstream): median "
+        parts.append(f"departures waiting for takeoff in the holding bay (at most {BAY_CAPACITY}, then queued "
+                     f"upstream): median "
                      f"{hs['median']:.1f}, p95 {hs['p95']:.1f}, max {hs['max']:.1f} min, {hs['over_30']} over 30 min "
                      f"(at most {hs['over_30_one_node']} at one node); upstream queue waits median "
                      f"{hs['queue_median']:.1f}, max {hs['queue_max']:.1f} min")
