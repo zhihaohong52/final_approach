@@ -625,6 +625,8 @@ interface BenchmarkReport {
     };
     delay_min_vs_feasible_status_quo?: number;   // arm mean delay on waves where status quo is legal
     n_ok?: number; failed_ids?: string[]; p95_all_ms?: number | null; model_decisions?: number;
+    worse_than_sq_consensus_pct?: number | null;   // v2.3: worse_than_status_quo_pct over consensus plans only
+    infeasible_sq_waves?: number; consensus_pct_infeasible_sq?: number | null;   // v2.3: waves whose status quo is infeasible, and the consensus rate on them
   }[];
   baseline: { delay_min: number; fuel_kg: number; pax_protected_pct: number; overtime_min: number; diversions: number;
     n_feasible?: number; infeasible_ids?: string[];   // status quo legal on n_feasible waves
@@ -640,7 +642,7 @@ interface BenchmarkReport {
   fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant the arms ran with
   fairness_variants?: {                // v2.3: the firm vs relaxing comparison and the pick (benchmark_notes.py --variants)
     firm: FairnessVariantReport; relaxing: FairnessVariantReport;
-    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[] };   // null: neither eligible
+    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[]; shortfall: boolean };   // shortfall: neither variant kept consensus within one wave of v3-traffic, so the higher mean consensus won; variant is null only in reports written before this field
   };
 }
 interface FairnessVariantReport {      // v2.3
