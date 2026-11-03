@@ -29,6 +29,11 @@ describe("roster", () => {
     expect(r[1].what).toContain("American Airlines Inc.");
     expect(r[1].what).toContain("AA2712");
   });
+  it("a name already ending in a full stop does not double it", () => {
+    const r = roster(["AIRLINE:WN"], [], [{ code: "WN", name: "Southwest Airlines Co.", callsigns: ["WN1"], basis: "" }]);
+    expect(r[0].what).toContain("Southwest Airlines Co. Its flights");
+    expect(r[0].what).not.toContain("..");
+  });
   it("old 3-agent run keeps its pilot among the voters", () => {
     expect(roster(["ATC", "PILOT:DL100", "GROUND"]).map((x) => x.cls)).toEqual(["atc", "pilot", "ground"]);
   });
@@ -36,8 +41,8 @@ describe("roster", () => {
 describe("lines", () => {
   it("unableLine", () => expect(unableLine(sampleUnable)).toMatch(/^UNABLE .+, PLT-FUEL-RESERVE$/));
   it("objectionLine names the floor source", () => {
-    expect(objectionLine(o)).toBe("AA2712 delay +15.5 min vs the original plan (ATC's plan)");
-    expect(objectionLine({ ...o, floor_source: "best_seen" })).toBe("AA2712 delay +15.5 min vs the best plan seen (ATC's plan)");
-    expect(objectionLine({ ...o, metric: "fuel_kg", floor: 100, value: 160, proposed_by: "ENGINE" })).toBe("AA2712 fuel +60 kg vs the original plan (the opening plan)");
+    expect(objectionLine(o)).toBe("AA2712 delay +15.5 min vs the original plan — objecting to ATC's plan");
+    expect(objectionLine({ ...o, floor_source: "best_seen" })).toBe("AA2712 delay +15.5 min vs the best plan seen so far — objecting to ATC's plan");
+    expect(objectionLine({ ...o, metric: "fuel_kg", floor: 100, value: 160, proposed_by: "ENGINE" })).toBe("AA2712 fuel +60 kg vs the original plan — objecting to the opening plan");
   });
 });

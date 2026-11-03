@@ -268,6 +268,8 @@ tbody tr:hover { background: #18171c; }
 .msg-dec { color: var(--muted); font: 12px var(--mono); margin-top: 3px; }
 .msg.rej .msg-body { color: var(--negative); }
 .msg-obj { margin: 3px 0 0; padding-left: 18px; font: 12px/1.6 var(--mono); color: var(--soft); }
+.msg.unable { border-left: 2px solid var(--warning); padding-left: 10px; }
+.unable-word { font-weight: 700; color: var(--warning); }
 .msg.unable .msg-body { overflow-wrap: anywhere; max-width: 80ch; text-wrap-style: pretty; }   /* ~240 characters: wrap, never clip */
 .msg.unable .msg-why { font: 12px var(--mono); }
 .msg-diff { margin: 6px 0 2px 116px; padding: 6px 10px; border-left: 1px solid var(--control); font: 12px/1.65 var(--mono); white-space: pre-wrap; color: var(--soft); }

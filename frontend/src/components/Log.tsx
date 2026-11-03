@@ -192,7 +192,7 @@ export function Log({ messages, running, focus, details = false, ruleIds, agents
               <article key={m.seq} className="msg unable">
                 <div className="msg-top">
                   <span className="who pilot">{agentName(m.sender)}</span>
-                  <div className="msg-body">{plain(unableLine(b), details)}</div>
+                  <div className="msg-body"><b className="unable-word">UNABLE</b>{plain(unableLine(b), details).replace(/^UNABLE/, "")}</div>
                 </div>
                 <div className="msg-why">{b.source}</div>
               </article>

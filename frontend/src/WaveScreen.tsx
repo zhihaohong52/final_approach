@@ -533,7 +533,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               <p className="dec-kicker">Disrupted flight</p>
               <p className="dec-head">{focusName ? <>{focusName} <span className="muted">{spoken(wave.focus!)}</span></> : "No single focus flight"}</p>
               <p className="dec-line">{intro(wave)}</p>
-              <p className="dec-line muted">ATC, the pilot and Ground negotiate its runway, slot and gate for up to 3 turns. A rule engine checks {rulesCount(config?.rule_ids)} and vetoes any plan that breaks one. You approve, edit or override the result.</p>
+              <p className="dec-line muted">{people.agents.some((a) => a.startsWith("AIRLINE:")) ? "ATC, the airlines and Ground" : "ATC, the pilot and Ground"} negotiate its runway, slot and gate for up to 3 turns. A rule engine checks {rulesCount(config?.rule_ids)} and vetoes any plan that breaks one. You approve, edit or override the result.</p>
               {runErr && <p className="dec-line neg">{runErr}</p>}
               <div className="dec-actions"><button className="btn primary wide" onClick={negotiate}>{status === "error" ? "Run again" : "Start negotiation"}</button></div>
             </div>

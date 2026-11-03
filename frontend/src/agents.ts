@@ -10,7 +10,7 @@ const PILOT = "Flies one flight: its fuel, ETA and crew hours. A rule-based chec
 function airlineWhat(code: string, groups: AirlineGroup[]): string {
   const g = groups.find((x) => x.code === code);
   const own = g?.callsigns.length ? ` Its flights: ${g.callsigns.join(", ")}.` : "";
-  return `Speaks for ${g?.name ?? `airline ${code}`}.${own} Moves its own flights between slots and gates, and rejects any plan that leaves one of them clearly worse off than it started.`;
+  return `Speaks for ${(g?.name ?? `airline ${code}`).replace(/\.+$/, "")}.${own} Moves its own flights between slots and gates, and rejects any plan that leaves one of them clearly worse off than it started.`;
 }
 
 /** Everyone who takes part: the voters (`agents`), then the pilots (formula-only, never vote). Old runs list the focus pilot among the voters. */
@@ -26,14 +26,14 @@ export function roster(agents: AgentId[], pilots: string[] = [], airlines: Airli
 
 export const unableLine = (b: UnableBody): string => b.text;
 
-const fromWhom = (p: Objection["proposed_by"]) => (p === "ENGINE" ? "the opening plan" : `${agentName(p)}'s plan`);
+const fromWhom = (p: Objection["proposed_by"]) => `objecting to ${p === "ENGINE" ? "the opening plan" : `${agentName(p)}'s plan`}`;
 
 /** One breach, e.g. "AA2712 delay +15.5 min vs the original plan (ATC's plan)". The wording follows floor_source. */
 export function objectionLine(o: Objection): string {
   const d = o.value - o.floor;
   const what = o.metric === "delay_min" ? `delay ${signed(d)} min` : `fuel ${signed(d)} kg`;
-  const vs = o.floor_source === "best_seen" ? "the best plan seen" : "the original plan";
-  return `${o.callsign} ${what} vs ${vs} (${fromWhom(o.proposed_by)})`;
+  const vs = o.floor_source === "best_seen" ? "the best plan seen so far" : "the original plan";
+  return `${o.callsign} ${what} vs ${vs} \u2014 ${fromWhom(o.proposed_by)}`;
 }
 
 /** Who is in the room, from the best source at hand: a finished run, else the OPEN message, else the wave itself (before negotiating). */
