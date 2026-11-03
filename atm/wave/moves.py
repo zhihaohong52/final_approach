@@ -152,23 +152,39 @@ def _wind_rank(wave: Wave, aircraft_type: str | None, in_use: dict[str, int] | N
     return [rid for _, rid in sorted(rows)]
 
 
-def fcfs_plan(wave: Wave) -> JointPlan:
-    """First come first served: by earliest ETA, best-ranked open runway (see _wind_rank), earliest
-    wake-legal slot behind the queue and already placed flights, scheduled gate, no absorption."""
-    placed: dict[tuple, list[tuple[float, str]]] = {}
+def _fcfs_order(wave: Wave):
+    return sorted(wave.flights, key=lambda f: (f.eta_earliest_min, f.callsign))
+
+
+def fcfs_runways(wave: Wave) -> dict[str, str]:
+    """FCFS runway choice per wave flight (callsign -> runway end; None when the airport has no
+    runways): by earliest ETA, the best-ranked open runway given the ends already in use."""
     in_use: dict[str, int] = {}
     for q in wave.queue:
-        placed.setdefault(strip_of(q.runway), []).append((float(q.slot_min), q.wake))
         in_use[q.runway] = in_use.get(q.runway, 0) + 1
-    out = {}
-    for f in sorted(wave.flights, key=lambda f: (f.eta_earliest_min, f.callsign)):
+    out: dict[str, str] = {}
+    for f in _fcfs_order(wave):
         ranked = _wind_rank(wave, f.aircraft_type, in_use)
         rw = ranked[0] if ranked else (wave.airport.runways[0].id if wave.airport.runways else None)
+        if rw:
+            in_use[rw] = in_use.get(rw, 0) + 1
+        out[f.callsign] = rw
+    return out
+
+
+def fcfs_plan(wave: Wave) -> JointPlan:
+    """First come first served: by earliest ETA, best-ranked open runway (see fcfs_runways), earliest
+    wake-legal slot behind the queue and already placed flights, scheduled gate, no absorption."""
+    placed: dict[tuple, list[tuple[float, str]]] = {}
+    for q in wave.queue:
+        placed.setdefault(strip_of(q.runway), []).append((float(q.slot_min), q.wake))
+    runways = fcfs_runways(wave)
+    out = {}
+    for f in _fcfs_order(wave):
+        rw = runways[f.callsign]
         key = strip_of(rw) if rw else ("",)
         t = _earliest_legal(wave, placed.get(key, []), f.wake, f.eta_earliest_min)
         placed.setdefault(key, []).append((t, f.wake))
-        if rw:
-            in_use[rw] = in_use.get(rw, 0) + 1
         out[f.callsign] = Assignment(f.callsign, "land", rw, t, f.scheduled_gate)
     return JointPlan([out[f.callsign] for f in wave.flights], "FCFS")
 
