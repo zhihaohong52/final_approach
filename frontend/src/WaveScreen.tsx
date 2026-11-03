@@ -10,7 +10,8 @@ import { Checks, Limits, Outcome, PlanTable, Sources, Weather } from "./componen
 import { Radar, SCAN_MIN, type Tone } from "./components/Radar";
 import { Strips } from "./components/Strips";
 import { Surface, type RejectedGround } from "./components/Surface";
-import { agentName, clock, clockSec, dateLabel, signed } from "./format";
+import { participants, roster } from "./agents";
+import { agentClass, agentName, clock, clockSec, dateLabel, signed } from "./format";
 import { chipLabel as chipOf } from "./scope";
 import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
 import { vetoConflicts } from "./veto";
@@ -416,6 +417,9 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const m = wave.metar;
   const wind = m ? (m.wind_kt ? `${m.wind_dir_deg != null ? String(Math.round(m.wind_dir_deg)).padStart(3, "0") : "VRB"}° ${m.wind_kt}${m.gust_kt ? `G${m.gust_kt}` : ""} kt` : "wind calm") : "no METAR";
   const radio = lastRadio(messages);
+  const openBody = messages.find((m) => m.body.type === "OPEN")?.body;
+  const people = participants(wave, result, openBody && openBody.type === "OPEN" ? openBody : null);
+  const nPilots = roster(people.agents, people.pilots, people.airlines).filter((r) => r.cls === "pilot").length;
   const focusName = wave.focus ? icao(wave.focus) : null;
 
   return (
@@ -648,11 +652,12 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         <section className="card feed-card">
           <div className="feed-head">
             <h2>Negotiation</h2>
-            <span className="meta">{status === "running" ? `turn ${Math.max(1, lastTurn?.round ?? 1)} of 3` : result ? `${result.stats.model_calls} model calls · ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}` : `3 agents · ${config?.rule_ids?.length ? `${config.rule_ids.length} rules` : "rule engine"}`}</span>
+            <span className="meta">{status === "running" ? `turn ${Math.max(1, lastTurn?.round ?? 1)} of 3` : result ? `${result.stats.model_calls} model calls · ${result.stats.fallbacks} fallback${result.stats.fallbacks === 1 ? "" : "s"}` 
+: `${people.agents.length} agents${nPilots > people.agents.filter((a) => a.startsWith("PILOT")).length ? ` · ${nPilots} pilots` : ""} · ${config?.rule_ids?.length ? `${config.rule_ids.length} rules` : "rule engine"}`}</span>
           </div>
           {result?.narration && <p className="brief">{icaoText(result.narration.brief)}<span className="brief-src"> {result.narration.source === "claude" ? `Written by ${result.narration.model ?? "Claude"} from the log; it decides nothing.` : "From a template over the log."}</span></p>}
           {result?.model_errors.length ? <p className="warnline">{result.model_errors.join(" · ")}</p> : null}
-          <div className="feed"><Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} ruleIds={config?.rule_ids} /></div>
+          <div className="feed"><Log messages={messages} running={status === "running"} focus={result?.focus ?? wave.focus} details={details} ruleIds={config?.rule_ids} agents={people.agents} pilots={people.pilots} airlines={people.airlines} /></div>
           {messages.length > 0 && <label className="check foot"><input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />Show model, probability and latency</label>}
         </section>
         <section className="card flights-card">
@@ -706,13 +711,13 @@ function intro(w: WaveScenario): string {
 }
 
 function lastRadio(msgs: NegotiationMessage[]): { who: string; cls: string; text: string } | null {
-  const m = [...msgs].reverse().find((x) => x.body.type === "AGENT_TURN" || x.body.type === "OPEN" || x.body.type === "CHECK" || x.body.type === "CONSENSUS");
+  const m = [...msgs].reverse().find((x) => x.body.type === "AGENT_TURN" || x.body.type === "UNABLE" || x.body.type === "OPEN" || x.body.type === "CHECK" || x.body.type === "CONSENSUS");
   if (!m) return null;
   const b = m.body;
   const who = agentName(m.sender).replace(/^Pilot (\S+)/, (_, cs) => `Pilot ${icao(cs)}`);
-  const cls = m.sender.startsWith("PILOT") ? "pilot" : m.sender.toLowerCase();
+  const cls = agentClass(m.sender);
   const text = b.type === "AGENT_TURN" ? (b.moves.length ? b.moves.map((x) => x.move.label).join("; ") : "keeps the plan on the table")
-    : b.type === "OPEN" ? "opens with the first-come plan" : b.type === "CHECK" ? (b.passed ? "plan passes every rule" : `vetoed: ${b.violations.map((v) => v.rule).join(", ")}`)
+    : b.type === "UNABLE" ? b.text : b.type === "OPEN" ? "opens with the first-come plan" : b.type === "CHECK" ? (b.passed ? "plan passes every rule" : `vetoed: ${b.violations.map((v) => v.rule).join(", ")}`)
     : b.type === "CONSENSUS" ? `all ${b.accepted_by.length} agents accept` : "";
   return { who, cls, text: icaoText(text) };
 }

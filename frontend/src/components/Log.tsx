@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import type { AgentTurnBody, Assignment, DecisionMeta, JointPlan, NegotiationMessage, RuleId } from "../api/types";
-import { icao, icaoText } from "../callsign";
+import type { AgentId, AgentTurnBody, AirlineGroup, Assignment, DecisionMeta, JointPlan, NegotiationMessage, RuleId } from "../api/types";
+import { objectionLine, roster, unableLine } from "../agents";
+import { icaoText } from "../callsign";
 import { agentClass, agentName as rawAgentName } from "../format";
 import { rulesCount } from "../rules";
 
@@ -19,7 +20,7 @@ function summary(m: NegotiationMessage): string {
     case "NO_CONSENSUS": return `No consensus in turn ${b.turn}`;
     case "FALLBACK": return `Deterministic solver picks plan ${b.plan_id} (${b.method})`;
     case "MODEL_FALLBACK": return `${b.from_model} failed (${b.error}); ${b.to_model} answers`;
-    case "UNABLE": return b.text;   // v2.3 (the full UNABLE line is A8)
+    case "UNABLE": return unableLine(b);
     // superseded in v2.0, still readable for old runs
     case "MOVE": return b.move.label;
     case "MOVE_REJECTED": return `${b.move.label}: vetoed, ${b.violations[0]?.rule ?? "rule"}`;
@@ -135,9 +136,18 @@ function Turn({ b, details, diff }: { b: AgentTurnBody; details: boolean; diff?:
       {b.rejected.map((r) => (
         <div key={r.move.id} className="msg-why breach">Vetoed: {plain(r.move.label, details)}. {plain(r.violations[0]?.detail ?? r.reason, details)}</div>
       ))}
+      {b.objections?.length ? (
+        <div className="msg-why breach">
+          Objects to {new Set(b.objections.map((o) => o.plan_id)).size === 1 ? "the plan" : "plans"} on the table:
+          <ul className="msg-obj">
+            {b.objections.slice(0, 6).map((o, i) => <li key={i}>{icaoText(objectionLine(o))}</li>)}
+            {b.objections.length > 6 && <li>and {b.objections.length - 6} more</li>}
+          </ul>
+        </div>
+      ) : null}
       <div className="msg-why">
         Own plan scores {b.proposal_utility.toFixed(2)} · accepts {acc} of {b.votes.length} plan{b.votes.length === 1 ? "" : "s"} on the table
-        {details ? b.votes.filter((v) => v.vote === "REJECT").map((v) => ` · rejects ${v.plan_id} (${v.utility.toFixed(2)} < ${v.reservation.toFixed(2)})`).join("")
+        {details ? b.votes.filter((v) => v.vote === "REJECT").map((v) => ` · rejects ${v.plan_id} (${v.utility.toFixed(2)} < ${v.reservation.toFixed(2)})${v.decided_by === "floor" ? " by its fairness floor" : ""}`).join("")
           : (() => { const n = b.votes.filter((v) => v.vote === "REJECT").length; return n ? ` · rejects ${n} below its minimum` : ""; })()}
       </div>
       {details && b.moves.map((x) => <div key={x.move.id} className="msg-dec">{x.move.label.split(" ").slice(0, 2).join(" ")} · {meta(x.decision)}</div>)}
@@ -147,14 +157,15 @@ function Turn({ b, details, diff }: { b: AgentTurnBody; details: boolean; diff?:
   );
 }
 
-export function Log({ messages, running, focus, details = false, ruleIds }: { messages: NegotiationMessage[]; running: boolean; focus?: string | null; details?: boolean; ruleIds?: RuleId[] }) {
+export function Log({ messages, running, focus, details = false, ruleIds, agents, pilots, airlines }: { messages: NegotiationMessage[]; running: boolean; focus?: string | null; details?: boolean; ruleIds?: RuleId[]; agents?: AgentId[]; pilots?: string[]; airlines?: AirlineGroup[] }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => { if (running && box.current) box.current.scrollTop = box.current.scrollHeight; }, [messages.length, running]);
   if (!messages.length) {
+    const people = roster(agents ?? ["ATC", ...(focus ? [`PILOT:${focus}` as AgentId] : []), "GROUND"], pilots, airlines);
+    const pilotCards = people.filter((r) => r.cls === "pilot");
     const roles: [string, string, string][] = [
-      ["ATC", "atc", "Sees the runways, the queue and the wind. Sequences every flight: landing order, runway, slot, speed control or ground delay."],
-      [focus ? `Pilot ${icao(focus)}` : "Pilot", "pilot", `Flies the disrupted flight${focus ? ` ${icao(focus)}` : ""} only: its fuel, ETA and connections. Slows down, takes a ground delay, asks to divert or accepts.`],
-      ["Ground", "ground", "Sees gates, stands and crews. Reassigns a gate, sends a flight to a remote stand, swaps gates."],
+      ...people.filter((r) => r.cls !== "pilot" || pilotCards.length === 1).map((r): [string, string, string] => [icaoText(r.name), r.cls, r.what]),
+      ...(pilotCards.length > 1 ? [[`${pilotCards.length} pilots`, "pilot", pilotCards[0].what] as [string, string, string]] : []),
       ["Engine", "engine", `Deterministic code, not a model. Checks ${rulesCount(ruleIds)} on every plan and vetoes any that breaks one.`],
     ];
     return (
@@ -177,6 +188,15 @@ export function Log({ messages, running, focus, details = false, ruleIds }: { me
           <h3 className="round-h">{ROUND[r] ?? `Turn ${r}`}</h3>
           {messages.filter((m) => m.round === r).map((m) => {
             const b = m.body;
+            if (b.type === "UNABLE") return (
+              <article key={m.seq} className="msg unable">
+                <div className="msg-top">
+                  <span className="who pilot">{agentName(m.sender)}</span>
+                  <div className="msg-body">{plain(unableLine(b), details)}</div>
+                </div>
+                <div className="msg-why">{b.source}</div>
+              </article>
+            );
             const rej = b.type === "MOVE_REJECTED" || (b.type === "CHECK" && !b.passed);
             const d = b.type === "AGENT_TURN" ? undefined : m.decision;
             return (

@@ -32,6 +32,11 @@ export const fmtInt = (n: number) => n.toLocaleString("en-US");
 
 export function agentClass(s: Sender): string {
   if (s.startsWith("PILOT")) return "pilot";
+  if (s.startsWith("AIRLINE:")) return "airline";
   return s.toLowerCase();
 }
-export const agentName = (s: Sender | AgentId) => (s.startsWith("PILOT:") ? `Pilot ${s.slice(6)}` : s === "ATC" ? "ATC" : s === "GROUND" ? "Ground" : s === "ENGINE" ? "Engine" : "Triage");
+export function agentName(s: Sender | AgentId): string {
+  if (s.startsWith("PILOT:")) return `Pilot ${s.slice(6)}`;
+  if (s.startsWith("AIRLINE:")) return `Airline ${s.slice(8)}`;
+  return s === "ATC" ? "ATC" : s === "GROUND" ? "Ground" : s === "ENGINE" ? "Engine" : s === "DECIDER" ? "Triage" : s;
+}

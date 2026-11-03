@@ -35,7 +35,7 @@
   --human: #e8b04b;           /* the duty manager's edits */
   --fixed: #5fbf8f;           /* traffic not in the negotiation */
   --scope: #0b0c0e;
-  --agent-atc: #4a8ad6; --agent-pilot: #5fc39c; --agent-ground: #d9a441; --agent-engine: #8f9197;
+  --agent-atc: #4a8ad6; --agent-pilot: #5fc39c; --agent-ground: #d9a441; --agent-engine: #8f9197; --agent-airline: #c586d9;
   --shadow: 0 12px 28px rgba(0, 0, 0, .2);
   --radius-card: 6px;
   --radius-control: 999px;
@@ -261,12 +261,15 @@ tbody tr:hover { background: #18171c; }
 .msg-top { display: flex; gap: 12px; align-items: baseline; }
 .who { flex: none; width: 104px; font: 500 12px var(--mono); white-space: nowrap; color: var(--soft); }
 .who::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--agent-engine); }
-.who.atc::before { background: var(--agent-atc); } .who.pilot::before { background: var(--agent-pilot); } .who.ground::before { background: var(--agent-ground); }
+.who.atc::before { background: var(--agent-atc); } .who.pilot::before { background: var(--agent-pilot); } .who.ground::before { background: var(--agent-ground); } .who.airline::before { background: var(--agent-airline); }
 .msg-body { flex: 1; min-width: 0; color: var(--text); }
 .msg-why, .msg-dec { margin-left: 116px; }
 .msg-why { color: var(--muted); font-size: 13px; margin-top: 3px; max-width: 80ch; }
 .msg-dec { color: var(--muted); font: 12px var(--mono); margin-top: 3px; }
 .msg.rej .msg-body { color: var(--negative); }
+.msg-obj { margin: 3px 0 0; padding-left: 18px; font: 12px/1.6 var(--mono); color: var(--soft); }
+.msg.unable .msg-body { overflow-wrap: anywhere; max-width: 80ch; text-wrap-style: pretty; }   /* ~240 characters: wrap, never clip */
+.msg.unable .msg-why { font: 12px var(--mono); }
 .msg-diff { margin: 6px 0 2px 116px; padding: 6px 10px; border-left: 1px solid var(--control); font: 12px/1.65 var(--mono); white-space: pre-wrap; color: var(--soft); }
 .msg-diff.muted { color: var(--muted); border-left-color: transparent; padding-left: 0; }
 .msg-diff-total { color: var(--muted); margin-top: 2px; }
@@ -510,7 +513,7 @@ tbody tr:hover { background: #18171c; }
 .dec-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; }
 .btn.wide { flex: 1; }
 .who-inline { font: 600 12px var(--mono); margin-right: 4px; }
-.who-inline.atc { color: var(--agent-atc); } .who-inline.pilot { color: var(--agent-pilot); } .who-inline.ground { color: var(--agent-ground); } .who-inline.engine { color: var(--agent-engine); }
+.who-inline.atc { color: var(--agent-atc); } .who-inline.pilot { color: var(--agent-pilot); } .who-inline.ground { color: var(--agent-ground); } .who-inline.airline { color: var(--agent-airline); } .who-inline.engine { color: var(--agent-engine); }
 .mini-kpis { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 12px 0; transition: opacity 200ms; }
 .mini-kpis.pending { opacity: .5; }
 .mini-kpis .kpis { grid-template-columns: 1fr 1fr; row-gap: 12px; }
