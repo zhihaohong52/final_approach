@@ -373,11 +373,38 @@ def test_constants_exported():
     assert RUNWAY_HOLD_CLEARANCE_M == 90.0 and RUNWAY_ON_PAVEMENT_M == 45.0
 
 
-def test_untagged_crossing_found_geometrically_ord_1886():
-    # KORD taxiway SS meets 09R/27L at node 1886, but its OSM edges carry no strip tag
+def _any_route(g, pred, ends=None):
+    """First route (exit end order, first 3 exits per end, ~15 sampled stands) that satisfies `pred`."""
+    stands = sorted(g.stands.values(), key=lambda s: s["node"])
+    for end in sorted(ends or g.exits):
+        for e in g.exits[end][:3]:
+            for st in stands[::max(1, len(stands) // 15)]:
+                try:
+                    p = unimpeded(g, e["node"], st["node"])
+                except NoPath:
+                    continue
+                if pred(p):
+                    return p
+    raise AssertionError("no such route")
+
+
+def test_untagged_crossing_found_geometrically_ord_ss():
+    # KORD taxiway SS meets 09R/27L at a runway node, but its OSM edges carry no strip tag (found by property,
+    # not by node id, so a surface rebuild does not break the test)
+    from atm.wave.surface import runway_strips_at
     g = load_graph("KORD")
-    p = _route_via(g, "09L", lambda p: 1886 in p.nodes[1:-1])
-    assert (1886, "09R/27L") in p.crossings
+
+    def untagged_ss(u):
+        es = g.adj[u]
+        return ("09R/27L" in runway_strips_at(g, u)
+                and sum(1 for _, _, k, n, st in es if k != "runway" and n == "SS" and st is None) >= 2
+                and not any(k != "runway" and st for _, _, k, _, st in es))
+
+    ss = [u for u in range(len(g.nodes)) if untagged_ss(u)]
+    assert ss
+    p = _any_route(g, lambda p: any(u in p.nodes[1:-1] for u in ss))
+    u = next(u for u in p.nodes[1:-1] if u in ss)
+    assert (u, "09R/27L") in p.crossings
 
 
 def test_ksea_untagged_crossing_waits_at_the_osm_hold():
@@ -398,9 +425,14 @@ def test_ksea_untagged_crossing_waits_at_the_osm_hold():
 
 
 def test_starting_inside_another_strips_zone_fails_ord_27c():
-    # KORD exit 27C node 1715 lies 60 m from 04L/22R and the route crosses 04L/22R next: it cannot back out
+    # a KORD 27C exit on 09C/27C that lies inside 04L/22R's zone (45-90 m: off its pavement) and whose route crosses
+    # 04L/22R next: the aircraft cannot back out
+    from atm.wave.surface import runway_strips_at, strip_distance_m
     g = load_graph("KORD")
-    p = _route_via(g, "27C", lambda p: p.nodes[0] == 1715 and any(st == "04L/22R" for _, st in p.crossings))
+    starts = {e["node"] for e in g.exits["27C"] if "09C/27C" in runway_strips_at(g, e["node"])
+              and RUNWAY_ON_PAVEMENT_M <= strip_distance_m(g, e["node"], "04L/22R") < RUNWAY_HOLD_CLEARANCE_M}
+    assert starts
+    p = _any_route(g, lambda p: p.nodes[0] in starts and any(st == "04L/22R" for _, st in p.crossings), ["27C"])
     res = Reservations({}, {}, {"04L/22R": [(1.0, "landing", "UA9")]})
     s = schedule(g, p, 0.0, res, "AA1")
     assert not s.ok and "04L/22R" in s.reason and "UA9" in s.reason
@@ -452,39 +484,43 @@ def _hand_track(g, p, cs, t0, wait_idx, wait_to):
     return GroundTrack(cs, "arrival", True, None, "", [], pts, [], 0.0, 0.0, "osm")
 
 
-def test_osm_hold_on_the_runway_does_not_end_the_vacate_stretch_ord_889():
+# Rebuilt surface data drops OSM holds on the pavement, so these tests inject one into a synthetic line graph.
+
+def test_osm_hold_on_the_runway_does_not_end_the_vacate_stretch():
+    # the route starts on runway R; an OSM hold for R snapped 20 m off its centreline must not end the vacate stretch
     from atm.wave.surface import on_runway
-    g = load_graph("KORD")
-    assert 889 in g.holds and on_runway(g, 889, "04R/22L")                    # snapped 4 m off the centreline
-    stands = sorted(g.stands.values(), key=lambda s: s["node"])
-    p = next(pp for s in stands[::20] for pp in [unimpeded(g, 8, s["node"])] if pp.nodes[1] == 889)
-    t46 = sum(p.seg_s[:2]) / 60
-    res = Reservations({46: [(0.0, t46 + 3.0, "BLOCK")]}, {}, {"04R/22L": [(2.0, "landing", "UA9")]})
+    xs = [0, 20, 60, 120, 400]
+    g, at = _line_graph(xs, {"R": 0}, holds={20: "R"})
+    assert on_runway(g, at[20], "R")
+    p = _line_path(g, at, xs)
+    t120 = sum(p.seg_s[:3]) / 60
+    res = Reservations({at[120]: [(0.0, t120 + 3.0, "BLOCK")]}, {}, {"R": [(2.0, "landing", "UA9")]})
     s = schedule(g, p, 0.0, res, "AA1")
-    assert all(w["node"] != 889 for w in s.waits) and s.waits[0]["node"] == 8
-    assert s.exit_clear_min > 2.0                                              # T31 fails it: still on 04R/22L
+    assert [w["node"] for w in s.waits] == [at[0]]                            # held at the exit, not on the hold
+    assert s.exit_clear_min == pytest.approx(next(q["t_min"] for q in s.points if q["node"] == at[120]))
+    assert s.exit_clear_min > 2.0                                              # T31 fails it: still on R
     ev = res.runway_events
     msgs = verify_separation([track(s, "AA1")], runway_events=ev, g=g)
-    assert any("vacating 04R/22L" in m and "UA9" in m for m in msgs)
-    # the old behaviour, by hand: off node 8 at 0.07, waiting on the hold at 889 through UA9's landing
-    old = _hand_track(g, p, "AA1", 0.0, 1, 3.57)
+    assert any("vacating R" in m and "UA9" in m for m in msgs)
+    # the old behaviour, by hand: off the exit, then waiting on the hold at 20 m through UA9's landing
+    old = _hand_track(g, p, "AA1", 0.0, 1, 3.6)
     assert any("UA9" in m for m in verify_separation([old], runway_events=ev, g=g))
 
 
-def test_osm_hold_on_the_runway_is_not_a_wait_spot_sfo_899():
-    from atm.wave.surface import _crossing_zones, strip_distance_m
-    g = load_graph("KSFO")
-    stands = sorted(g.stands.values(), key=lambda s: s["node"])
-    p = next(pp for s in stands[::max(1, len(stands) // 15)] for pp in [unimpeded(g, 884, s["node"])]
-             if 899 in pp.nodes[1:])
-    i = p.nodes.index(899)
-    t898 = sum(p.seg_s[:i + 1]) / 60
-    res = Reservations({898: [(0.0, t898 + 4.0, "BLOCK")]}, {}, {"10R/28L": [(t898 + 2.0, "landing", "UA9")]})
+def test_osm_hold_on_the_runway_is_not_a_wait_spot():
+    # crossing R: an OSM hold for R 30 m from the centreline (on the pavement) is skipped; the one at 75 m is used
+    from atm.wave.surface import on_runway
+    xs = [-400, -200, -75, -30, 40, 76, 300]
+    g, at = _line_graph(xs, {"R": 0}, holds={-75: "R", -30: "R"})
+    assert on_runway(g, at[-30], "R") and not on_runway(g, at[-75], "R")
+    p = _line_path(g, at, xs)
+    i = p.nodes.index(at[76])
+    t76 = sum(p.seg_s[:i]) / 60
+    res = Reservations({at[76]: [(0.0, t76 + 4.0, "BLOCK")]}, {}, {"R": [(t76 + 2.0, "landing", "UA9")]})
     s = schedule(g, p, 0.0, res, "AA1")
-    assert s.ok and [w["node"] for w in s.waits] == [900]
-    assert strip_distance_m(g, 900, "10R/28L") == pytest.approx(75.6, abs=0.5)
+    assert s.ok and [w["node"] for w in s.waits] == [at[-75]]
     assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
-    # the old behaviour, by hand: waiting on hold 899 (30.6 m from the centreline) through the landing
-    old = _hand_track(g, p, "AA1", 0.0, i, t898 + 4.5)
+    # the old behaviour, by hand: waiting on the on-pavement hold through the landing
+    old = _hand_track(g, p, "AA1", 0.0, p.nodes.index(at[-30]), t76 + 4.5)
     msgs = verify_separation([old], runway_events=res.runway_events, g=g)
-    assert any("10R/28L protected zone" in m and "UA9" in m for m in msgs)
+    assert any("R protected zone" in m and "UA9" in m for m in msgs)
