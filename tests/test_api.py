@@ -201,3 +201,16 @@ def test_readme_attributions():
     text = (Path(__file__).resolve().parents[1] / "README.md").read_text()
     assert "Procedures: FAA CIFP 2611, not for navigation" in text
     assert "© OpenStreetMap contributors" in text
+
+
+def test_decision_run_id_and_edits_are_validated(client):
+    """Final review Minor 5: a non-string run_id was stringified (["a"] -> "['a']") and edits were stored unbounded."""
+    for rid in (["a"], 7, "", "r" * 65, None):
+        r = client.post("/api/decision", json={"run_id": rid, "decision": "APPROVE"})
+        assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request", rid
+    for edits in ([{"callsign": "AA1"}] * 65, [{"callsign": "AA1", "note": "x" * 70_000}], "AA1", [1]):
+        r = client.post("/api/decision", json={"run_id": "abc", "decision": "APPROVE", "edits": edits})
+        assert r.status_code == 422 and r.json()["error"]["code"] == "invalid_request"
+        assert len(r.text) < 300
+    ok = client.post("/api/decision", json={"run_id": "abc", "decision": "APPROVE", "edits": [{"callsign": "AA1", "slot_min": 3}]})
+    assert ok.status_code == 200

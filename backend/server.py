@@ -172,22 +172,35 @@ class Decision(BaseModel):
     note: str = ""
 
 
+DECISION_RUN_ID_MAX = 64      # run ids are 12 hex chars; replay ids are wave-like
+DECISION_EDITS_MAX = 64       # a wave has at most a handful of flights
+DECISION_EDITS_BYTES = 65536
+
+
 @app.post("/api/decision")
 def decision(body: dict = Body(...)):
-    if "run_id" in body:  # v2: {run_id, decision, note?}
+    if "run_id" in body:  # v2: {run_id, decision, note?, edits?}
+        rid, edits = body.get("run_id"), body.get("edits")
+        if not isinstance(rid, str) or not 1 <= len(rid) <= DECISION_RUN_ID_MAX:
+            return _err(422, "invalid_request", f"run_id must be a string of 1-{DECISION_RUN_ID_MAX} characters")
+        if edits is None:
+            edits = []
+        if not isinstance(edits, list) or len(edits) > DECISION_EDITS_MAX or not all(isinstance(e, dict) for e in edits) \
+                or len(json.dumps(edits, default=str)) > DECISION_EDITS_BYTES:
+            return _err(422, "invalid_request", f"edits must be a list of at most {DECISION_EDITS_MAX} assignments "
+                                                f"({DECISION_EDITS_BYTES // 1024} KB of JSON)")
         kind, note = body.get("decision"), str(body.get("note") or "").strip()
         if kind not in ("APPROVE", "OVERRIDE"):
             return _err(422, "invalid_decision", "decision must be APPROVE or OVERRIDE")
         if kind == "OVERRIDE" and not note:
             return _err(422, "note_required", "a note is required to OVERRIDE")
         now = datetime.now(timezone.utc).isoformat()
-        edits = body.get("edits") if isinstance(body.get("edits"), list) else []
         store = get_store()
-        stored = store.record_decision({"run_id": str(body["run_id"]), "decision": kind, "note": note,
+        stored = store.record_decision({"run_id": rid, "decision": kind, "note": note,
                                         "edits": edits, "recorded_at": now, "ts": time.time()})
         persisted = bool(stored) and _decision_persisted(store)
         if not stored:
-            log.warning("decision for run %s was not persisted", body["run_id"])
+            log.warning("decision for run %s was not persisted", rid)
         return {"ok": True, "recorded_at": now, "persisted": persisted}
     try:  # v1 behaviour, unchanged
         d = Decision(**body)
