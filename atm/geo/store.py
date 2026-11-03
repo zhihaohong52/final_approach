@@ -1,4 +1,5 @@
-"""Loader for the per-airport CIFP procedure documents (data/ref/procedures/<ICAO>.json.gz).
+"""Loaders for the per-airport CIFP procedure documents (data/ref/procedures/) and OSM surface documents
+(data/ref/surface/), both <ICAO>.json.gz.
 
 Reads through the datastore (PgStore in production, FileStore offline); never touches the network.
 """
@@ -19,4 +20,11 @@ PROCEDURES_DIR = ROOT / "data/ref/procedures"
 def load_procedures(icao: str) -> dict | None:
     """Procedures document for `icao` (header, airport, fixes, runways, stars, approaches, holds), or None."""
     blob = get_store().procedures(icao)
+    return None if blob is None else json.loads(gzip.decompress(blob))
+
+
+@lru_cache(maxsize=4)
+def load_surface(icao: str) -> dict | None:
+    """OSM surface document for `icao` (header, nodes, edges, exits, stands, gates, holding_positions, ...), or None."""
+    blob = get_store().surface(icao)
     return None if blob is None else json.loads(gzip.decompress(blob))

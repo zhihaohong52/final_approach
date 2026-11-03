@@ -34,7 +34,12 @@ def test_degree2_chains_merged():
 
 
 def test_reach_drops_when_stands_unreachable():
+    # Drop lane T and move the S1/S2 cluster 600 m north, beyond the 150 m segment snap of every taxiway:
+    # the stands are then reachable by no taxi edge (the old cluster sat ~100 m from taxiway A and would now snap to it).
     broken = json.loads(json.dumps(OSM)); broken["elements"] = [e for e in broken["elements"] if e.get("tags", {}).get("ref") != "T"]
+    for e in broken["elements"]:
+        if e.get("tags", {}).get("aeroway") == "parking_position":
+            e["lat"] = 0.0060
     assert build_surface(broken, "KXXX", RWYS, (0.0, 0.0), "t")["quality"]["reach_pct"]["09"] == 0.0
 
 
@@ -106,8 +111,8 @@ def _with_stand(dy_m, name="SX", extra=()):
     return build_surface(osm, "KXXX", RWYS, (0.0, 0.0), "t")
 
 
-def test_off_graph_stand_snaps_within_50m_else_isolated():
-    near = _with_stand(30)    # 30 m north of T's end of the S1/S2 row, within 50 m of a T node
+def test_off_graph_stand_snaps_within_150m_else_isolated():
+    near = _with_stand(30)    # 30 m north of T's end of the S1/S2 row, within 150 m of a T segment
     far = _with_stand(500)
     n_near = next(x for x in near["stands"] if x["id"] == "SX")
     n_far = next(x for x in far["stands"] if x["id"] == "SX")
@@ -126,3 +131,20 @@ def test_present_end_with_no_exits_reports_reach():
     s = _s()
     assert s["exits"]["18"] == []
     assert s["quality"]["reach_pct"]["18"] == 0.0   # no exit node to seed from
+
+
+def test_stand_far_from_vertices_snaps_onto_the_middle_of_a_long_segment():
+    import math
+    osm = json.loads(json.dumps(OSM))
+    lat = lambda m: round(math.degrees(m / 6371000.0), 7)
+    osm["elements"] += [
+        {"type": "node", "id": 9801, "lat": lat(2000), "lon": 0.0251810},
+        {"type": "way", "id": 9802, "nodes": [1017, 9801], "tags": {"aeroway": "taxiway", "ref": "C"}},   # one 1.8 km segment
+        {"type": "node", "id": 9803, "lat": lat(1100), "lon": round(0.0251810 + math.degrees(100 / 6371000.0), 7),
+         "tags": {"aeroway": "parking_position", "name": "SM", "ref": "m"}}]   # 100 m east of the segment's middle
+    s = build_surface(osm, "KXXX", RWYS, (0.0, 0.0), "t")
+    sm = next(x for x in s["stands"] if x["id"] == "SM")
+    assert sm["node"] < len(s["nodes"]) and any(sm["node"] in e[:2] for e in s["edges"] if e[3] == "taxiway")
+    assert sum(e[4] == "C" for e in s["edges"]) == 2            # the segment was split at the stand's projection
+    assert abs(sum(e[2] for e in s["edges"] if e[4] == "C") - (2000 - 200)) < 5   # lengths stay consistent
+    assert s["quality"]["reach_pct"]["09"] == 1.0

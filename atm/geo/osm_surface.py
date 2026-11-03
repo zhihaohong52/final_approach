@@ -11,7 +11,7 @@ from collections import deque
 
 EARTH_R = 6371000.0
 SNAP_M = 15.0              # taxiway end -> runway centreline
-STAND_SNAP_M = 50.0        # stand node not on a way -> nearest taxi vertex
+STAND_SNAP_M = 150.0       # off-graph stand -> nearest point on the nearest taxiway/taxilane segment
 TURN_DEG = 10.0
 RUNWAY_END_M = 150.0       # runway vertex must be this close to a threshold for the end to be "in OSM"
 STRIP_AXIS_M = 30.0        # runway vertex belongs to a strip if this close to its axis
@@ -174,13 +174,35 @@ def build_surface(osm: dict, icao: str, runways: list[dict], ref_latlon: tuple[f
     for nid, n in onode.items():
         if n["tags"].get("aeroway") == "parking_position":
             stand_srcs.append({"type": "n", "id": nid, "tags": n["tags"], "p": n["p"], "key": nid if nid in adj else None})
-    taxi_vertices = [v for v, nb in adj.items() if any(a[0] != "runway" for a in nb.values())]
+    segs, seen_seg = [], set()
+    for a, nb in adj.items():
+        for b, attrs in nb.items():
+            if attrs[0] != "runway" and frozenset((a, b)) not in seen_seg:
+                seen_seg.add(frozenset((a, b)))
+                segs.append([a, b, attrs])
     special: set = set()
-    for s in stand_srcs:
-        if s["key"] is None:
-            near = min(taxi_vertices, key=lambda v: _dist(pos[v], s["p"]), default=None)
-            if near is not None and _dist(pos[near], s["p"]) <= STAND_SNAP_M:
-                s["key"] = near
+    nstand = 0
+    for s in sorted(stand_srcs, key=lambda s: (s["type"], s["id"])):
+        if s["key"] is None and segs:
+            best = None
+            for i, (a, b, _at) in enumerate(segs):
+                d, _t, q = _seg_dist(s["p"], pos[a], pos[b])
+                if d <= STAND_SNAP_M and (best is None or d < best[0]):
+                    best = (d, i, q)
+            if best is not None:
+                _d, i, q = best
+                a, b, attrs = segs[i]
+                end = next((k for k in (a, b) if _dist(q, pos[k]) <= 1.0), None)
+                if end is None:   # split the segment with a new node at the projection
+                    nstand += 1
+                    end = ("stand", nstand)
+                    pos[end] = q
+                    del adj[a][b], adj[b][a]
+                    adj[a][end] = adj[b][end] = attrs
+                    adj[end] = {a: attrs, b: attrs}
+                    segs[i] = [a, end, attrs]
+                    segs.append([end, b, attrs])
+                s["key"] = end
         if s["key"] is not None:
             special.add(s["key"])
     hold_keys = [nid for nid, n in onode.items() if n["tags"].get("aeroway") == "holding_position" and nid in adj]
