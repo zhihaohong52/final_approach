@@ -19,7 +19,10 @@ import { parseRoute, waveHash } from "./route";
 
 const SCAN_S = SCAN_MIN * 60;       // the radar picture updates once per antenna revolution
 const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side from this width
-const SPEEDS = [1, 10, 60];
+// replay speeds as replayed time per real second: real time, then a minute, five and fifteen minutes a second,
+// so a three-hour wave plays in 3 h, 3 min, 36 s or 12 s
+const SPEEDS = [1, 60, 300, 900];
+const speedLabel = (v: number) => (v < 60 ? `${v} s/s` : `${v / 60} min/s`);
 
 const UNDO_KEY = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘Z" : "Ctrl+Z";
 
@@ -94,7 +97,7 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
   const [t, setT] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [ranReplay, setRanReplay] = useState(false);   // the result on screen was streamed from a recording
-  const [speed, setSpeed] = useState(10);          // replay speed: replayed seconds per real second
+  const [speed, setSpeed] = useState(60);          // replay speed: replayed seconds per real second
   const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
   const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
   const [pathsBusy, setPathsBusy] = useState(false);
@@ -509,7 +512,7 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
               </button>
               <span className="clock mono">{clockSec(wave.window_start, tNow)}</span>
               <div className="speed seg" role="group" aria-label="Replay speed">
-                {SPEEDS.map((v) => <button key={v} aria-pressed={speed === v} onClick={() => setSpeed(v)} title={v === 1 ? `Real time: one radar scan every ${SCAN_S} s` : `${v} times real time`}>{v}×</button>)}
+                {SPEEDS.map((v) => <button key={v} aria-pressed={speed === v} onClick={() => setSpeed(v)} title={v === 1 ? `Real time: one radar scan every ${SCAN_S} s` : `${v / 60} replayed minute${v === 60 ? "" : "s"} per second (${v}× real time)`}>{speedLabel(v)}</button>)}
               </div>
               {t != null && <button className="btn text sm" onClick={() => { setT(null); setPlaying(false); }}>Reset</button>}
             </div>
