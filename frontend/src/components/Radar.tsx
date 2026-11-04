@@ -39,15 +39,17 @@ interface Props {
   paths?: TrajectorySet | null;                // the engine's trajectories for `plan`; null = none
   pathsNote?: string | null;                   // set when a recorded run has no paths: no targets are drawn
   updating?: boolean;                          // trajectories for an edited plan are being recomputed
+  range?: number | null; onRange?: (r: number | null) => void;   // the scope range, held by the parent so it survives a page change
   fill?: boolean;                              // fill the parent's height also when narrow (half of a side-by-side panel)
 }
 
 interface Blip { cs: string; x: number; y: number; tone: Tone; l1: string; l2: string; out: number | null; title: string; trail: [number, number][]; ahead: [number, number] }
 
-export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false, fill = false }: Props) {
+export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, paths = null, pathsNote = null, updating = false, fill = false, range: rangeIn, onRange }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, boxH], setSize] = useState([960, 0]);
-  const [userRange, setRange] = useState<number | null>(null);   // null = Auto: 20 NM, wider while a hold is on the scope
+  const [ownRange, setOwnRange] = useState<number | null>(null);   // null = Auto: 20 NM, wider while a hold is on the scope
+  const userRange = onRange ? rangeIn ?? null : ownRange, setRange = onRange ?? setOwnRange;
   const [hoverFix, setHoverFix] = useState<string | null>(null);
   useEffect(() => {
     const el = box.current;
@@ -322,7 +324,8 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
     <div ref={box} className={`radar${wide || fill ? " fill" : ""}`}>
       <div className="range seg" role="group" aria-label="Scope range">
         <button aria-pressed={userRange === null} onClick={() => setRange(null)} title="20 NM, wider while a hold is on the scope">Auto</button>
-        {RANGES.map((r) => <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} NM</button>)}
+        {RANGES.map((r) => <button key={r} aria-pressed={range === r} onClick={() => setRange(r)} aria-label={`${r} NM`}>{r}</button>)}
+        <span className="unit" aria-hidden="true">NM</span>
       </div>
       {(beyond.length > 0 || awaiting.length > 0) && (
         <ul className="beyond" aria-label={`Inbound flights not drawn on the ${range} NM scope`}>
@@ -454,9 +457,9 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
           <>
             <text className="scope-note" x={14} y={H - 12}>{wave.airport.icao} · rings {step} NM{wide ? ` · the engine's paths for this plan · updates every ${SCAN_MIN * 60} s` : ` · ${SCAN_MIN * 60} s scan`}{updating ? " · updating paths…" : ""}</text>
             {anySynth && (
-              <g className="legend-synth" transform={`translate(${W - 16} ${TOP + 4})`}>
-                <line x1={-252} y1={-4} x2={-226} y2={-4} strokeDasharray="5 4" />
-                <text x={0} y={0} textAnchor="end">dashed = synthesized, not published</text>
+              <g className="legend-synth" transform={`translate(14 ${stack ? H - 40 : H - 26})`}>
+                <line x1={0} y1={-4} x2={24} y2={-4} strokeDasharray="5 4" />
+                <text x={32} y={0}>dashed = synthesized, not published</text>
               </g>
             )}
             <text className="scope-note" x={stack ? 14 : W - 16} y={stack ? H - 26 : H - 12} textAnchor={stack ? "start" : "end"}>

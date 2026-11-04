@@ -45,6 +45,7 @@ interface Props {
   focus?: string | null;           // the disrupted flight: the zoomed map centres on it when nothing is selected
   updating?: boolean;
   active?: boolean;                // false while its pane is hidden: it then skips rendering entirely
+  zoom?: number; onZoom?: (z: number) => void;   // held by the parent so the zoom survives a page change
   rejected?: RejectedGround | null; // a move the engine just vetoed: its failing ground conflicts, shown briefly
 }
 
@@ -247,10 +248,11 @@ const Airfield = memo(function Airfield({ g, W, H, S, cx, cy, top, keyX }: { g: 
 /** Hidden behind the radar it does not re-render at all; shown, only the aircraft layer follows the clock. */
 export const Surface = memo(SurfaceMap, (a, b) => a.active === false && b.active === false);
 
-function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false, rejected = null }: Props) {
+function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, updating = false, rejected = null, zoom: zoomIn, onZoom }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [[W, H], setSize] = useState([720, 480]);
-  const [zoom, setZoom] = useState(1);
+  const [ownZoom, setOwnZoom] = useState(1);
+  const zoom = onZoom ? zoomIn ?? 1 : ownZoom, setZoom = onZoom ?? setOwnZoom;
   const centre = useRef<{ who: string | null; xy: XY } | null>(null);
   useEffect(() => {
     const el = box.current;

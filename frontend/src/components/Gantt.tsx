@@ -9,6 +9,12 @@ import { axisEnd, axisStart } from "../scope";
 const capture = (el: Element | null, id: number) => { try { el?.setPointerCapture(id); } catch { /* pointer already released */ } };
 
 const LABEL = 72, RIGHT = 12, LANE = 28, BAR = 16, AXIS = 34, GAP = 24, NOTE = 22;
+// On the home page the Gantt shares the screen with the scope: its card is GANTT_SHARE of the page height (the same
+// 45% as .ops.home .plan-card in styles.css) and the drawing shrinks uniformly, down to MIN_K, to fit it; only past that
+// does the card scroll.
+export const GANTT_SHARE = 0.45;
+const MIN_K = 0.75;
+const FIT_MQ = "(min-width: 1100px) and (min-height: 700px)";
 const WAKE_QUICK_MIN = 2;            // quick in-browser check while dragging; the server applies the real wake table
 
 export interface Rejection { seq: number; move: Move; violations: RuleCheck[]; runway?: string }
@@ -79,12 +85,31 @@ const TONE_TEXT: Record<Tone, string> = { focus: "var(--hue)", flight: "var(--te
 export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, tone, involved, editable, onEdit, t, onTime, selected, onSelect, paths = null, onDrag, preview = null, previewFailed = false }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
-  const [W, setW] = useState(1100);
+  const [cw, setW] = useState(1100);   // the drawing is scaled by k to fit the card, so its own width is the container's over k
+  const [k, setK] = useState(1);
+  const [room, setRoom] = useState(Infinity);
+  const W = cw / k;
   const [drag, setDrag] = useState<Drag | null>(null);
   const [scrub, setScrub] = useState(false);
   const dragged = useRef(false);
   const [settle, setSettle] = useState(false);
   const [scrollX, setScrollX] = useState(0);                // lane notes follow the visible left edge on narrow screens
+  // the height the card can give the drawing on the home page (Infinity: the page scrolls instead)
+  useLayoutEffect(() => {
+    const el = wrap.current, main = el?.closest<HTMLElement>(".ops.home"), card = el?.closest<HTMLElement>(".plan-card");
+    if (!el || !main || !card) { setRoom(Infinity); return; }
+    const mq = matchMedia(FIT_MQ);
+    const measure = () => {
+      const cs = getComputedStyle(main);   // a percentage max-height is of the content box
+      const inner = main.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      setRoom(mq.matches ? Math.floor(GANTT_SHARE * inner - (card.offsetHeight - el.offsetHeight)) : Infinity);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(main); ro.observe(card);
+    mq.addEventListener("change", measure);
+    return () => { ro.disconnect(); mq.removeEventListener("change", measure); };
+  }, []);
   // measured before the first paint, so bars never start at a guessed width and glide into place
   useLayoutEffect(() => {
     const el = wrap.current;
@@ -177,6 +202,7 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   let y = gatesTop;
   for (const l of lanes) { gateY[l.g.id] = y; y += l.n * LANE; }
   const H = y + (hiddenGates ? NOTE : 0) + 6;
+  useLayoutEffect(() => { setK(Math.max(MIN_K, Math.min(1, room / H))); }, [room, H]);
   const ticks: number[] = [];
   for (let m = START; m <= END; m += 15) ticks.push(m);
   const tickPx = 15 * pxPerMin;
@@ -197,13 +223,13 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   const firstX = focusSlot != null ? x(focusSlot) : times.length ? x(Math.min(...times)) : 0;
   useEffect(() => {
     const el = wrap.current;
-    if (el && el.scrollWidth > el.clientWidth + 8) el.scrollLeft = Math.max(0, firstX - LABEL - (el.clientWidth - LABEL) / 3);
+    if (el && el.scrollWidth > el.clientWidth + 8) el.scrollLeft = Math.max(0, (firstX - LABEL - (el.clientWidth / k - LABEL) / 3) * k);
   }, [firstX]);
 
   // ---------- pointer: drag a bar, or scrub the time cursor on the axis ----------
   const local = (e: React.PointerEvent) => {
     const r = svg.current!.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top] as const;
+    return [(e.clientX - r.left) / k, (e.clientY - r.top) / k] as const;
   };
   const laneAt = (kind: "land" | "gate", py: number, fallback: string) => {
     if (kind === "land") {
@@ -347,13 +373,13 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
 
   return (
     <div className={`gantt-wrap${drag?.moved ? " dragging" : ""}`} ref={wrap} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)} tabIndex={-1} role="region" aria-label="Runway and gate timeline, scrolls sideways on small screens">
-      <svg className="gantt gantt-labels" width={LABEL - 4} height={H} aria-hidden="true">
+      <svg className="gantt gantt-labels" viewBox={`0 0 ${LABEL - 4} ${H}`} width={(LABEL - 4) * k} height={H * k} aria-hidden="true">
         <text className="group" x={0} y={AXIS - 6}>Runways</text>
         {runways.map((r) => <text key={r.id} className="lane-label" x={0} y={yRwy(r.id) + 18} style={r.open ? undefined : { fill: "var(--muted)" }}>{r.id}</text>)}
         <text className="group" x={0} y={gatesTop - 6}>Gates</text>
         {lanes.map(({ g }) => <text key={g.id} className="lane-label" x={0} y={gateY[g.id] + 18}>{g.id === "RS" ? "Remote" : g.id}</text>)}
       </svg>
-      <svg ref={svg} className="gantt" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="group"
+      <svg ref={svg} className="gantt" viewBox={`0 0 ${W} ${H}`} width={cw} height={H * k} role="group"
         aria-label={`Runway and gate timeline, ${clock(wave.window_start, START)} to ${clock(wave.window_start, END)}${editable ? ". Drag a bar, or select it and use the arrow keys, to move a flight." : ""}`}
         onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { if (drag?.moved) onDrag?.(drag.cs, null); setDrag(null); setScrub(false); }} onClick={() => { if (dragged.current) dragged.current = false; else onSelect(null); }}>
         <defs>
@@ -556,6 +582,20 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
             <path d={`M${x(t) - 5} ${AXIS - 12} h10 l-5 6z`} fill="var(--text)" />
           </g>
         )}
+      </svg>
+      {/* the time axis stays on screen when the rows scroll under it; the real axis (and its scrubber) is the one in the drawing */}
+      <svg className="gantt gantt-axis" viewBox={`0 0 ${W} ${AXIS}`} width={cw} height={AXIS * k} aria-hidden="true">
+        <rect width={W} height={AXIS} fill="var(--surface)" />
+        <text className="group" x={0} y={AXIS - 6}>Runways</text>
+        {ticks.map((m) => (
+          <g key={m}>
+            <line x1={x(m)} x2={x(m)} y1={AXIS - 6} y2={AXIS} stroke={m === 0 || m === 60 ? "var(--control)" : "var(--gridline)"} />
+            {(tickPx >= 60 || (m !== START && m !== END)) && (tickPx >= 44 || ((m - START) / 15) % 2 === 0) && (
+              <text className="tick" x={x(m)} y={16} textAnchor={m === START ? "start" : m === END ? "end" : "middle"}>{clock(wave.window_start, m)}</text>
+            )}
+          </g>
+        ))}
+        {t != null && t >= START && t <= END && <path d={`M${x(t) - 5} ${AXIS - 12} h10 l-5 6z`} fill="var(--text)" />}
       </svg>
     </div>
   );

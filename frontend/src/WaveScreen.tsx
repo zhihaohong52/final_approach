@@ -55,6 +55,8 @@ type Fetched = { key: string; set: TrajectorySet | null };
 
 export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home" | "details"; onScope?: (s: string) => void; onWaveId?: (id: string) => void }) {
   const home = page === "home";
+  const [radarRange, setRadarRange] = useState<number | null>(null);   // scope range and map zoom live here, so they survive a visit to the details page
+  const [mapZoom, setMapZoom] = useState(1);
   const [config, setConfig] = useState<Config | null>(null);
   const [waves, setWaves] = useState<WaveSummary[]>([]);
   const [wave, setWave] = useState<WaveScenario | null>(null);
@@ -516,12 +518,12 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
             {/* both stay mounted, so the radar keeps its range and the map its zoom across the hand-off */}
             <div className={`pane${shownPanel === "surface" ? " off" : ""}`}>
               <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-                geo={geo} paths={paths} pathsNote={pathsNote} updating={updatingPaths} fill={shownPanel === "both"} />
+                geo={geo} paths={paths} pathsNote={pathsNote} updating={updatingPaths} fill={shownPanel === "both"} range={radarRange} onRange={setRadarRange} />
             </div>
             {surf && (
               <div className={`pane${shownPanel === "radar" ? " off" : ""}`}>
                 <Surface geo={geo!} traj={pathsNote ? null : paths} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
-                  focus={wave.focus} updating={updatingPaths} active={shownPanel !== "radar"} rejected={view !== "before" ? rejectGround : null} />
+                  focus={wave.focus} updating={updatingPaths} zoom={mapZoom} onZoom={setMapZoom} active={shownPanel !== "radar"} rejected={view !== "before" ? rejectGround : null} />
               </div>
             )}
           </div>
