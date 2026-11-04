@@ -145,12 +145,13 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
     let gone = false;
     (async () => {
       try {
-        const [c, ws] = await Promise.all([api.config(), api.waves()]);
+        const fromHash = parseRoute(location.hash).waveId;
+        const listed = api.waves();   // a linked wave loads beside the list, not after it (a cold list builds the replays)
+        const opening = fromHash ? loadWave(fromHash) : null;
+        const [c, ws] = await Promise.all([api.config(), listed]);
         if (gone) return;
         setConfig(c); setMode(c.default_mode === "decision+claude" ? "decision" : c.default_mode); setModel(c.default_model); setReplay(c.replay_available); setWaves(ws);
-        const fromHash = parseRoute(location.hash).waveId;
-        const first = fromHash ?? ws[0]?.id ?? (await api.randomWave()).id;
-        await loadWave(first);
+        await (opening ?? loadWave(ws[0]?.id ?? (await api.randomWave()).id));
       } catch (e) { if (!gone) setLoadErr(`Couldn't reach the negotiator: ${(e as Error).message}`); }
     })();
     return () => { gone = true; };
@@ -456,12 +457,7 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
           </p>
         </div>
         <div className="toolbar">
-          <label className="field"><span className="sr-only">Wave</span>
-            <select className="select" value={wave.id} onChange={(e) => loadWave(e.target.value)} aria-label="Wave">
-              {waves.map((w) => <option key={w.id} value={w.id}>{w.id} · {w.n_flights} flights</option>)}
-              {!waves.some((w) => w.id === wave.id) && <option value={wave.id}>{wave.id}</option>}
-            </select>
-          </label>
+          <WavePicker current={wave} waves={waves} onPick={(id) => loadWave(id)} />
           <FlightPicker airport={wave.airport.iata} onPick={(id) => loadWave(id)} />
           <button className="btn text" onClick={async () => loadWave((await api.randomWave()).id)}>Random</button>
           <details className="settings">
@@ -771,6 +767,57 @@ const HARD_CASES = [
   { id: "F2015-247837", title: "SLC, 3 of 6 runways closed", what: "status quo breaks GND-GATE-FREE; agreed in turn 2" },
 ];
 
+const waveWhen = (w: { window_start: string }) => `${dateLabel(w.window_start)} ${w.window_start.slice(11, 16)}`;
+
+// The wave list: recorded runs first, then the 2024 busy hours spread over the hubs (GET /api/waves); one airport's
+// own hours (up to 300) when filtered. A wave is a 60-min window at one airport, its late arrivals negotiated.
+function WavePicker({ current, waves, onPick }: { current: WaveScenario; waves: WaveSummary[]; onPick: (waveId: string) => void }) {
+  const [airport, setAirport] = useState("");
+  const [rows, setRows] = useState<WaveSummary[] | null>(waves);
+  const ref = useRef<HTMLDetailsElement>(null);
+  const airports = useMemo(() => [...new Set(waves.map((w) => w.airport.iata))].sort(), [waves]);
+  useEffect(() => {
+    if (!airport) { setRows(waves); return; }
+    let gone = false;
+    setRows(null);
+    api.waves("", airport).then((r) => { if (!gone) setRows(r); }).catch(() => { if (!gone) setRows([]); });
+    return () => { gone = true; };
+  }, [airport, waves]);
+  const pick = (id: string) => { ref.current?.removeAttribute("open"); onPick(id); };
+  const recorded = (rows ?? []).filter((w) => w.replay_available);
+  const rest = (rows ?? []).filter((w) => !w.replay_available);
+  const item = (w: WaveSummary) => {
+    const late = w.disrupted_callsigns.length;
+    return (
+      <button key={w.id} role="listitem" aria-current={w.id === current.id || undefined} onClick={() => pick(w.id)}>
+        <span><span className="code">{w.airport.iata}</span> {waveWhen(w)}</span>
+        <span className="muted">{late} late · {w.n_queue} other arrival{w.n_queue === 1 ? "" : "s"}</span>
+      </button>
+    );
+  };
+  return (
+    <details className="settings" ref={ref}>
+      <summary className="select wave-trigger" aria-label="Choose a wave"><span className="code">{current.airport.iata}</span> {waveWhen(current)}</summary>
+      <div className="menu wide">
+        <label className="field">Airport
+          <select className="select" value={airport} onChange={(e) => setAirport(e.target.value)}>
+            <option value="">Every airport</option>
+            {airports.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </label>
+        {rows == null ? <p className="muted">Loading…</p> : !rows.length ? <p className="muted">No waves at {airport}.</p> : (
+          <div className="picklist tall" role="list" aria-label="Waves">
+            {recorded.length > 0 && <p className="muted picklist-head">Recorded runs</p>}
+            {recorded.map(item)}
+            {rest.length > 0 && <p className="muted picklist-head">Busy hours, Jun–Aug 2024{airport ? ` at ${airport}` : ""}</p>}
+            {rest.map(item)}
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function FlightPicker({ airport, onPick }: { airport: string; onPick: (waveId: string) => void }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<FlightRow[] | null>(null);
@@ -784,7 +831,7 @@ function FlightPicker({ airport, onPick }: { airport: string; onPick: (waveId: s
   }, [q, airport]);
   return (
     <details className="settings" ref={ref}>
-      <summary className="select search-trigger" aria-label="Search all flights.csv rows">Search a flight or airport</summary>
+      <summary className="select search-trigger" aria-label="Search all flights.csv rows">Search 2015 flights</summary>
       <div className="menu wide right">
         <label className="field">Search by flight, airport or row
           <input autoFocus className="select" style={{ backgroundImage: "none", cursor: "text" }} value={q} onChange={(e) => setQ(e.target.value)} placeholder={`For example AA1298, or ${airport}`} />

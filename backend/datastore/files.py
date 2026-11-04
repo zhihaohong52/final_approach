@@ -195,6 +195,12 @@ class FileStore:
     def wave_rows(self, airport: str | None, q: str | None, limit: int, offset: int = 0) -> list[dict]:
         return self._wave_frame(airport, q).iloc[offset:offset + limit].to_dict("records")
 
+    def wave_rows_spread(self, per_airport: int) -> list[dict]:
+        idx = self._wave_frame(None)
+        idx = idx.assign(_rk=idx.groupby("airport", sort=False).cumcount())
+        idx = idx[idx["_rk"] < max(per_airport, 0)].sort_values(["_rk", "airport"], kind="stable")
+        return idx.drop(columns="_rk").to_dict("records")
+
     def wave_count(self, airport: str | None) -> int:
         return len(self._wave_frame(airport))
 

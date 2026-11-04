@@ -39,6 +39,10 @@ def list_waves(airport: str | None = None, q: str | None = None, limit: int = 50
     return [s][:limit]
 
 
+def list_waves_spread(limit: int = 300) -> list[dict]:
+    return list_waves(limit=limit)
+
+
 def random_wave(airport: str | None = None, seed: int | None = None) -> dict:
     waves = list_waves(airport)
     if not waves:

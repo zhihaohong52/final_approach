@@ -74,7 +74,7 @@ def _engine_version() -> str:
 
 STORE_METHODS = (
     "frame", "rows", "workbook_rows",
-    "wave_row", "wave_rows", "wave_count", "wave_summary", "arrivals_day", "metar_2024_rows",
+    "wave_row", "wave_rows", "wave_rows_spread", "wave_count", "wave_summary", "arrivals_day", "metar_2024_rows",
     "flight2015_row", "flights2015_day", "search_flights2015",
     "iem_get", "iem_put",
     "save_run", "get_run", "list_runs", "record_decision",
@@ -274,6 +274,13 @@ class PgStore:
         with self._conn() as conn:
             got = conn.execute(f"select {self._WAVE_COLS}, summary from ref.waves{where} order by ord limit %s offset %s",
                                params + [max(limit, 0), max(offset, 0)]).fetchall()
+        return [{**self._wave_dict(r), "summary": r[7]} for r in got]
+
+    def wave_rows_spread(self, per_airport: int) -> list[dict]:
+        with self._conn() as conn:   # one round trip, not one per airport (each costs ~0.7 s on Neon)
+            got = conn.execute(f"select {self._WAVE_COLS}, summary from (select *, row_number() over "
+                               f"(partition by airport order by ord) as rk from ref.waves) t where rk <= %s "
+                               f"order by rk, airport", [max(per_airport, 0)]).fetchall()
         return [{**self._wave_dict(r), "summary": r[7]} for r in got]
 
     def wave_count(self, airport: str | None) -> int:

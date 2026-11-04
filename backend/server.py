@@ -482,13 +482,26 @@ def _sse(event: str, data) -> str:
 def waves(airport: str | None = None, q: str | None = None, limit: int = 50):
     _kick_warm()
     limit = max(0, min(limit, 500))
-    head = [] if (airport or q) else _replay_summaries()  # recorded flights.csv rows first: the challenge input
-    return (head + _bts_waves(airport, q, limit))[:limit]
+    if airport or q:
+        return _bts_waves(airport, q, limit)
+    head = _replay_summaries()   # recorded runs first (2024 busy hours, then flights.csv rows)
+    seen = {w["id"] for w in head}
+    return (head + [w for w in _spread_waves(limit) if w["id"] not in seen])[:limit]
 
 
 @functools.lru_cache(maxsize=256)
 def _bts_waves_cached(airport: str | None, q: str | None, limit: int) -> tuple:
     return tuple(WB.list_waves(airport=airport, q=q, limit=limit))
+
+
+@functools.lru_cache(maxsize=8)
+def _spread_waves_cached(limit: int) -> tuple:
+    return tuple(WB.list_waves_spread(limit))
+
+
+def _spread_waves(limit: int) -> list[dict]:
+    """The unfiltered listing: the 2024 waves taken in turn from every hub, so one airport cannot fill it."""
+    return [dict(w) for w in _spread_waves_cached(limit)]
 
 
 def _bts_waves(airport: str | None, q: str | None, limit: int) -> list[dict]:
@@ -532,8 +545,8 @@ _REPLAY_SUMMARIES_LOCK = threading.Lock()
 
 
 def _replay_summaries() -> list[dict]:
-    """flights.csv rows with a recorded run (the demo set), built once (concurrent first requests wait for one
-    build), with one pooled connection for all of its store reads."""
+    """Waves with a recorded run (the demo set), 2024 busy hours before flights.csv rows, built once (concurrent
+    first requests wait for one build), with one pooled connection for all of its store reads."""
     global _REPLAY_SUMMARIES
     if _REPLAY_SUMMARIES is not None:
         return _REPLAY_SUMMARIES
@@ -541,7 +554,7 @@ def _replay_summaries() -> list[dict]:
         if _REPLAY_SUMMARIES is None:
             out = []
             with get_store().session():
-                for wid in sorted(i for i in _replay_ids(live=True) if i.startswith("F2015-")):
+                for wid in sorted(_replay_ids(live=True), key=lambda i: (i.startswith("F2015-"), i)):
                     try:
                         out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
                     except (KeyError, ValueError):

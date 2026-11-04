@@ -42,6 +42,12 @@ def test_deterministic():
     assert build.build_wave(wid).to_dict() == build.build_wave(wid).to_dict()
 
 
+def test_list_waves_spread_takes_every_hub_in_turn():
+    out = build.list_waves_spread(60)
+    aps = [w["airport"]["iata"] for w in out]
+    assert len(out) == 60 and len(set(aps[:30])) == 30   # the first 30 are 30 different hubs
+
+
 def test_list_waves_shape():
     out = build.list_waves(limit=5)
     assert 0 < len(out) <= 5

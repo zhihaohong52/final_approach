@@ -196,8 +196,8 @@ def test_replay_summaries_built_once_in_one_session(monkeypatch):
     ths = [threading.Thread(target=lambda: out.append(server._replay_summaries())) for _ in range(4)]
     for t in ths: t.start()
     for t in ths: t.join()
-    assert builds == ["F2015-1", "F2015-2"] and sessions == [1]
-    assert all(o == [{"id": "F2015-1"}, {"id": "F2015-2"}] for o in out)
+    assert builds == ["ATL-x", "F2015-1", "F2015-2"] and sessions == [1]   # 2024 recorded runs first
+    assert all(o == [{"id": "ATL-x"}, {"id": "F2015-1"}, {"id": "F2015-2"}] for o in out)
 
 
 def test_waves_random_uses_one_session(monkeypatch):

@@ -42,7 +42,7 @@ async function get<T>(path: string, fallback: () => Promise<T>, valid: (x: any) 
 
 export const api = {
   config: () => get<Config>("/api/config", async () => (await mock()).mockConfig, (c) => Array.isArray(c?.modes) && Array.isArray(c?.models)),
-  waves: (q = "") => get<WaveSummary[]>(`/api/waves?limit=50${q ? `&q=${encodeURIComponent(q)}` : ""}`, async () => (await mock()).mockWaves),
+  waves: (q = "", airport = "", limit = 300) => get<WaveSummary[]>(`/api/waves?limit=${limit}${q ? `&q=${encodeURIComponent(q)}` : ""}${airport ? `&airport=${encodeURIComponent(airport)}` : ""}`, async () => (await mock()).mockWaves),
   randomWave: () => get<WaveSummary>("/api/waves/random", async () => (await mock()).mockWaves[0]),
   flights: (q = "", airport = "") => get<FlightsResponse>(`/api/flights?limit=30${q ? `&q=${encodeURIComponent(q)}` : ""}${airport ? `&airport=${encodeURIComponent(airport)}` : ""}`, async () => {
     const f = (await mock()).mockFlights, t = q.trim().toLowerCase();

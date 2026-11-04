@@ -143,6 +143,11 @@ p, li, dd, .msg-why, .brief, .msg-body { text-wrap-style: pretty; }
 .picklist button { display: flex; justify-content: space-between; gap: 12px; padding: 8px; border: 0; border-radius: 6px; background: none; text-align: left; cursor: pointer; font-size: 13px; }
 .picklist button:hover { background: #2b2a2f; }
 .settings .menu.wide { width: 400px; }
+.wave-trigger { min-width: 190px; list-style: none; cursor: pointer; }
+.wave-trigger::-webkit-details-marker { display: none; }
+.picklist.tall { max-height: min(460px, 60vh); }
+.picklist-head { font-size: 13px; padding: 8px 8px 2px; margin: 0; }
+.picklist button[aria-current] { background: #2b2a2f; }
 
 /* ---------- layout ---------- */
 .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--gap); margin-top: var(--gap); align-items: stretch; }

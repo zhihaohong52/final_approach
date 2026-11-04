@@ -674,6 +674,17 @@ def list_waves(airport: str | None = None, q: str | None = None, limit: int = 50
         return [_row_summary(r, ids) for r in store.wave_rows(airport.upper() if airport else None, q, limit)]
 
 
+def list_waves_spread(limit: int = 300) -> list[dict]:
+    """Up to `limit` 2024 waves taken round-robin over the hubs (each hub's own order: most disrupted first), so the
+    unfiltered listing shows every airport instead of the few with the most disrupted hours."""
+    from backend.wave.hubs import HUBS
+    store = get_store()
+    with store.session():
+        ids = store.replay_ids()
+        rows = store.wave_rows_spread(-(-max(limit, 0) // len(HUBS)))
+        return [_row_summary(r, ids) for r in rows[:limit]]
+
+
 def random_wave(airport: str | None = None, seed: int | None = None) -> dict:
     store = get_store()
     ap = airport.upper() if airport else None
