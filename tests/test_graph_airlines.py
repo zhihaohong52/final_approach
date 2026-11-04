@@ -341,6 +341,20 @@ def test_escape_clause_judged_at_end_of_turn(monkeypatch):
     assert out2["route"] == "finalize" and out2["final"].id == p.id
 
 
+def test_objection_words_follow_the_airlines_vote():
+    """Review I1: the rationale tail comes from the airline's own vote on each objected plan."""
+    o = {"callsign": "WN130", "metric": "delay_min", "floor": 30.7, "value": 31.2, "allowed": 30.75,
+         "floor_source": "best_seen", "plan_id": "aaaaaaaaaa", "proposed_by": "ATC"}
+    acc = [{"plan_id": "aaaaaaaaaa", "vote": "ACCEPT", "decided_by": "escape"}]
+    rej = [{"plan_id": "aaaaaaaaaa", "vote": "REJECT", "decided_by": "floor"}]
+    assert graph._objection_words([o], [], [], acc).endswith(
+        "; accepts it: no plan on the table meets its floor (escape clause)")
+    assert graph._objection_words([o], [], [], rej).endswith("; rejects the plan")
+    o2 = {**o, "plan_id": "bbbbbbbbbb"}
+    two = graph._objection_words([o, o2], [], [], acc + [{"plan_id": "bbbbbbbbbb", "vote": "REJECT"}])
+    assert "accepts aaaaaaaaaa: no plan" in two and two.endswith("; rejects bbbbbbbbbb")
+
+
 def test_narration_mentions_unable_and_airlines(monkeypatch):
     """A pilot's UNABLE is a key message, so the narration lines carry the refusal; the brief names the voters."""
     from backend.wave import narrate

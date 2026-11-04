@@ -306,9 +306,12 @@ export interface Vote {
   p_accept?: number;                   // absent in formulas mode
   utility: number; reservation: number;
   reason: string;
-  decided_by?: "formula" | "floor";    // "formula": a model's P(accept) was uncertain, so the formula decided;
-                                       // "floor" (v2.3, AIRLINE only): the fairness floor REJECTed it, no model was asked
-  floor?: FloorBreach[];               // v2.3: the breaches behind a `decided_by: "floor"` REJECT
+  decided_by?: "formula" | "floor" | "escape";
+                                       // "formula": a model's P(accept) was uncertain, so the formula decided;
+                                       // "floor" (v2.3, AIRLINE only): the fairness floor REJECTed it, no model was asked;
+                                       // "escape" (v2.3.1, AIRLINE only): the plan breaches the floor but no plan on the
+                                       // table meets it, so the airline voted on utility (ACCEPT or REJECT)
+  floor?: FloorBreach[];               // v2.3: the breaches behind a "floor" REJECT or (v2.3.1) an "escape" vote
 }
 // v2.3 fairness floor: a flight breaches when `value > allowed` (allowed = floor + slack x cap + epsilon).
 export interface FloorBreach {
@@ -431,7 +434,8 @@ export interface BenchmarkReport {
   fairness?: "firm" | "relaxing";      // v2.3: the fairness-floor variant the arms ran with
   fairness_variants?: {                // v2.3: the firm vs relaxing comparison and the pick
     firm: FairnessVariantReport; relaxing: FairnessVariantReport;
-    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[]; shortfall: boolean };   // shortfall: neither variant kept consensus within one wave of v3-traffic, so the higher mean consensus won; variant is null only in reports written before this field
+    pick: { variant: "firm" | "relaxing" | null; rule: string; reasons: string[]; rows: Record<string, unknown>[]; shortfall: boolean;
+            auto_variant?: "firm" | "relaxing"; override?: "user" };   // v2.3.1: auto_variant = the rule's pick; override "user" = variant chosen by the user   // shortfall: neither variant kept consensus within one wave of v3-traffic, so the higher mean consensus won; variant is null only in reports written before this field
   };
 }
 export interface FairnessVariantReport {      // v2.3

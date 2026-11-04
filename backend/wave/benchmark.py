@@ -868,7 +868,8 @@ def pick_fairness(firm: dict, relaxing: dict, prev: dict) -> dict:
     else:
         win = next(v for v in by if ok[v])
         reasons.insert(0, f"Only {win} keeps consensus within one wave of v3-traffic in every arm.")
-    return {"variant": win, "rule": rule, "reasons": reasons, "rows": rows, "shortfall": shortfall}
+    # auto_variant: what this rule picked; a user override sets variant to the shipped one and adds override: "user"
+    return {"variant": win, "auto_variant": win, "rule": rule, "reasons": reasons, "rows": rows, "shortfall": shortfall}
 
 
 def _f(v) -> str:

@@ -115,7 +115,14 @@ def test_77162_firm_final_plan_is_the_escape_clause_plan():
     t3 = [v for m in r["log"] if m["round"] == 3 and m["type"] == "AGENT_TURN" for v in m["body"]["votes"]]
     assert {v["plan_id"] for v in t3} == {fid}                   # nothing else on the table in turn 3
     wn3 = [v for m in r["log"] if m["round"] == 3 and m["sender"] == "AIRLINE:WN" for v in m["body"]["votes"]]
-    assert wn3 and wn3[0]["vote"] == "ACCEPT" and "decided_by" not in wn3[0]   # accepted on utility (escape), not floor
+    assert wn3 and wn3[0]["vote"] == "ACCEPT" and wn3[0]["decided_by"] == "escape"   # on utility (escape), not floor
+    assert wn3[0]["floor"] and wn3[0]["floor"][0]["callsign"] == "WN130"
+    why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 3 and m["sender"] == "AIRLINE:WN"
+               and m["type"] == "AGENT_TURN")
+    assert "rejects" not in why and "accepts it: no plan on the table meets its floor (escape clause)" in why, why
+    t2why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 2 and m["sender"] == "AIRLINE:WN"
+                 and m["type"] == "AGENT_TURN")
+    assert t2why.endswith("rejects the plan"), t2why                  # turn 2: a real floor REJECT
     plans = _plans(w, r)
     others = [p for pid, p in plans.items() if pid != fid and pid in {v["plan_id"] for v in t3}]
     assert not any(not fairness.breaches(w, p, "WN", _floors(w, r, plans)["WN"], "firm", 3, source="best_seen")

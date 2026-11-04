@@ -2985,6 +2985,8 @@
     },
     "pick": {
       "variant": "firm",
+      "auto_variant": "relaxing",
+      "override": "user",
       "rule": "A variant passes iff every arm's consensus rate >= the v3-traffic arm's minus one wave (2.0 pp at n = 50). Among passing variants the lower mean per-flight worse-than-status-quo share (agreed plans, any flight worse on delay or fuel) wins (difference under 0.05 is a tie: firm). If neither passes, the higher mean consensus rate wins and the shortfall is flagged. Scored on the arms common to both variants and v3-traffic. v3-traffic has wave totals only, so the comparison with it uses the wave-total share.",
       "reasons": [
         "OVERRIDE (user, 4 Nov 2026): firm shipped. The automatic rule picked relaxing because firm missed the consensus floor by 2 waves in jev-1.14 (94 vs v3-traffic 98); the user chose firm because relaxing left 58-62% of agreed waves with a flight worse than its status quo, and firm leaves 0%. The cost: 2 more fallback waves in jev-1.14 (6% vs 0%) and 94% consensus in elephant-1 (relaxing 98%).",

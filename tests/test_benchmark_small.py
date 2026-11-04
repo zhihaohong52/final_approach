@@ -367,6 +367,7 @@ def test_pick_fairness_rule():
     # relaxing better and eligible (firm eligible too) -> relaxing; one wave (2 pp) below prev still passes
     p = B.pick_fairness(_rep([98.0, 96.0], [10.0, 12.0]), _rep([96.0, 94.0], [4.0, 6.0]), PREV)
     assert p["variant"] == "relaxing" and not p["shortfall"] and p["rows"] and p["reasons"]
+    assert p["auto_variant"] == p["variant"] and "override" not in p      # the rule alone: no override
     # tie within 0.05 -> firm
     p = B.pick_fairness(_rep([98.0, 96.0], [10.0, 10.0]), _rep([98.0, 96.0], [10.02, 10.0]), PREV)
     assert p["variant"] == "firm"
@@ -535,3 +536,11 @@ def test_main_passes_fairness_to_arm_runs(tmp_path, monkeypatch):
                                                                               real(w, m, chain=chain, **kw))[1])
     main(["--fixtures", "--n", "2", "--fairness", "firm", "--out", str(tmp_path), "--no-ablation", "--outage-n", "0"])
     assert seen and set(seen) == {"firm"}
+
+
+def test_shipped_pick_marks_the_user_override():
+    """Review M4: the shipped report says in fields, not only in reasons, that firm overrides the rule's pick."""
+    import json
+    from pathlib import Path
+    pk = json.loads((Path(__file__).resolve().parents[1] / "eval" / "benchmark.json").read_text())["fairness_variants"]["pick"]
+    assert pk["variant"] == "firm" and pk["auto_variant"] == "relaxing" and pk["override"] == "user"

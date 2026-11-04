@@ -34,8 +34,9 @@ Choices made here (documented for review):
 - Fairness floor (spec 3.4, `fairness.py`): an airline compares each of its flights' delay and fuel with the
   floor plan (status quo when feasible, else the best feasible plan it has seen). When some CHECK-passed plan on
   the table meets its floor, it REJECTs every plan that breaches it (`decided_by: "floor"`, `floor: [breach]`,
-  never sent to the model); otherwise (firm escape clause) it votes on utility as ATC / GROUND do. Its AGENT_TURN
-  lists `objections`: the breaches of each CHECK-passed plan another agent proposed.
+  never sent to the model); otherwise (firm escape clause) it votes on utility as ATC / GROUND do, and each vote on
+  a breaching plan says so (`decided_by: "escape"`, `floor: [breach]`). Its AGENT_TURN lists `objections`: the
+  breaches of each CHECK-passed plan another agent proposed; the rationale words its own vote on each of them.
 - Votes: when a voter speaks it votes on every CHECK-passed plan on the table at that moment: the incumbent, the
   proposals made earlier in this turn and its own. Consensus = one CHECK-passed plan with no pilot UNABLE,
   ACCEPTed by every voter within the same turn (best max-min utility over the voters if several). A plan GROUND
@@ -672,6 +673,7 @@ def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[lis
         return buf, [], None
     us = {p.id: agent_utility(w, p, agent) for p in plans}
     floor_votes: dict[str, dict] = {}
+    escape: dict[str, list[dict]] = {}   # plan id -> its breaches, when no plan here meets the floor (escape clause)
     if _role(agent) == "AIRLINE":
         br = {p.id: run.breaches(p, agent, rnd) for p in plans}
         if any(not b for b in br.values()):
@@ -680,6 +682,8 @@ def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[lis
                     floor_votes[p.id] = {"plan_id": p.id, "vote": "REJECT", "utility": us[p.id], "reservation": res,
                                          "decided_by": "floor", "floor": [dict(b) for b in br[p.id]],
                                          "reason": _floor_reason(br[p.id][0], run.fairness)}
+        else:
+            escape = {pid: b for pid, b in br.items() if b}
     asked = [p for p in plans if p.id not in floor_votes]
     # code compares utility with the reservation; the model only judges whether to accept, given the verdict
     best_u = max(us[p.id] for p in asked)
@@ -724,12 +728,23 @@ def _votes(run: _Run, agent: str, rnd: int, plans: list[JointPlan]) -> tuple[lis
                            f"utility {us[p.id]:.3f} {'>=' if acc else '<'} reservation {res:.3f}")
         else:
             v["reason"] = f"{r.model}: P(accept)={pa:.2f} (utility {us[p.id]:.3f}, reservation {res:.3f})"
+        if p.id in escape:
+            # firm escape clause: the plan breaches the floor but no plan on the table meets it, so the vote is on
+            # utility; "escape" replaces "formula" (the reason still says when the formula decided)
+            v["decided_by"] = "escape"
+            v["floor"] = [dict(b) for b in escape[p.id]]
+            v["reason"] = ("escape clause (no plan on the table meets the floor, "
+                           f"{_floor_reason(escape[p.id][0], run.fairness)}): " + v["reason"])
         votes.append(v)
     return buf, votes, _meta("noul", first)
 
 
-def _objection_words(objections: list[dict], applied: list[dict], proposal_breaches: list[dict]) -> str:
-    """`objects: <cs> <metric> +<over the floor> vs <floor source>; counter-offer: <own moves> | rejects the plan`."""
+def _objection_words(objections: list[dict], applied: list[dict], proposal_breaches: list[dict],
+                     votes: list[dict]) -> str:
+    """`objects: <cs> <metric> +<over the floor> vs <floor source> on <plan>; <tail>`. The tail is the counter-offer
+    (own moves whose plan meets the floor) or, from the airline's own vote on each objected plan: "rejects the plan"
+    / "rejects <id>" when it voted REJECT, "accepts it/<id>: no plan on the table meets its floor (escape clause)"
+    when it voted ACCEPT under the escape clause."""
     b = objections[0]
     d = b["value"] - b["floor"]
     over = f"+{d:.1f} min" if b["metric"] == "delay_min" else f"+{d:.0f} kg"
@@ -739,7 +754,17 @@ def _objection_words(objections: list[dict], applied: list[dict], proposal_breac
     if applied and not proposal_breaches:
         tail = "counter-offer: " + "; ".join(x["move"]["label"] for x in applied)
     else:
-        tail = "rejects the plan"
+        pids = list(dict.fromkeys(o["plan_id"] for o in objections))
+        vote = {v["plan_id"]: v for v in votes}
+        one = len(pids) == 1
+        parts = []
+        for pid in pids:
+            v = vote.get(pid)
+            if v is not None and v["vote"] == "ACCEPT":
+                parts.append(f"accepts {'it' if one else pid}: no plan on the table meets its floor (escape clause)")
+            else:
+                parts.append("rejects the plan" if one else f"rejects {pid}")
+        tail = "; ".join(parts)
     return f"objects: {b['callsign']} {metric} {over} vs {src} on {b['plan_id']}{more}; {tail}"
 
 
@@ -796,7 +821,7 @@ def _speak(st: S, agent: str) -> dict:
         body["objections"] = objections
         if objections:
             pb = run.breaches(proposal, agent, rnd) if checked[proposal.id][1] else []
-            rationale += "; " + _objection_words(objections, applied, pb)
+            rationale += "; " + _objection_words(objections, applied, pb, votes)
             body["rationale"] = rationale
     if vmeta is not None:
         body["decision"] = vmeta
