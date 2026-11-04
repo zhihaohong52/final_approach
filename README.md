@@ -10,7 +10,23 @@ Design: `docs/superpowers/specs/2026-10-31-disruption-negotiator-design.md` · A
 
 ## 1. Pitch
 
-When weather or a late inbound disrupts an arrival, the airline duty manager coordinates by phone between the tower, the crew and ground handling. This prototype replaces those calls with exactly three agents: ATC, PILOT (for the focus flight) and GROUND. The input is one real disrupted flight, a row of `data/challenge2/flights.csv` (DOT 2015, `WEATHER_DELAY > 15` or `LATE_AIRCRAFT_DELAY > 20`). The wave is built at its destination airport, with the other `flights.csv` arrivals in the same window as context and weather fetched on demand from IEM (cited). Each agent sees only its own domain and can only make moves inside its own authority. A deterministic rule engine decides whether any move or plan is legal; no model ever does. Decision models choose among the options the engine offers and vote. Claude (Haiku 5.5) only narrates the finished outcome for the duty manager and decides nothing; every run from the UI gets a brief, with a deterministic template if Claude is unavailable. In the default mode (formulas, chosen by the benchmark) no model takes any decision; decision models run in `decision` and `decision+claude` modes. The output is a revised arrival (time, runway, gate, action, delay vs schedule) plus the full log, and the human approves or overrides. BTS Jun-Aug 2024 waves are still supported as a second source.
+When weather or a late inbound disrupts an arrival, the airline duty manager coordinates by phone between the tower, the crew and ground handling. This prototype replaces those calls with software agents: ATC, GROUND and one agent per airline that has a flight in the wave (2 + N voters; see the next paragraph for why this is not the challenge's three). Pilots appear too, but only to refuse (UNABLE). The input is one real disrupted flight, a row of `data/challenge2/flights.csv` (DOT 2015, `WEATHER_DELAY > 15` or `LATE_AIRCRAFT_DELAY > 20`). The wave is built at its destination airport, with the other `flights.csv` arrivals in the same window as context and weather fetched on demand from IEM (cited). Each agent sees only its own domain and can only make moves inside its own authority. An airline agent speaks for its own flights and may not accept a plan that makes one of them worse than a reference plan, with one stated exception (section 3, firm fairness). A deterministic rule engine decides whether any move or plan is legal; no model ever does. Decision models choose among the options the engine offers and vote. Claude (Haiku 5.5) only narrates the finished outcome for the duty manager and decides nothing; every run from the UI gets a brief, with a deterministic template if Claude is unavailable. In the default mode (formulas, chosen by the benchmark) no model takes any decision; decision models run in `decision` and `decision+claude` modes. The output is a revised arrival (time, runway, gate, action, delay vs schedule) plus the full log, and the human approves or overrides. BTS Jun-Aug 2024 waves are still supported as a second source.
+
+### Deviation from the workbook's `rules_of_play`
+
+The workbook sheet `rules_of_play` says: "One turn = each of the three agents sends one structured message." This build does not follow that. A turn here is one message from each **voter**: ATC, one `AIRLINE:<code>` agent per airline with a flight in the wave, and GROUND (2 + N voters, usually 3 to 5). On top of that there is one formula pilot per flight (`PILOT:<callsign>`). Pilots never vote, never propose and make no model calls. They only answer UNABLE when an instruction or plan breaks one of their own rules (`PLT-*` and `ATC-WIND-LIMITS`). This is the default mode, not a switch. Waves with one airline still have 3 voters.
+
+Why:
+
+- **Realism.** A pilot does not bargain over slots; they accept an instruction or say "unable", for safety only. The airline's operations centre decides which of its own flights absorbs a delay (14 CFR 121.533 on shared operational control, FAA Collaborative Decision Making, slot substitution), because only it sees connections, crew duty and the next departure.
+- **Evidence.** In the 4 Nov stress test on the two most disrupted 2024 waves, the old three-agent plans left the airline worse off and nobody objected. With airline agents (formulas mode, firm fairness) both waves now reach consensus in 2 turns on the status quo:
+
+| Wave | Old three-agent plan (delay, fuel) | v4-airlines, firm (delay, fuel) | What happened |
+|---|---|---|---|
+| CLT-2024-07-29-19 | 1,086 min, +1,376 kg vs status quo (status quo 1,053 min) | 1,053.3 min, 0 kg | turn 1: the airline rejects ATC's plan (e.g. AA2712 +15.5 min); turn 2: consensus on the status quo |
+| ATL-2024-07-18-21 | 1,225 min, +448 kg vs status quo (status quo 1,216 min) | 1,216.2 min, 0 kg | same pattern, consensus in turn 2 on the status quo |
+
+Both waves give the same result under firm and relaxing. The benchmark in section 5 measures the cost: every agreed plan is legal, and the airlines' floor costs consensus and some rounds.
 
 ## 2. Live demo and local run
 
@@ -63,13 +79,15 @@ flowchart LR
   subgraph NEG["Negotiation (LangGraph, max 3 turns)"]
     direction TB
     ATC["ATC agent<br/>runway, slot, order"]
-    PIL["PILOT agent<br/>own flight: speed, ground delay, divert"]
+    AIR["AIRLINE agents (one per airline, N)<br/>own flights: speed, ground delay, swap own, divert<br/>fairness floor on their flights"]
     GND["GROUND agent<br/>gates, remote stand"]
-    ATC --> PIL --> GND
+    ATC --> AIR --> GND
+    PLT["PILOT:callsign (formula, no model)<br/>UNABLE on PLT-* and wind rules"]
+    PLT -.->|"UNABLE"| AIR
   end
 
   ENGINE["Rule engine (deterministic)<br/>14 rules, cites source and values<br/>lists legal moves, CHECKs every plan"]
-  DEC["Decision layer: picks a move / votes<br/>jev-1.14 (default, benchmark winner) or formulas; one model at a time:<br/>jev-1.14 → d1-ultra → elephant-1 → formula<br/>(next only on timeout or invalid answer)"]
+  DEC["Decision layer: picks a move / votes<br/>default chain (<code>decide.py</code>): d1-ultra → elephant-1 → jev-1.14 → formula, or formulas only;<br/>one model at a time, the next only on timeout or invalid answer"]
   FB["Fallback solver (deterministic)<br/>beam search + safety net<br/>if no consensus after 3 turns"]
   NAR["Claude Haiku 5.5<br/>writes the duty-manager brief<br/>(explains only, decides nothing)"]
 
@@ -92,7 +110,7 @@ flowchart LR
   NAR --> API
   API --- MCP
 
-  BENCH["Benchmark (50 seeded rows)<br/>arms: formulas, 3 models, status quo,<br/>centralised optimiser; outage test; engine-off ablation"]
+  BENCH["Benchmark (50 seeded rows)<br/>arms: formulas, 3 models, status quo,<br/>centralised optimiser; firm vs relaxing fairness; outage test; engine-off ablation"]
   BUILD -.-> BENCH
   NEG -.-> BENCH
 ```
@@ -110,21 +128,21 @@ graph TD;
 	triage(triage)
 	open(open)
 	atc(atc)
-	pilot(pilot)
+	airlines(airlines)
 	ground(ground)
 	decide_turn(decide_turn)
 	fallback(fallback)
 	finalize(finalize)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> triage;
-	atc --> pilot;
+	airlines --> ground;
+	atc --> airlines;
 	decide_turn -. &nbsp;next&nbsp; .-> atc;
 	decide_turn -.-> fallback;
 	decide_turn -.-> finalize;
 	fallback --> finalize;
 	ground --> decide_turn;
 	open --> atc;
-	pilot --> ground;
 	triage --> open;
 	finalize --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
@@ -132,7 +150,7 @@ graph TD;
 	classDef last fill:#bfb6fc
 ```
 
-Protocol (`backend/wave/graph.py`, LangGraph). Per turn each agent (ATC, then PILOT, then GROUND) sends ONE `AGENT_TURN` message holding its moves, the moves the engine rejected with their violations, its proposal, its votes and a rationale. The engine runs a `CHECK` after every proposal. Consensus means all 3 agents `ACCEPT` the same plan that passed `CHECK`, within a turn. After at most 3 turns without consensus, a deterministic beam solver with a safety net produces the plan and the reason is logged.
+Protocol (`backend/wave/graph.py`, LangGraph). Per turn each voter (ATC, then the airlines in alphabetical order inside the one `airlines` node, then GROUND) sends ONE `AGENT_TURN` message holding its moves, the moves the engine rejected with their violations, its proposal, its votes and a rationale. The engine runs a `CHECK` after every proposal. A pilot sends `UNABLE` (not an `AGENT_TURN`) when a move the engine rejected, or a plan on the table, breaks one of that flight's own pilot-side rules. UNABLE is a message in the log; the engine's `CHECK` still decides legality. Consensus means all voters `ACCEPT` the same plan that passed `CHECK`, within a turn. After at most 3 turns without consensus, a deterministic beam solver with a safety net produces the plan and the reason is logged.
 
 Components (all under `backend/`):
 
@@ -153,8 +171,11 @@ Components (all under `backend/`):
   - `GND-GATE-FREE`: gate not occupied, including by other wave flights, with the airport turnaround time.
   - `GND-GATE-NOTICE`: gate changes need at least 20 min notice.
   - `GND-CREW-DUTY`: reports ground overtime past the 8 h shift. It never vetoes; overtime is a cost.
-- **Moves and authority** (`wave/moves.py`): ATC changes runway, slot and order. PILOT changes only its own flight (speed reduction, ground delay, divert, accept). GROUND changes gates only.
-- **Utilities** (`wave/utility.py`): ATC scores the wave, PILOT its own flight, GROUND gates and crew (overtime at 1.5x). Voting uses a reservation schedule that drops each turn.
+- **Moves and authority** (`wave/moves.py`): ATC changes runway, slot and order. An airline agent changes only its own flights (speed reduction, ground delay, divert, accept, and `swap_own`: swap the slots of two of its own flights on the same runway). GROUND changes gates only. Pilots have no moves.
+- **Airlines** (`wave/airlines.py`): a static table groups carrier codes into airlines (a regional flies under its major, for example OH to AA). BTS data has the operating carrier only, so where the table has no row the operating carrier is its own airline; each wave lists its airlines and the basis of each grouping (`Wave.airlines`).
+- **Pilots** (`wave/unable.py`): one per flight, formulas only. A pilot refuses only on the `PLT-*` rules and `ATC-WIND-LIMITS`.
+- **Utilities** (`wave/utility.py`): ATC scores the wave, each airline the weighted mean over its own flights, GROUND gates and crew (overtime at 1.5x). Voting uses a reservation schedule that drops each turn.
+- **Fairness floor** (`wave/fairness.py`, `ATM_FAIRNESS=firm|relaxing`): an airline objects to a plan that makes one of its flights worse than a reference plan on delay or fuel: the status quo when it is feasible, else the best CHECK-passed plan seen so far. **Firm** (shipped): an airline never accepts such a plan, except when no CHECK-passed plan on the table meets its floor (the escape clause, so a wave can still end). **Relaxing**: the floor loosens each turn on the reservation schedule (a flight may be worse by up to 6.0 / 13.2 / 20.4 min of delay in turns 1 / 2 / 3, plus a fuel allowance on the same scale). Shipped as firm by the user's choice, see section 5.
 - **Safety**: every move and every proposal is engine-checked, votes are cast only on `CHECK`-passed plans, the final plan's feasibility is re-checked, and models only choose among offered options.
 - **Decision layer** (`decide.py`): per call, a chain of OpenRouter models, then TypeSafe (Jev), then local formulas. Each call has a 2 s timeout and one retry on 429/5xx. A circuit breaker skips an entry for 60 s after 3 consecutive failures. Every fallback is logged and shown in the UI.
 - **Fallback solver** (`wave/fallback.py`): beam search over legal moves maximising the worst agent's utility, with a remote-stand, ground-delay or divert safety net. Legality is still decided only by the rules engine. It never raises.
@@ -287,7 +308,7 @@ The `statement_timeout` line gives `atm_app` the same 5 s limit that `0006` give
 
 ## 5. Evaluation
 
-**What the measured impact is:** every final plan obeys every rule (0 violations in every arm), while the uncoordinated status quo breaks at least one rule on 16 of 50 waves; with the rule engine switched off, 32% of the agents' plans are illegal; a negotiation takes about 1 s in formulas mode and 4-8 s with jev-1.14 (`stats.elapsed_ms`). Delay is roughly neutral: on the 34 waves where the status quo is legal, the negotiated plans are about 2 min better in total. Negotiation buys legality first; minutes are a small bonus.
+**What the measured impact is:** every agreed plan obeys every rule (0 violations in agreed plans, every arm, both fairness variants), while the uncoordinated status quo breaks at least one rule on 24 of 50 waves; with the rule engine switched off, 48% of the formula arm's plans are illegal. Delay is roughly neutral: on the 26 waves where the status quo is legal, the negotiated plans are 1.7 to 4.0 min better in total (320.6 to 323.0 min against 324.7). On all 50 waves the negotiated mean delay is above the status quo's (334.0 to 335.5 min against 326.7); the status quo is illegal on 24 of them, so that comparison is not like for like. Negotiation buys legality first; minutes are a small bonus. The airline agents add a second guarantee: under the shipped firm floor no agreed plan leaves any flight worse than in the status quo on delay or fuel (0.0% of agreed waves with a feasible status quo, against 57.7 to 61.5% under relaxing). That costs consensus and rounds, listed below.
 
 Method (`python3 -m backend.wave.benchmark --n 50 --arms <models>,formula --concurrency 4 --seed 7`):
 
@@ -306,54 +327,69 @@ Method (`python3 -m backend.wave.benchmark --n 50 --arms <models>,formula --conc
 - Engine-off ablation: the share of formula-arm final plans that are infeasible under the real rules when the rules engine is disabled.
 
 <!-- BENCHMARK -->
-Run: `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (re-run 2 Nov 2026 after the runway-history fix, live models, final rules). Same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50.
+Run: `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,openrouter:baseten/elephant-1,formula --concurrency 4 --seed 7 --outage-n 20` (4 Nov 2026, engine `v4-airlines`, live models, firm fairness). The same 50 flights.csv rows (seeded, stratified over 30 hubs) for every arm; all arms finished all 50. Every number below is from `eval/benchmark.json`; the full tables are in `eval/BENCHMARK.md`, the per-variant runs in `eval/variants/`.
 
-| Arm | Consensus (raw-number prompts → judgement-only) | Mean turns | Rule violations | Total delay, all wave arrivals (min) [95% CI] | Gap to optimiser (min) | Pax protected | Brier* | p50 / p95 ms | Errors | Same plan as formulas |
-|---|---|---|---|---|---|---|---|---|---|---|
-| typesafe/jev-1.14 | 94% → **98%** | 1.32 | 0 | 351.2 [305, 398] | 1.6 | 25.8% | 0.0063 | 446 / 598 | 0% | 66% |
-| liquid/d1-ultra | 82% → **96%** | 1.36 | 0 | 351.4 [305, 398] | 1.8 | 25.5% | 0.0016 | 568 / 668 | 0% | 84% |
-| baseten/elephant-1 | 68% → **98%** | 1.34 | 0 | 351.4 [305, 398] | 1.8 | 25.8% | 0.0155 | 493 / 579 | 0% | 74% |
-| formula | 98% | 1.32 | 0 | 351.2 [305, 398] | 1.6 | 25.5% | n/a | n/a / n/a | 0% | 100% |
-| centralised optimiser (beam search, no negotiation) | - | - | 0 infeasible | 349.6 [303, 396] | 0 | 26.1% | - | ~2.3 s/wave | - | - |
-| status quo (no negotiation) | - | - | breaks a rule on 16/50 waves | 343.2 | - | 26.5% | - | - | - | - |
+**Arms, shipped variant (firm)**
 
-\* Brier is measured against the formula verdict (accept if utility >= reservation), not ground truth.
+| Arm | Consensus | Fallback to solver | Mean rounds | Rule violations | Delay, all arrivals (min) | Fuel (kg) | Pax protected | Brier* | p50 / p95 ms | Errors | Same decision as formulas |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| typesafe/jev-1.14 | 94% | 6% | 1.98 | 0 | 334.1 | 148.7 | 34.7% | 0.0083 | 416 / 509 | 0% | 62% |
+| liquid/d1-ultra | 96% | 4% | 1.88 | 0 | 334.0 | 132.5 | 34.7% | 0.0012 | 545 / 957 | 0% | 70% |
+| baseten/elephant-1 | 94% | 6% | 2.00 | 0 | 334.4 | 152.6 | 34.4% | 0.0137 | 484 / 587 | 0% | 60% |
+| formula | 98% | 2% | 1.92 | 0 | 335.5 | 154.7 | 34.4% | n/a | n/a | 0% | 100% |
+| centralised optimiser (beam search, no negotiation) | - | - | - | 0 infeasible | 329.4 | 83.2 | 34.7% | - | - | - | - |
+| status quo (no negotiation) | - | - | - | breaks a rule on 24/50 waves | 326.7 | 1.4 | 36.9% | - | - | - | - |
 
-- **Code does the maths, the model judges.** Following TypeSafe's System One guidance ("keep deterministic work in code"), the decision models never see raw utilities. Code pre-computes every comparison into words: per move, whether it fixes or adds rule breaches, whether it is better or worse for the agent, and the engine's rank; per vote, whether the plan meets the agent's minimum this turn, with explicit yes/no criteria. The model only makes the final pick and the accept/reject. A model vote counts only when it is confident (TypeSafe confidence routing): P(accept) >= 0.7 accepts, <= 0.3 rejects, and anything in between falls back to the formula verdict, marked `decided_by: formula` in the log. In the recorded jev-1.14 runs no vote landed in that band. The model is offered exactly the moves the formula may take (a Pilot may divert only for its own fuel problem or when every runway is closed).
-- **Result: the decision models now match the formulas.** jev-1.14 reaches 98% consensus in 1.32 turns with 351.2 min total delay, 1.6 min from the optimiser (formulas: 351.2, 1.6). With raw numbers in the prompt the same models reached 68-94% consensus and jev-1.14 carried 10 min more delay.
-- **Selection: `typesafe/jev-1.14`** by the rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
-- **How good is "good"?** The centralised optimiser (the beam-search solver run on each wave with no negotiation) is the reference for what one coordinator would pick. Three self-interested agents negotiating land within about 2 min of it.
-- **Status quo:** it breaks at least one rule on 16 of 50 waves. On the 34 waves where it is legal, the negotiated plans are also faster: 336.5 min (formulas) and 336.8 min (jev-1.14) against 338.8 min for the status quo.
-- **Safety:** 0 rule violations in any final plan, every arm. **Engine-off ablation:** 32% of the agents' final plans break a rule when the engine is disabled.
-- **Outage test:** primary model replaced by a dead endpoint on 20 waves; 20/20 resolved with a legal plan.
-- **100 rows with every reference (`eval/BENCHMARK_100.md`):** jev-1.14 reaches 99% consensus in 1.25 turns, 0 rule violations, 342.9 min total delay, 0.9 min from the optimiser (341.9); formulas 342.7, 0.7 min. The status quo breaks a rule on 28 of 100 waves; on the 72 where it is legal, the negotiated plans are faster (336.1 min jev-1.14, 335.7 formulas vs 338.1).
-- **At scale (1,000 rows, `eval/BENCHMARK_1000.md`):** jev-1.14 reaches 99.5% consensus in 1.20 turns with 329.8 ± 10.6 min mean total delay, against 329.3 ± 10.6 for the formulas, with the same outcome on 100% of the 999 waves.
+\* Brier is measured against the formula verdict (accept if utility >= reservation), not ground truth. Delay, fuel and pax are means over the 50 waves. The status quo is illegal on 24 of them, so its lower delay is not a like-for-like win.
+
+**Selection.** The rule is unchanged: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie goes to lower Brier. It selects `liquid/d1-ultra` (n = 50: indicative, not statistically significant). The default chain in `decide.py` starts with it.
+
+**Fairness variants.** Same waves and arms under each variant. "Worse flight" = share of agreed waves with a feasible status quo where any flight is worse than in the status quo on delay (> 0.05 min) or fuel (> 0.5 kg). "Worse wave-total" = share of waves with a feasible status quo whose final plan (consensus or fallback) has a worse wave-total delay or fuel. v3-traffic recorded wave totals only.
+
+| Variant | Arm | Consensus | v3-traffic consensus | Worse flight | Worse wave-total | v3-traffic worse wave-total | Model calls per wave | p95 ms |
+|---|---|---|---|---|---|---|---|---|
+| firm (shipped) | jev-1.14 | 94% | 98% | 0.0% | 0.0% | 65.4% | 20.7 | 509 |
+| firm (shipped) | d1-ultra | 96% | 96% | 0.0% | 0.0% | 61.5% | 18.7 | 957 |
+| firm (shipped) | elephant-1 | 94% | 96% | 0.0% | 0.0% | 61.5% | 20.5 | 587 |
+| firm (shipped) | formula | 98% | 98% | 0.0% | 0.0% | 65.4% | 0 | n/a |
+| relaxing | jev-1.14 | 100% | 98% | 61.5% | 57.7% | 65.4% | 15.3 | 521 |
+| relaxing | d1-ultra | 100% | 96% | 57.7% | 53.8% | 61.5% | 14.5 | 1,306 |
+| relaxing | elephant-1 | 98% | 96% | 57.7% | 53.8% | 61.5% | 15.1 | 680 |
+| relaxing | formula | 100% | 98% | 61.5% | 57.7% | 65.4% | 0 | n/a |
+
+- **The automatic pick was relaxing; firm is shipped by the user's choice (4 Nov 2026).** The pick rule: a variant passes if every arm's consensus is at least the v3-traffic arm's minus one wave (2 points at n = 50); among passing variants the lower worse-flight share wins. Firm fails it in jev-1.14 (94% against 98%, two waves lower; elephant-1 is one wave lower, inside the tolerance). The user chose firm because relaxing leaves 57.7 to 61.5% of agreed waves with a flight worse than its status quo, and firm leaves none.
+- **What firm costs:** consensus 94 / 96 / 94 / 98% (jev-1.14 / d1-ultra / elephant-1 / formula) against 98 / 96 / 96 / 98% in v3-traffic. That is 2 more fallback waves in jev-1.14 and 1 more in elephant-1. Relaxing reaches 100 / 100 / 98 / 100%. Firm also takes about half a round more (mean rounds 1.88 to 2.00, against 1.46 to 1.50) and about 5 more model calls per wave than relaxing (jev-1.14 20.7 against 15.3). Firm burns less fuel than relaxing (132.5 to 154.7 kg against 210.2 to 223.7 kg per wave).
+- **Regressions against v3-traffic: 66 wave-arm rows** (19 d1-ultra, 16 jev-1.14, 16 formula, 15 elephant-1; 57 on delay, 9 on fuel). Every row has the cause `negotiation`: `physics_delta` is 0.0 on every metric, and the status quo is identical (326.69 min, 1.36 kg, 26 feasible waves). They are not all small: the largest delay rise is 54.4 min (`F2015-163396`, formula, 185.6 to 240.0) and the largest fuel rise is 168 kg (`F2015-251827`, d1-ultra, 12 to 180). The first 20 rows are listed in `eval/BENCHMARK.md`, all 66 in `eval/benchmark.json`. We have not measured per wave why the airline floor moves the plan in each of them.
+- **Consensus fallbacks** (firm, solver took over): jev-1.14 3 waves (`F2015-112396`, `-208692`, `-246479`), d1-ultra 2, elephant-1 3, formula 1. Mean delay is flat across variants (334.0 to 335.5 min in firm, 333.4 to 334.6 min in relaxing).
+- **Safety:** 0 rule violations in agreed plans in all four arms of both variants. **Engine-off ablation:** 48% of the formula arm's final plans break a rule when the engine is disabled. **Outage test:** primary model replaced by a dead endpoint on 20 waves; 20/20 resolved with a legal plan (both variants).
+- **Latency and cost:** d1-ultra's p95 under firm is 957 ms (under 1 s); under relaxing it was 1,306 ms. `cost_usd_per_wave` is not measured (0.0 in the file).
+- **Earlier engines:** the engine history table in `eval/BENCHMARK.md` runs from v2 to v4-airlines. The v3-traffic numbers are archived in `eval/archive/`. The 100-row and 1,000-row runs (`eval/BENCHMARK_100.md`, `eval/BENCHMARK_1000.md`) were made on earlier engines and were not re-run; do not compare them with the table above.
 - Full report: `eval/BENCHMARK.md`, raw data `eval/benchmark.json`.
 <!-- /BENCHMARK -->
 
 ### Cost of model calls
 
-Measured on 31 Oct 2026 from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call and $0.0005 per wave** (9.6 calls per wave: one triage, the move picks and the votes).
+Measured on 31 Oct 2026 from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call** on the v2 call pattern (9.6 calls per wave). Airline agents add model decisions: the v4-airlines benchmark (firm) counts 18.7 to 20.7 model calls per wave (relaxing 14.5 to 15.3), about twice the v2 pattern. At the measured price per call that is roughly $0.001 per wave. This is an estimate: the benchmark does not measure cost, and the price per call was not re-measured on v4.
 
 | Item | Per wave | Per 1,000 waves | Source |
 |---|---|---|---|
-| jev-1.14 decisions (OpenRouter) | ~$0.0005 | ~$0.50 | measured, as above |
+| jev-1.14 decisions (OpenRouter) | ~$0.001 | ~$1 | estimate: 20.7 calls (benchmark, firm) x $0.00005 (measured on v2) |
 | Claude Haiku 5.5 brief (one call, max 1,500 output tokens) | at most ~$0.0016 | at most ~$1.60 | Anthropic list price $0.10 / $0.50 per million input / output tokens; upper bound assuming 8k input tokens and the full output cap |
 | Formulas mode | $0 | $0 | no model calls |
-| **Total, decision mode with brief** | **about $0.002** | **about $2** | |
+| **Total, decision mode with brief** | **about $0.003** | **about $3** | |
 
-For scale: everything this key spent during the hackathon, including every benchmark arm, the 1,000-row and 100-row runs and the outage tests, came to about $6. Replays cost nothing (no model calls). The path and surface layers add no model calls either: trajectories, taxi routes and the hold-short schedule are deterministic code, and `GET /api/wave/{id}/geo` and `POST /api/trajectories` are pure computation. The v3 benchmark records no cost (`cost_usd_per_wave` is 0.0, output tokens free, input cost not measured), so the figures above come from the 31 Oct measurement on the v2 call pattern.
+For scale: everything this key spent during the hackathon, including every benchmark arm, the 1,000-row and 100-row runs and the outage tests, came to about $6. Replays cost nothing (no model calls). The path and surface layers add no model calls either: trajectories, taxi routes and the hold-short schedule are deterministic code, and `GET /api/wave/{id}/geo` and `POST /api/trajectories` are pure computation. The v3 and v4 benchmarks record no cost (`cost_usd_per_wave` is 0.0, output tokens free, input cost not measured), so the per-call price comes from the 31 Oct measurement on the v2 call pattern. Pilot agents make no model calls.
 
 ### Demo replays
 
-Recorded runs in `data/replay/` (engine v3-traffic, live decision models: `liquid/d1-ultra`, 0 model fallbacks) play back with no model calls. Waves without a recording run live. The "laps" flight is the one that flies the holding pattern on the radar. Delay and fuel are wave totals of the agreed plan against the status quo (first come, first served), from the recordings; taxi waits are the hold-short and give-way waits of ATC-TAXI-CONFLICT against the fixed 2015 ground traffic.
-- `F2015-7053` ORD: MQ3269 on 32R, gate B22, +395 min. The status quo is legal but EV4125 laps once (5.7 min, 228 kg). Agreed in round 1: EV4125 moves to 22R and EV3273 to 28R, which removes the hold but costs more on the wave: delay 644.0 → 653.0 min, fuel 228 → 796 kg (the longer routes), pax protected 17.9 % both. No taxi wait for the wave flights, but the fixed 2015 ORD departures are overloaded in this wave (41 of 88 still waiting at the 30-min horizon, takeoffs up to 36 min late; see LIMITS).
-- `F2015-292602` MIA: AA943 on 08L, gate A4, +314 min. The status quo fails GND-GATE-FREE (AA1202 and AA1254 on gate A2), so the agreed plan (round 1) is the only legal one of the two, at a cost: delay 505.2 → 540.4 min, fuel 0 → 1,788 kg, pax protected 17.3 → 12.9 %. AA1254 moves to runway 30 and AA1202 laps 9 times (44.7 min) because the plan pushes it from T+73 to T+117.7 min to clear the gate. Taxi waits 1.6 → 0 min.
-- `F2015-152758` ATL: DL2256 on 08L, gate T11, +313 min. In the status quo DL1532 and DL1600 each lap once (6.4 and 7.7 min), and it fails GND-GATE-FREE (DL1532, DL1537 and DL1600 on gate E17). Agreed in round 2: the three spread over 09R (gate E16), 08R and 09L (gate E15), which is legal and better: delay 757.4 → 745.9 min, fuel 564 → 160 kg, no lap. DL1532 now waits 1.5 min on its taxi (wave taxi waits 0.4 → 1.5 min).
-- `F2015-75` DFW, crosswind runway closures: AA1344 on 35C, gate A38, +113 min. The status quo is legal but slow on the ground: AA260, AA2441 and MQ2833 wait 7.6, 13.6 and 21.0 min head-on against the 36R departure stream on their fixed taxi route (42.2 min in all). The agents move AA2441 and MQ2833 to 35L (round 1), which cuts the taxi waits to 4.0 and 0.8 min (12.4 min in all): delay 250.0 → 216.2 min, fuel 28 → 12 kg. No lap.
-- `F2015-77162` DEN: DL927 on 16L, gate C35, +133 min. The status quo fails GND-GATE-FREE (NK853 and WN463 on gate C46), so the agreed plan (round 2) is the only legal one: WN130 moves to runway 07, NK853 to 16R and gate C35, WN463 to 17R. Delay 335.9 → 337.9 min, fuel 0 → 28 kg. No lap, no taxi wait.
+Recorded runs in `data/replay/` (engine v4-airlines, decision mode, firm fairness, live decision model `liquid/d1-ultra`, 0 model fallbacks) play back with no model calls. All 5 reach consensus. An airline agent put an objection on the record in every one of them, and the "laps" flight (the one that flies the holding pattern on the radar) laps in 3 of the 5. There is no UNABLE in any replay: UNABLE appears only when a pilot-side rule rejects a move, and none did here. Waves without a recording run live. Delay and fuel are wave totals of the agreed plan against the status quo (first come, first served), from the recordings.
+- `F2015-7053` ORD (airlines AA, OO, UA; 3 turns): MQ3269 on 32R, gate B22, +395 min. ATC proposes moving EV4125 to 22R and EV3273 to 28R to remove EV4125's lap. UA rejects it in every turn on its floor (EV3273 delay +6.3 min against the original plan, and 3 more objections). ATC gives way in turn 3 and the agreed plan is the status quo: delay 644.0 min, fuel 228 kg, pax protected 17.9 %, unchanged. EV4125 still laps once (5.7 min).
+- `F2015-292602` MIA (AA; 2 turns): AA943 on 08L, gate A4, +314 min. The status quo fails GND-GATE-FREE (AA1202 and AA1254 on gate A2), so the agreed plan is the only legal one. In turn 1 AA rejects ATC's plan (AA1202 fuel +256 kg against the best plan so far) and counter-offers that AA1202 absorbs 8 min by speed reduction. In turn 2 the plan agreed is the one with AA943 on runway 30 and AA1006 on 08R. Cost: delay 505.2 to 540.4 min, fuel 0 to 1,532 kg, pax protected 17.3 to 12.9 %. AA1202 laps 7 times.
+- `F2015-152758` ATL (DL; 2 turns): DL2256 on 08L, gate T11, +313 min. In the status quo DL1532 and DL1600 each lap once and it fails GND-GATE-FREE (DL1532, DL1537 and DL1600 on gate E17). Turn 1 GROUND moves two of them to gates E15 and E16. In turn 2 DL objects to ATC's new plan (DL2256 delay +5.5 min against the best plan so far, and 2 more) and the agreed plan keeps DL2256 on 08L with the gate changes. It is legal and better: delay 757.4 to 746.8 min, fuel 564 to 152 kg, no lap.
+- `F2015-75` DFW (AA; 3 turns): AA1344 on 35C, gate A38, +113 min. ATC wants AA2441 and MQ2833 on 35L to cut their taxi waits. AA rejects it in all 3 turns on its floor (MQ2833 fuel +4 kg against the original plan). The agreed plan is the status quo: delay 250.0 min, fuel 28 kg, no lap. Under the v3-traffic engine the agents moved those two flights and cut the wave's delay to 216.2 min; with an airline holding a floor they do not.
+- `F2015-77162` DEN (airlines DL, NK, WN; 3 turns): DL927 on 16L, gate C35, +133 min. The status quo fails GND-GATE-FREE (NK853 and WN463 on gate C46). In turn 2 NK rejects the plan on the table (NK853 delay +9.3 min against the best plan so far, and 1 more) and WN objects to WN130 (+0.5 min). The agreed plan in turn 3 is the one with WN130 on runway 07, NK853 on 16R and WN463 on 17R. Delay 335.9 to 337.9 min, fuel 0 to 28 kg. No lap.
 
-Laps: status quo in ORD F2015-7053 and ATL F2015-152758, agreed plan in MIA (gate relief for a non-focus flight; the pattern is analysed in `eval/archive/engine-v3-air/BENCHMARK.md`). DFW shows the taxi waits; DEN clears its gate clash with runway and gate changes, no hold.
+Laps: status quo in ORD F2015-7053 and ATL F2015-152758; agreed plan in MIA (AA1202, gate relief for a non-focus flight) and ORD (EV4125, kept by the airline floor). DFW and DEN have none.
 
 Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan on the table passes the engine CHECK, so the log shows three `NO_CONSENSUS` messages and a `FALLBACK` with its reason; the safety net diverts DL2019 to CSG (about 320 min). The system declines to invent a plan it cannot prove legal.
 
@@ -368,18 +404,24 @@ Failure case, live (no recording): `F2015-102056` (DL2019). In turns 1-3 no plan
 - **Spec update at 12:45.** The challenge now wants 3 agents and turns on `flights.csv` rows, so we moved from N-pilot waves to 3-agent turns.
 - **Final review found two bugs.** Weather delay was dropped from the ETA, and pilots diverted just to clear Ground's gate conflict. Both fixed.
 - **First `flights.csv` benchmark picked a model that fell back to the solver on 32% of waves.** We added the consensus >= 90% gate to the selection rule.
+- **The stress test showed that the three-agent plans hurt flights nobody spoke for.** On the two most disrupted 2024 waves ATC pushed airline flights later and nothing objected. We added one agent per airline and a fairness floor, and pilots that can say UNABLE. The first automatic pick (relaxing) still left 57.7 to 61.5% of agreed waves with some flight worse than its status quo. We shipped firm instead (user's choice, 4 Nov 2026), and it costs consensus (94 to 98%, a few more fallback waves) and about half a round.
 
 ## 7. Limits
 
 - The workbook limits are synthetic planning numbers, and we relax or assume several of them (table above).
 - Gate occupancy, fuel, crew shifts and connections are simulated. Outcome gains depend partly on those assumptions.
 - Brier is measured against the formula verdict, not ground truth.
-- n = 50 waves; small differences between arms are not significant.
+- n = 50 waves and one seed; small differences between arms are not significant. One wave is 2 points of consensus, so the one-wave tolerance in the fairness pick rule is the resolution of this benchmark. Model arms are not deterministic.
+- The airline grouping is a static table (carrier code to airline, regionals under their major by hand). BTS has no marketing-carrier field, so a carrier with no row is its own airline: OO at ORD and EV at DFW stay their own airlines, and the floor protects each of them separately.
+- Pilots refuse only on the `PLT-*` rules (earliest ETA, fuel reserve, crew duty) and wind limits. There is no runway-length rule in the rule set, so a pilot cannot refuse a runway for being too short.
+- The firm floor has an escape clause: an airline accepts a plan below its floor only if no CHECK-passed plan on the table meets that floor. Without it a wave could not end. It means firm is not an absolute guarantee, though no agreed plan in the benchmark had a flight worse than its status quo.
+- This build has more voters than the workbook's three agents (see "Deviation from the workbook's `rules_of_play`").
+- Firm fairness costs consensus (94 to 98% against 98 to 100% for relaxing) and more rounds and model calls. 66 per-wave regressions against v3-traffic, up to 54.4 min of delay on one wave, are listed in section 5.
 - The delay utility caps at 60 minutes, so flights that are hours late gain little from negotiation.
 - The airborne flag ignores time zones (BTS waves); about 8% of flights are misclassified.
 - METAR is the latest observation at or before the wave start (flights.csv rows) or the end-of-hour observation (BTS waves).
 - Alternate airports may be small airports.
-- p95 model latency is above the 1 s target.
+- p95 model latency is under 1 s per call in the shipped firm run (957 ms at most), but it was 1,306 ms for d1-ultra under relaxing.
 - Utility weights are design judgements, not calibrated to airline cost data. Wake separation is a time-based simplification.
 - Taxi validation bias: our taxi-in time (rollout + unimpeded routed taxi) is compared with BTS 2015 `TAXI_IN` on the focus flights (`eval/BENCHMARK.md`, 42 flights, mean bias -2.78 min). It runs low, on purpose and not corrected: BTS `TAXI_IN` includes ramp and gate waits that the model does not have (`rules.LIMITS` "taxi route": no ramp or gate waits, so it can sit below BTS TAXI_IN), and the 2015 stands are bound to today's OSM. The waits against fixed traffic are not in that comparison, and where a fixed route meets a departure stream head-on (DFW) the modelled time is above BTS, because the arrival cannot reroute.
 - Paths: ground traffic is fixed once per wave and not re-timed per plan; some runway ends open in 2015 are missing from today's OSM and use a straight-line generic taxi (`src: "synth"`).
@@ -396,7 +438,7 @@ backend/             backend
   geo/             CIFP and OSM surface parsers, gate binding, loaders (via the datastore)
   datastore/       Postgres (Neon) store, file fallback, seed datasets
   wave/            build, flights2015 (flights.csv waves), constraints (workbook limits), rules, moves, utility,
-                   graph, fallback, baseline, benchmark, narrate, replay,
+                   airlines, unable, fairness, graph, fallback, baseline, benchmark, narrate, replay,
                    route, trajectory, holding, surface, ground_traffic, wavegeo (paths and taxi)
   (negotiation.py, plans.py, scenario.py, baseline.py, evaluate.py: earlier single-flight mode, kept for back-compat)
 frontend/        React dashboard (owned by the frontend teammate)
@@ -409,7 +451,7 @@ tests/           pytest suite
 Dockerfile, render.yaml   deployment
 ```
 
-Tests (621 offline, plus the opt-in `live_db` ones):
+Tests (739 offline, plus the opt-in `live_db` ones):
 
 ```bash
 python3 -m pytest -q -m "not live_db"

@@ -1,4 +1,4 @@
-> **SUPERSEDED.** This is the v1 single-flight evaluation (rule agents, one flight at a time). It is not comparable with the current 3-agent wave negotiation; see `eval/BENCHMARK.md` and README section 5.
+> **SUPERSEDED.** This is the v1 single-flight evaluation (rule agents, one flight at a time). It is not comparable with the current wave negotiation (ATC, airline agents, GROUND); see `eval/BENCHMARK.md` and README section 5.
 
 # Evaluation: 500 real disrupted flights (rule agents)
 

@@ -8,21 +8,21 @@ graph TD;
 	triage(triage)
 	open(open)
 	atc(atc)
-	pilot(pilot)
+	airlines(airlines)
 	ground(ground)
 	decide_turn(decide_turn)
 	fallback(fallback)
 	finalize(finalize)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> triage;
-	atc --> pilot;
+	airlines --> ground;
+	atc --> airlines;
 	decide_turn -. &nbsp;next&nbsp; .-> atc;
 	decide_turn -.-> fallback;
 	decide_turn -.-> finalize;
 	fallback --> finalize;
 	ground --> decide_turn;
 	open --> atc;
-	pilot --> ground;
 	triage --> open;
 	finalize --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2

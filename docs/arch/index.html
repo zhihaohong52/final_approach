@@ -47,7 +47,7 @@ svg { position:absolute; inset:0; }
 <div class="b" style="left:840px;top:185px;width:275px"><b>ATC → PILOT → GROUND</b><p>one structured message each per turn; moves only inside own authority</p></div>
 <div class="b" style="left:840px;top:360px;width:275px;border-color:var(--violet)"><div class="k" style="color:var(--violet)">Decision layer</div><p>code computes verdicts → <b style="display:inline;font-size:18px;color:var(--ink)">jev-1.14</b> picks a move and votes · chain d1-ultra → elephant-1 → formula</p></div>
 <div class="b" style="left:1195px;top:185px;width:285px;border-color:var(--green)"><div class="k" style="color:var(--green)">Rule engine</div><p>12 deterministic rules CHECK every move and plan; vetoes cite rule, source, values</p></div>
-<div class="b" style="left:1195px;top:375px;width:285px"><b>Consensus?</b><p>one legal plan accepted by all 3 agents</p></div>
+<div class="b" style="left:1195px;top:375px;width:285px"><b>Consensus?</b><p>one legal plan accepted by all voters (ATC, airlines, GROUND)</p></div>
 
 <div class="b" style="left:1555px;top:370px;width:300px;border-color:var(--green)"><b>Agreed plan</b><p>revised arrival time, runway, gate</p></div>
 <div class="b" style="left:1555px;top:595px;width:300px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">No consensus after 3 turns</div><p>deterministic solver decides; reason logged</p></div>
