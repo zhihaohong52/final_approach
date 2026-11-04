@@ -7,9 +7,11 @@ export function axisStart(times: number[], holdStarts: number[]): number {
   return first > 45 ? Math.floor((first - 15) / 15) * 15 : Math.min(0, Math.floor((Math.min(0, ...times, ...holdStarts) - 3) / 15) * 15);
 }
 
-/** The axis end: three hours at most, at least 75 min, 15-minute steps after the last event. */
-export function axisEnd(start: number, last: number): number {
-  return Math.min(start + 180, Math.max(start + 75, Math.ceil((last + 3) / 15) * 15));
+/** The axis end: at least 75 min, 15-minute steps after the last event, three hours at most unless `reach` (the
+ *  disrupted flight's last event) lies further out: the axis always shows the disrupted flight, up to 12 hours. */
+export function axisEnd(start: number, last: number, reach = -Infinity): number {
+  const cap = Math.min(start + 720, Math.max(start + 180, Math.ceil((reach + 3) / 15) * 15));
+  return Math.min(cap, Math.max(start + 75, Math.ceil((last + 3) / 15) * 15));
 }
 
 export const RANGES = [10, 20, 40, 80];       // NM from centre to the short edge, as on a scope range knob

@@ -147,7 +147,9 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   const START = Math.min(computedStart, startSeen.current.v);
   startSeen.current.v = START;
   const lastAll = Math.max(START, ...lastPlan, ...(firstPlan > 45 ? [] : lastQueue));
-  const END = axisEnd(START, lastAll);
+  // the disrupted flight is always on the axis, landing and gate, however late it lands
+  const focusEnd = plans.flatMap((p) => land(p).filter((a) => a.callsign === wave.focus).map((a) => (a.metrics.in_block_min ?? a.slot_min ?? 0) + turn));
+  const END = axisEnd(START, lastAll, Math.max(-Infinity, ...focusEnd));
   const inView = (from: number, to: number) => to >= START && from <= END;
   // flights landing after the window are named in a gutter on the right, clear of every bar
   // fixed for the length of a drag, so the time scale never shifts under the pointer
@@ -217,6 +219,8 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
   const real = (label: string) => !/simulated/i.test(label);
   const noteX = Math.max(x(START), scrollX + LABEL) + 8;
   const offAxis: JSX.Element[] = [];   // flights landing after the window: labels on the right edge
+  const offRow = new Map<number, number>();   // labels already on a row, so a second one sits below, not on top
+  const offDy = (y: number) => { const n = offRow.get(y) ?? 0; offRow.set(y, n + 1); return n * 12; };
 
   // on a narrow screen the chart opens on the disrupted flight's landing, the subject of the page
   const focusSlot = plan?.assignments.find((a) => a.callsign === wave.focus)?.slot_min;
@@ -483,12 +487,13 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
           const tip = `${name} (${a.callsign}): runway ${a.runway} ${clock(wave.window_start, slot)}, gate ${a.gate} ${clock(wave.window_start, inb)}–${clock(wave.window_start, inb + turn)}${editable ? ". Drag to move; arrow keys move it by a minute or a lane." : ""}`;
           if (slot > END && !dragging) {
             // drawn in a layer above the bars (below), so a bar running to the edge can't hide it
+            const rdy = onLane ? offDy(ry) : 0, gdy = gy > 0 ? offDy(gy) : 0;
             offAxis.push(
               <g key={a.callsign}>
-                {onLane && ring && <circle cx={x(END) + 8} cy={ry + 14} r={3.5} fill={ring} />}
-                {onLane && <text x={x(END) + (ring ? 16 : 8)} y={ry + 18} className="off-axis" style={{ fill: TONE_TEXT[rwTone] }}>{`${name} → ${clock(wave.window_start, slot)}`}</text>}
-                {gy > 0 && ring && <circle cx={x(END) + 8} cy={gy + 14} r={3.5} fill={ring} />}
-                {gy > 0 && <text x={x(END) + (ring ? 16 : 8)} y={gy + 18} className="off-axis" style={{ fill: TONE_TEXT[gtTone] }}>{`${name} → ${clock(wave.window_start, inb)}`}</text>}
+                {onLane && ring && <circle cx={x(END) + 8} cy={ry + 14 + rdy} r={3.5} fill={ring} />}
+                {onLane && <text x={x(END) + (ring ? 16 : 8)} y={ry + 18 + rdy} className="off-axis" style={{ fill: TONE_TEXT[rwTone] }}>{`${name} → ${clock(wave.window_start, slot)}`}</text>}
+                {gy > 0 && ring && <circle cx={x(END) + 8} cy={gy + 14 + gdy} r={3.5} fill={ring} />}
+                {gy > 0 && <text x={x(END) + (ring ? 16 : 8)} y={gy + 18 + gdy} className="off-axis" style={{ fill: TONE_TEXT[gtTone] }}>{`${name} → ${clock(wave.window_start, inb)}`}</text>}
                 <title>{tip}</title>
               </g>);
             return null;

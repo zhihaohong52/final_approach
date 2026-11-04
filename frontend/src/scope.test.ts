@@ -19,6 +19,9 @@ describe("axisEnd", () => {
   it("at least 75 min", () => expect(axisEnd(60, 70)).toBe(135));
   it("capped at start + 180", () => expect(axisEnd(30, 600)).toBe(210));
   it("rounds up to 15 min past the last event", () => expect(axisEnd(0, 100)).toBe(105));
+  it("reaches the disrupted flight past three hours", () => expect(axisEnd(0, 330, 310)).toBe(315));
+  it("the disrupted flight's reach only lifts the cap", () => expect(axisEnd(0, 100, 310)).toBe(105));
+  it("never beyond 12 hours", () => expect(axisEnd(0, 2000, 2000)).toBe(720));
 });
 
 describe("autoRange", () => {
