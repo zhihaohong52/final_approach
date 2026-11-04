@@ -128,12 +128,12 @@ def test_floor_source():
 
 
 def test_current(monkeypatch, caplog):
-    assert VARIANTS == ("firm", "relaxing") and FAIRNESS_DEFAULT == "relaxing"
+    assert VARIANTS == ("firm", "relaxing") and FAIRNESS_DEFAULT == "firm"
     monkeypatch.delenv("ATM_FAIRNESS", raising=False)
     monkeypatch.setattr(fairness, "_warned", set())
     assert current() == FAIRNESS_DEFAULT
-    monkeypatch.setenv("ATM_FAIRNESS", "firm")
-    assert current() == "firm"
+    monkeypatch.setenv("ATM_FAIRNESS", "relaxing")
+    assert current() == "relaxing"
     monkeypatch.setenv("ATM_FAIRNESS", "bogus")
     with caplog.at_level(logging.WARNING, logger="backend.wave.fairness"):
         assert current() == FAIRNESS_DEFAULT

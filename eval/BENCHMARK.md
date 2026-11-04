@@ -1,5 +1,5 @@
 # Benchmark (50 waves, seed 7, source flights2015)
-Generated 2026-11-04T00:26:38+00:00
+Generated 2026-11-04T00:12:29+00:00
 
 Outcome means (delay, fuel, pax, overtime, rounds, agreement) are over waves that succeeded in every arm (50 of 50).
 
@@ -9,133 +9,77 @@ Outcome means (delay, fuel, pax, overtime, rounds, agreement) are over waves tha
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | status quo | - | - | - | - | - | 326.69 | 1.36 | 36.92 | 1.748 | - | - | - | - | - |
 | Optimiser (centralised beam search, no negotiation) | - | - | - | - | 0 | 329.44 | 83.2 | 34.704 | - | - | - | - | - | - |
-| typesafe/jev-1.14 | 50/50 | 100.0 | 1.46 | 0.0 | 0 | 334.152 | 223.68 | 34.56 | 1.988 | 38.0 | 0.0087 | 421.5 | 520.5 | 0.0 |
-| liquid/d1-ultra | 50/50 | 100.0 | 1.46 | 0.0 | 0 | 334.106 | 218.8 | 34.56 | 2.002 | 54.0 | 0.0022 | 556.0 | 1305.9 | 0.0 |
-| baseten/elephant-1 | 50/50 | 98.0 | 1.48 | 2.0 | 0 | 334.562 | 217.76 | 34.24 | 1.876 | 38.0 | 0.0168 | 489.0 | 680.1 | 0.0 |
-| formula | 50/50 | 100.0 | 1.5 | 0.0 | 0 | 333.4 | 210.16 | 34.278 | 1.966 | 100.0 | n/a | n/a | n/a | 0.0 |
+| typesafe/jev-1.14 | 50/50 | 94.0 | 1.98 | 6.0 | 0 | 334.134 | 148.72 | 34.72 | 2.214 | 62.0 | 0.0083 | 416.0 | 508.6 | 0.0 |
+| liquid/d1-ultra | 50/50 | 96.0 | 1.88 | 4.0 | 0 | 333.996 | 132.48 | 34.72 | 1.742 | 70.0 | 0.0012 | 545.0 | 956.5 | 0.0 |
+| baseten/elephant-1 | 50/50 | 94.0 | 2.0 | 6.0 | 0 | 334.39 | 152.56 | 34.4 | 2.074 | 60.0 | 0.0137 | 484.0 | 586.6 | 0.0 |
+| formula | 50/50 | 98.0 | 1.92 | 2.0 | 0 | 335.54 | 154.72 | 34.438 | 2.012 | 100.0 | n/a | n/a | n/a | 0.0 |
 
 Status quo infeasible on 24 waves: F2015-102056, F2015-105396, F2015-110532, F2015-112396, F2015-124231, F2015-144568, F2015-165543, F2015-205196, F2015-208678, F2015-208692, F2015-209722, F2015-210010, F2015-246479, F2015-251827, F2015-254935, F2015-267904, F2015-282726, F2015-298859, F2015-335957, F2015-343919, F2015-43962, F2015-60842, F2015-63104, F2015-63860.
 
-- typesafe/jev-1.14 vs status quo on 26 feasible-status-quo waves: delay 318.362 min vs 324.665 min
-- liquid/d1-ultra vs status quo on 26 feasible-status-quo waves: delay 317.973 min vs 324.665 min
-- baseten/elephant-1 vs status quo on 26 feasible-status-quo waves: delay 318.196 min vs 324.665 min
-- formula vs status quo on 26 feasible-status-quo waves: delay 317.988 min vs 324.665 min
+- typesafe/jev-1.14 vs status quo on 26 feasible-status-quo waves: delay 320.904 min vs 324.665 min
+- liquid/d1-ultra vs status quo on 26 feasible-status-quo waves: delay 320.623 min vs 324.665 min
+- baseten/elephant-1 vs status quo on 26 feasible-status-quo waves: delay 320.946 min vs 324.665 min
+- formula vs status quo on 26 feasible-status-quo waves: delay 322.985 min vs 324.665 min
 
 Optimiser reference (n=50, 50 feasible): mean delay 329.44 min, 95% CI [282.467, 376.413]; no models, no negotiation.
-- typesafe/jev-1.14: delay 95% CI [287.524, 380.78]; gap to optimiser 4.712 min; share of optimiser gain over status quo 59.73% (n=22 waves with feasible status quo beaten by the optimiser).
-- liquid/d1-ultra: delay 95% CI [287.466, 380.746]; gap to optimiser 4.666 min; share of optimiser gain over status quo 63.29% (n=22 waves with feasible status quo beaten by the optimiser).
-- baseten/elephant-1: delay 95% CI [287.835, 381.289]; gap to optimiser 5.122 min; share of optimiser gain over status quo 61.25% (n=22 waves with feasible status quo beaten by the optimiser).
-- formula: delay 95% CI [286.759, 380.041]; gap to optimiser 3.96 min; share of optimiser gain over status quo 65.73% (n=22 waves with feasible status quo beaten by the optimiser).
+- typesafe/jev-1.14: delay 95% CI [287.4, 380.868]; gap to optimiser 4.694 min; share of optimiser gain over status quo 34.49% (n=22 waves with feasible status quo beaten by the optimiser).
+- liquid/d1-ultra: delay 95% CI [287.155, 380.837]; gap to optimiser 4.556 min; share of optimiser gain over status quo 37.06% (n=22 waves with feasible status quo beaten by the optimiser).
+- baseten/elephant-1: delay 95% CI [287.585, 381.195]; gap to optimiser 4.95 min; share of optimiser gain over status quo 34.1% (n=22 waves with feasible status quo beaten by the optimiser).
+- formula: delay 95% CI [289.252, 381.828]; gap to optimiser 6.1 min; share of optimiser gain over status quo 15.41% (n=22 waves with feasible status quo beaten by the optimiser).
 
 Status-quo diversions (mean): 0.0
 
 ## Selection
 
-**Winner:** typesafe/jev-1.14 (n = 50 waves: indicative, not statistically significant)
+**Winner:** liquid/d1-ultra (n = 50 waves: indicative, not statistically significant)
 
 Rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
 
-- typesafe/jev-1.14 is the best model arm: it meets all three thresholds (error, p95, consensus) and has the best outcome among the qualifying model arms.
+- liquid/d1-ultra is the best model arm: it meets all three thresholds (error, p95, consensus) and has the best outcome among the qualifying model arms.
 - Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.
 - cost_usd_per_wave = 0.0: output tokens free; input cost not measured.
 - fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).
-- typesafe/jev-1.14 p95 all decisions incl. fallbacks: 520.5 ms
-- liquid/d1-ultra p95 all decisions incl. fallbacks: 1305.9 ms
-- liquid/d1-ultra missed p95 < 1000 ms: 1305.9 ms
-- baseten/elephant-1 p95 all decisions incl. fallbacks: 680.1 ms
-- baseten/elephant-1 outcomes partly from solver fallback on 1/50 waves
-- Mean delay: typesafe/jev-1.14 334.152 min vs formula 333.4 min vs status quo 326.69 min.
+- typesafe/jev-1.14 p95 all decisions incl. fallbacks: 508.6 ms
+- typesafe/jev-1.14 outcomes partly from solver fallback on 3/50 waves
+- liquid/d1-ultra p95 all decisions incl. fallbacks: 956.5 ms
+- liquid/d1-ultra outcomes partly from solver fallback on 2/50 waves
+- baseten/elephant-1 p95 all decisions incl. fallbacks: 586.6 ms
+- baseten/elephant-1 outcomes partly from solver fallback on 3/50 waves
+- Mean delay: liquid/d1-ultra 333.996 min vs formula 335.54 min vs status quo 326.69 min.
 
 ## Outage test
 
-Primary `invalid/model-does-not-exist` disabled on 20 wave(s): 20 resolved. Fallbacks used: {"typesafe/jev-1.14-20261014": 222}
+Primary `invalid/model-does-not-exist` disabled on 20 wave(s): 20 resolved. Fallbacks used: {"liquid/d1-ultra-20261015": 246}
 
 ## Ablation: safety engine off
 
-46.0% of formula-arm final plans are infeasible under the real rules when the engine is disabled.
+48.0% of formula-arm final plans are infeasible under the real rules when the engine is disabled.
 
 ## Failures
 
-- `F2015-144520` (typesafe/jev-1.14): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-156608` (typesafe/jev-1.14): regression vs status quo: fuel 220.0 > 0.0 kg
-- `F2015-302254` (typesafe/jev-1.14): regression vs status quo: delay 311.7 > 307.7 min
-- `F2015-302254` (typesafe/jev-1.14): regression vs status quo: fuel 52.0 > 0.0 kg
-- `F2015-115532` (typesafe/jev-1.14): regression vs status quo: delay 239.4 > 236.5 min
-- `F2015-169005` (typesafe/jev-1.14): regression vs status quo: fuel 32.0 > 0.0 kg
-- `F2015-161169` (typesafe/jev-1.14): regression vs status quo: fuel 12.0 > 0.0 kg
-- `F2015-209820` (typesafe/jev-1.14): regression vs status quo: delay 256.2 > 253.8 min
-- `F2015-209820` (typesafe/jev-1.14): regression vs status quo: fuel 100.0 > 12.0 kg
-- `F2015-291336` (typesafe/jev-1.14): regression vs status quo: fuel 228.0 > 0.0 kg
-- `F2015-112468` (typesafe/jev-1.14): regression vs status quo: fuel 236.0 > 0.0 kg
-- `F2015-268625` (typesafe/jev-1.14): regression vs status quo: fuel 196.0 > 0.0 kg
-- `F2015-272020` (typesafe/jev-1.14): regression vs status quo: delay 444.0 > 443.8 min
-- `F2015-74915` (typesafe/jev-1.14): regression vs status quo: delay 334.7 > 334.5 min
-- `F2015-74915` (typesafe/jev-1.14): regression vs status quo: fuel 76.0 > 0.0 kg
-- `F2015-274783` (typesafe/jev-1.14): regression vs status quo: fuel 108.0 > 0.0 kg
-- `F2015-131437` (typesafe/jev-1.14): regression vs status quo: fuel 104.0 > 0.0 kg
-- `F2015-273632` (typesafe/jev-1.14): regression vs status quo: fuel 20.0 > 0.0 kg
-- `F2015-144520` (liquid/d1-ultra): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-156608` (liquid/d1-ultra): regression vs status quo: fuel 220.0 > 0.0 kg
-- `F2015-302254` (liquid/d1-ultra): regression vs status quo: fuel 52.0 > 0.0 kg
-- `F2015-115532` (liquid/d1-ultra): regression vs status quo: delay 239.4 > 236.5 min
-- `F2015-169005` (liquid/d1-ultra): regression vs status quo: fuel 32.0 > 0.0 kg
-- `F2015-161169` (liquid/d1-ultra): regression vs status quo: fuel 12.0 > 0.0 kg
-- `F2015-209820` (liquid/d1-ultra): regression vs status quo: delay 256.2 > 253.8 min
-- `F2015-209820` (liquid/d1-ultra): regression vs status quo: fuel 100.0 > 12.0 kg
-- `F2015-112468` (liquid/d1-ultra): regression vs status quo: fuel 236.0 > 0.0 kg
-- `F2015-291336` (liquid/d1-ultra): regression vs status quo: fuel 228.0 > 0.0 kg
-- `F2015-268625` (liquid/d1-ultra): regression vs status quo: fuel 196.0 > 0.0 kg
-- `F2015-272020` (liquid/d1-ultra): regression vs status quo: delay 444.0 > 443.8 min
-- `F2015-274783` (liquid/d1-ultra): regression vs status quo: fuel 108.0 > 0.0 kg
-- `F2015-131437` (liquid/d1-ultra): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-273632` (liquid/d1-ultra): regression vs status quo: fuel 20.0 > 0.0 kg
-- `F2015-144520` (baseten/elephant-1): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-156608` (baseten/elephant-1): regression vs status quo: fuel 220.0 > 0.0 kg
-- `F2015-302254` (baseten/elephant-1): regression vs status quo: fuel 52.0 > 0.0 kg
-- `F2015-115532` (baseten/elephant-1): regression vs status quo: delay 239.4 > 236.5 min
-- `F2015-169005` (baseten/elephant-1): regression vs status quo: fuel 32.0 > 0.0 kg
-- `F2015-161169` (baseten/elephant-1): regression vs status quo: fuel 12.0 > 0.0 kg
-- `F2015-209820` (baseten/elephant-1): regression vs status quo: delay 256.2 > 253.8 min
-- `F2015-209820` (baseten/elephant-1): regression vs status quo: fuel 100.0 > 12.0 kg
-- `F2015-291336` (baseten/elephant-1): regression vs status quo: fuel 228.0 > 0.0 kg
-- `F2015-112468` (baseten/elephant-1): regression vs status quo: fuel 236.0 > 0.0 kg
-- `F2015-268625` (baseten/elephant-1): regression vs status quo: fuel 196.0 > 0.0 kg
-- `F2015-272020` (baseten/elephant-1): regression vs status quo: delay 444.0 > 443.8 min
-- `F2015-274783` (baseten/elephant-1): regression vs status quo: fuel 108.0 > 0.0 kg
-- `F2015-131437` (baseten/elephant-1): regression vs status quo: fuel 92.0 > 0.0 kg
+- `F2015-112396` (typesafe/jev-1.14): no consensus: deterministic solver fallback
+- `F2015-208692` (typesafe/jev-1.14): no consensus: deterministic solver fallback
+- `F2015-246479` (typesafe/jev-1.14): no consensus: deterministic solver fallback
+- `F2015-208692` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `F2015-246479` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `F2015-208692` (baseten/elephant-1): no consensus: deterministic solver fallback
+- `F2015-246479` (baseten/elephant-1): no consensus: deterministic solver fallback
 - `F2015-124231` (baseten/elephant-1): no consensus: deterministic solver fallback
-- `F2015-273632` (baseten/elephant-1): regression vs status quo: fuel 20.0 > 0.0 kg
-- `F2015-144520` (formula): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-156608` (formula): regression vs status quo: fuel 220.0 > 0.0 kg
-- `F2015-302254` (formula): regression vs status quo: fuel 52.0 > 0.0 kg
-- `F2015-115532` (formula): regression vs status quo: delay 239.4 > 236.5 min
-- `F2015-169005` (formula): regression vs status quo: fuel 228.0 > 0.0 kg
-- `F2015-161169` (formula): regression vs status quo: fuel 36.0 > 0.0 kg
-- `F2015-209820` (formula): regression vs status quo: delay 262.8 > 253.8 min
-- `F2015-209820` (formula): regression vs status quo: fuel 212.0 > 12.0 kg
-- `F2015-291336` (formula): regression vs status quo: fuel 228.0 > 0.0 kg
-- `F2015-112468` (formula): regression vs status quo: fuel 236.0 > 0.0 kg
-- `F2015-268625` (formula): regression vs status quo: fuel 196.0 > 0.0 kg
-- `F2015-272020` (formula): regression vs status quo: delay 444.7 > 443.8 min
-- `F2015-272020` (formula): regression vs status quo: fuel 24.0 > 0.0 kg
-- `F2015-131437` (formula): regression vs status quo: fuel 92.0 > 0.0 kg
-- `F2015-274783` (formula): regression vs status quo: fuel 168.0 > 0.0 kg
-- `F2015-163396` (formula): regression vs status quo: fuel 112.0 > 0.0 kg
-- `F2015-273632` (formula): regression vs status quo: fuel 84.0 > 0.0 kg
+- `F2015-246479` (formula): no consensus: deterministic solver fallback
 
 ## Prompt budget (largest prompt of any kind)
 
 Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state + instructions + options) per arm, against the 32,000-char (8k-token) budget:
 
-- typesafe/jev-1.14: 7,907 chars (within budget)
-- liquid/d1-ultra: 7,909 chars (within budget)
-- baseten/elephant-1: 7,907 chars (within budget)
+- typesafe/jev-1.14: 8,173 chars (within budget)
+- liquid/d1-ultra: 8,329 chars (within budget)
+- baseten/elephant-1: 8,329 chars (within budget)
 - formula: 0 chars (within budget)
 
 ## Engine veto counts
 
-- typesafe/jev-1.14: PLT-FUEL-RESERVE 8
-- liquid/d1-ultra: PLT-FUEL-RESERVE 7
+- typesafe/jev-1.14: PLT-FUEL-RESERVE 7
+- liquid/d1-ultra: PLT-FUEL-RESERVE 8
 - baseten/elephant-1: PLT-FUEL-RESERVE 5
 - formula: PLT-FUEL-RESERVE 10
 
@@ -169,10 +113,10 @@ Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state 
 | v3-traffic | baseten/elephant-1 | 334.386 | 238.4 | 4.17 | 0.414 | 34.24 | 1.8 | 96.0 | 0 | 50 |
 | v3-traffic | formula | 333.378 | 233.36 | 2.04 | 0.432 | 34.278 | 1.886 | 98.0 | 0 | 50 |
 | v4-airlines | baseline | 326.69 | 1.36 | 0.0 | 1.083 | 36.92 | 1.748 | n/a | n/a | 26 |
-| v4-airlines | typesafe/jev-1.14 | 334.152 | 223.68 | 4.0 | 0.434 | 34.56 | 1.988 | 100.0 | 0 | 50 |
-| v4-airlines | liquid/d1-ultra | 334.106 | 218.8 | 4.0 | 0.423 | 34.56 | 2.002 | 100.0 | 0 | 50 |
-| v4-airlines | baseten/elephant-1 | 334.562 | 217.76 | 4.08 | 0.458 | 34.24 | 1.876 | 98.0 | 0 | 50 |
-| v4-airlines | formula | 333.4 | 210.16 | 2.0 | 0.441 | 34.278 | 1.966 | 100.0 | 0 | 50 |
+| v4-airlines | typesafe/jev-1.14 | 334.134 | 148.72 | 2.13 | 0.783 | 34.72 | 2.214 | 94.0 | 0 | 50 |
+| v4-airlines | liquid/d1-ultra | 333.996 | 132.48 | 2.08 | 0.944 | 34.72 | 1.742 | 96.0 | 0 | 50 |
+| v4-airlines | baseten/elephant-1 | 334.39 | 152.56 | 2.13 | 0.771 | 34.4 | 2.074 | 94.0 | 0 | 50 |
+| v4-airlines | formula | 335.54 | 154.72 | 2.04 | 0.846 | 34.438 | 2.012 | 98.0 | 0 | 50 |
 
 ## Attribution
 
@@ -182,36 +126,36 @@ Physics (status quo under the new engine minus under the old): delay_min +0, fue
 
 Negotiation (arm minus status quo, same engine); headline claims come from these deltas:
 
-- typesafe/jev-1.14: delay_min +7.462, fuel_kg +222.32, lap_share_pct +4, taxi_wait_min -0.649, pax_protected_pct -2.36, overtime_min +0.24
-- liquid/d1-ultra: delay_min +7.416, fuel_kg +217.44, lap_share_pct +4, taxi_wait_min -0.66, pax_protected_pct -2.36, overtime_min +0.254
-- baseten/elephant-1: delay_min +7.872, fuel_kg +216.4, lap_share_pct +4.08, taxi_wait_min -0.625, pax_protected_pct -2.68, overtime_min +0.128
-- formula: delay_min +6.71, fuel_kg +208.8, lap_share_pct +2, taxi_wait_min -0.642, pax_protected_pct -2.642, overtime_min +0.218
+- typesafe/jev-1.14: delay_min +7.444, fuel_kg +147.36, lap_share_pct +2.13, taxi_wait_min -0.3, pax_protected_pct -2.2, overtime_min +0.466
+- liquid/d1-ultra: delay_min +7.306, fuel_kg +131.12, lap_share_pct +2.08, taxi_wait_min -0.139, pax_protected_pct -2.2, overtime_min -0.006
+- baseten/elephant-1: delay_min +7.7, fuel_kg +151.2, lap_share_pct +2.13, taxi_wait_min -0.312, pax_protected_pct -2.52, overtime_min +0.326
+- formula: delay_min +8.85, fuel_kg +153.36, lap_share_pct +2.04, taxi_wait_min -0.237, pax_protected_pct -2.482, overtime_min +0.264
 
-Headline: under engine v4-airlines, negotiation (formula) adds 6.71 min of mean delay against the status quo.
+Headline: under engine v4-airlines, negotiation (liquid/d1-ultra) adds 7.306 min of mean delay against the status quo.
 
-Regressions (22):
+Regressions (66):
 
-- `F2015-208692` (typesafe/jev-1.14) delay_min 181.3 to 186.4; negotiation
-- `F2015-343919` (typesafe/jev-1.14) delay_min 251.1 to 253.1; negotiation
+- `F2015-112468` (typesafe/jev-1.14) delay_min 168.2 to 179.6; negotiation
+- `F2015-124231` (typesafe/jev-1.14) delay_min 348.0 to 349.9; negotiation
+- `F2015-131437` (typesafe/jev-1.14) delay_min 475.4 to 475.9; negotiation
+- `F2015-144520` (typesafe/jev-1.14) delay_min 629.8 to 630.7; negotiation
+- `F2015-144568` (typesafe/jev-1.14) delay_min 507.8 to 510.1; negotiation
+- `F2015-156608` (typesafe/jev-1.14) delay_min 335.3 to 341.2; negotiation
+- `F2015-161169` (typesafe/jev-1.14) delay_min 278.0 to 282.8; negotiation
+- `F2015-169005` (typesafe/jev-1.14) delay_min 204.1 to 216.9; negotiation
+- `F2015-268625` (typesafe/jev-1.14) delay_min 327.3 to 331.5; negotiation
+- `F2015-273632` (typesafe/jev-1.14) delay_min 200.9 to 216.9; negotiation
+- `F2015-274783` (typesafe/jev-1.14) delay_min 222.9 to 236.9; negotiation
+- `F2015-291336` (typesafe/jev-1.14) delay_min 187.6 to 191.9; negotiation
+- `F2015-334031` (typesafe/jev-1.14) delay_min 159.8 to 160.8; negotiation
+- `F2015-334031` (typesafe/jev-1.14) fuel_kg 8.0 to 28.0; negotiation
 - `F2015-60842` (typesafe/jev-1.14) delay_min 279.7 to 284.6; negotiation
 - `F2015-60842` (typesafe/jev-1.14) fuel_kg 0.0 to 16.0; negotiation
-- `F2015-208678` (liquid/d1-ultra) delay_min 698.3 to 700.3; negotiation
-- `F2015-208678` (liquid/d1-ultra) fuel_kg 88.0 to 168.0; negotiation
-- `F2015-208692` (liquid/d1-ultra) delay_min 175.3 to 182.1; negotiation
-- `F2015-209722` (liquid/d1-ultra) delay_min 132.4 to 148.6; negotiation
-- `F2015-209722` (liquid/d1-ultra) fuel_kg 272.0 to 1088.0; negotiation
-- `F2015-251827` (liquid/d1-ultra) delay_min 240.8 to 244.9; negotiation
-- `F2015-251827` (liquid/d1-ultra) fuel_kg 12.0 to 180.0; negotiation
-- `F2015-165543` (baseten/elephant-1) fuel_kg 348.0 to 360.0; negotiation
-- `F2015-208692` (baseten/elephant-1) delay_min 181.3 to 186.4; negotiation
-- `F2015-246479` (baseten/elephant-1) delay_min 198.9 to 206.3; negotiation
-- `F2015-246479` (baseten/elephant-1) fuel_kg 688.0 to 728.0; negotiation
-- `F2015-268625` (baseten/elephant-1) delay_min 318.6 to 327.3; negotiation
-- `F2015-298859` (baseten/elephant-1) delay_min 451.0 to 458.5; negotiation
-- `F2015-298859` (baseten/elephant-1) fuel_kg 24.0 to 72.0; negotiation
-- `F2015-343919` (baseten/elephant-1) delay_min 251.1 to 253.0; negotiation
-- `F2015-165543` (formula) delay_min 200.9 to 208.4; negotiation
-- ... and 2 more in benchmark.json
+- `F2015-112468` (liquid/d1-ultra) delay_min 168.2 to 179.6; negotiation
+- `F2015-124231` (liquid/d1-ultra) delay_min 348.0 to 349.9; negotiation
+- `F2015-131437` (liquid/d1-ultra) delay_min 475.2 to 475.9; negotiation
+- `F2015-144520` (liquid/d1-ultra) delay_min 629.8 to 630.7; negotiation
+- ... and 46 more in benchmark.json
 
 ## Fairness variants
 
@@ -228,10 +172,12 @@ Same waves and arms under each fairness variant. worse flight % (per-flight, wha
 | relaxing | baseten/elephant-1 | 98.0 | 96.0 | 57.69 | 53.85 | 61.54 | 334.562 | 217.76 | 15.1 | 680.1 |
 | relaxing | formula | 100.0 | 98.0 | 61.54 | 57.69 | 65.38 | 333.4 | 210.16 | 0.0 | n/a |
 
-**Pick:** relaxing
+**Pick:** firm
 
 Rule: A variant passes iff every arm's consensus rate >= the v3-traffic arm's minus one wave (2.0 pp at n = 50). Among passing variants the lower mean per-flight worse-than-status-quo share (agreed plans, any flight worse on delay or fuel) wins (difference under 0.05 is a tie: firm). If neither passes, the higher mean consensus rate wins and the shortfall is flagged. Scored on the arms common to both variants and v3-traffic. v3-traffic has wave totals only, so the comparison with it uses the wave-total share.
 
+- OVERRIDE (user, 4 Nov 2026): firm shipped. The automatic rule picked relaxing because firm missed the consensus floor by 2 waves in jev-1.14 (94 vs v3-traffic 98); the user chose firm because relaxing left 58-62% of agreed waves with a flight worse than its status quo, and firm leaves 0%. The cost: 2 more fallback waves in jev-1.14 (6% vs 0%) and 94% consensus in elephant-1 (relaxing 98%).
+- Automatic pick (not shipped): relaxing.
 - Only relaxing keeps consensus within one wave of v3-traffic in every arm.
 - firm: fails the consensus floor; mean consensus 95.5%, mean worse-flight share 0.0%
 - relaxing: passes the consensus floor; mean consensus 99.5%, mean worse-flight share 59.61%
@@ -291,13 +237,13 @@ Tier counts over the 50 benchmark waves (waves that failed to build count as non
 ## Airline agents (v4-airlines)
 
 - The v3-traffic to v4-airlines change adds one agent per airline (utility = its own flights' weighted mean, a fairness floor against the status-quo or best-seen plan) and one pilot per flight that can answer UNABLE on PLT-* and wind rules. No physics changed: physics_delta is 0.0 on every metric, and the status quo is identical (delay 326.69 min, fuel 1.36 kg, 26 feasible waves of 50).
-- Shipped fairness variant: relaxing. Firm (no airline flight may be worse than its floor) gives 0.0 % of agreed waves with any flight worse, but consensus falls below the v3-traffic floor in jev-1.14 (94 % vs 98 %, two waves lower) and is 94 % in elephant-1 (96 % in v3-traffic, one wave lower, inside the tolerance). Relaxing keeps every arm within one wave of v3-traffic: consensus 100 / 100 / 98 / 100 % for jev-1.14 / d1-ultra / elephant-1 / formula, against 98 / 96 / 96 / 98 % in v3-traffic. pick.shortfall is false.
+- Shipped fairness variant: FIRM, by a user override of the automatic pick (4 Nov 2026). The rule picked relaxing: firm misses the consensus floor in jev-1.14 (94 % vs 98 % in v3-traffic, two waves lower; elephant-1 94 % vs 96 %, one wave lower, inside the tolerance). The user chose firm because relaxing leaves 57.7-61.5 % of agreed waves with some flight worse than its status quo, and firm leaves 0.0 % in every arm. The cost of firm is named here: consensus 94 / 96 / 94 / 98 % (jev-1.14 / d1-ultra / elephant-1 / formula) against v3-traffic 98 / 96 / 96 / 98 %, i.e. 2 more fallback waves in jev-1.14 and 1 more in elephant-1, plus about half a round and about 5 model calls more per wave than relaxing. Relaxing for comparison: consensus 100 / 100 / 98 / 100 %. pick.shortfall is false.
 - Worse-than-status-quo share, wave totals, v3-traffic to v4-airlines (relaxing): jev-1.14 65.4 to 57.7 %, d1-ultra 61.5 to 53.8 %, elephant-1 61.5 to 53.8 %, formula 65.4 to 57.7 %. Per-flight share (any flight worse on delay or fuel, relaxing): 61.5 / 57.7 / 57.7 / 61.5 %. Firm: 0.0 % in every arm on both measures. v3-traffic recorded wave totals only, so the per-flight share has no v3 value.
 - Consensus per arm and variant (firm / relaxing), jev-1.14 94 / 100 %, d1-ultra 96 / 100 %, elephant-1 94 / 98 %, formula 98 / 100 %. Fallback rate follows: firm 6 / 4 / 6 / 2 %, relaxing 0 / 0 / 2 / 0 %. Mean rounds: firm 1.98 / 1.88 / 2.00 / 1.92, relaxing 1.46 / 1.46 / 1.48 / 1.50 (v3-traffic 1.36 to 1.42).
 - Model calls per wave (firm / relaxing): jev-1.14 20.7 / 15.3, d1-ultra 18.7 / 14.5, elephant-1 20.5 / 15.1, formula 0. p95 latency ms per call (firm / relaxing): jev-1.14 509 / 521, d1-ultra 957 / 1306, elephant-1 587 / 680 (v3-traffic 533 / 1228 / 629). d1-ultra's relaxing p95 of 1306 ms is above 1 s. Cost is not measured.
 - A6 stress waves (formulas mode, identical under firm and relaxing): CLT-2024-07-29-19 consensus in 2 turns, delay 1053.3 min, fuel 0.0 kg; ATL-2024-07-18-21 consensus in 2 turns, delay 1216.2 min, fuel 0.0 kg. Every airline flight stays at its status quo on both. On the best-seen-floor waves F2015-77162 (firm consensus in turn 3, relaxing turn 2) and F2015-292602 (both turn 2) the status quo is infeasible, the objections cite the best-seen plan and the final plan is feasible.
 - Fuel kg (v3-traffic to v4-airlines, relaxing): jev-1.14 245.8 to 223.7, d1-ultra 218.1 to 218.8, elephant-1 238.4 to 217.8, formula 233.4 to 210.2. Firm: 148.7 / 132.5 / 152.6 / 154.7. Mean delay is flat (334.1 to 334.6 min in the three model arms). Firm burns about 55 to 86 kg less fuel per wave than relaxing, at the cost of about half a round more per wave and the consensus losses above.
-- Regressions (22 wave-arm rows against v3-traffic under relaxing: 8 elephant-1, 7 d1-ultra, 4 jev-1.14, 3 formula; firm 66): each is a delay or fuel rise on one wave, up to a few minutes. The cause is the negotiation, measured: physics_delta is 0.0 and the per-wave attribution assigns every row to negotiation. Why the airline agents move each wave is a likely cause (not measured per wave): an airline floor turns down a slot push that helps the wave total but costs one of its flights.
+- Regressions (66 wave-arm rows against v3-traffic under firm: 19 d1-ultra, 16 jev-1.14, 16 formula, 15 elephant-1; relaxing 22). Firm's named cost is the consensus dip in jev-1.14 (94 vs 98 %: F2015-112396, -208692, -246479 fell back to the solver) and its extra rounds: each is a delay or fuel rise on one wave, up to a few minutes. The cause is the negotiation, measured: physics_delta is 0.0 and the per-wave attribution assigns every row to negotiation. Why the airline agents move each wave is a likely cause (not measured per wave): an airline floor turns down a slot push that helps the wave total but costs one of its flights.
 - rule_violations_in_agreed_plans is 0 in all four arms of both variants. The 20-wave outage test resolves 20 of 20 in both (primary disabled, fallback model used).
 
 ## Limits
