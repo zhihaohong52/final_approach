@@ -341,6 +341,27 @@ def test_escape_clause_judged_at_end_of_turn(monkeypatch):
     assert out2["route"] == "finalize" and out2["final"].id == p.id
 
 
+def test_escape_guard_does_not_apply_on_the_last_turn(monkeypatch):
+    """Review M7: on turn 3 a later floor-meeting plan cannot be carried into a turn 4, so it must not block a
+    unanimous plan that breaches only under the escape clause (that would turn a consensus into a fallback)."""
+    w = make_wave()
+    run = graph._Run(w, "formulas", None, None, "t", "firm")
+    p = moves.fcfs_plan(w)
+    q = next(moves.apply(w, p, m) for m in moves._candidates(w, p, "GROUND")
+             if rules.feasible(w, moves.apply(w, p, m)) and moves.apply(w, p, m).id != p.id)
+    breach = {"callsign": "DL100", "metric": "delay_min", "floor": 0.0, "value": 9.0, "allowed": 0.05,
+              "floor_source": "status_quo"}
+    monkeypatch.setattr(graph._Run, "breaches",
+                        lambda self, plan, ag, rnd: [] if plan.id == q.id or ag != "AIRLINE:DL" else [breach])
+    assert graph._escape_guard(run, 2, [p, q], [p]) == []                 # turn 2: blocked, q carries on
+    assert [x.id for x in graph._escape_guard(run, graph.MAX_TURNS, [p, q], [p])] == [p.id]
+    ballots = {ag: [{"plan_id": p.id, "vote": "ACCEPT", "utility": 0.5, "reservation": 0.1}] for ag in run.agents}
+    ballots["GROUND"].append({"plan_id": q.id, "vote": "ACCEPT", "utility": 0.5, "reservation": 0.1})
+    out = graph._decide_turn({"ctx": run, "round": graph.MAX_TURNS, "checked": {p.id: (p, True), q.id: (q, True)},
+                              "ballots": ballots, "proposals": [("ATC", p), ("GROUND", q)]})
+    assert out["route"] == "finalize" and out["final"].id == p.id
+
+
 def test_objection_words_follow_the_airlines_vote():
     """Review I1: the rationale tail comes from the airline's own vote on each objected plan."""
     o = {"callsign": "WN130", "metric": "delay_min", "floor": 30.7, "value": 31.2, "allowed": 30.75,

@@ -337,7 +337,7 @@ class _Run:
         return Decider(self.chain, on_fallback=hook)
 
     def account(self, r: DecisionResult, calls: int = 1) -> None:
-        with self.lock:  # called from agent worker threads
+        with self.lock:  # nodes run one after another; the lock is a guard only
             if r.provider != "formula":
                 self.model_calls += calls
             self.fallbacks += len(r.fallback_from)
@@ -891,7 +891,11 @@ def _escape_guard(run: _Run, rnd: int, valid: list[JointPlan], unanimous: list[J
     """Firm escape clause, judged at the end of the turn: an airline voted on utility (escape) only if no
     floor-meeting plan was on the table when it spoke. A later voter (e.g. GROUND) may still put one on the table
     in the same turn; then a plan that breaches that airline's floor cannot win this turn. The floor-meeting plan
-    is not declared here (the airline never voted on it); the incumbent rule carries it into turn t+1."""
+    is not declared here (the airline never voted on it); the incumbent rule carries it into turn t+1.
+    On the last turn there is no turn t+1 to carry it into, so the guard does not apply: blocking would only turn a
+    unanimous plan into a solver fallback."""
+    if rnd >= MAX_TURNS:
+        return list(unanimous)
     out = []
     for p in unanimous:
         blocked = any(run.breaches(p, ag, rnd) and any(not run.breaches(q, ag, rnd) for q in valid if q.id != p.id)

@@ -486,7 +486,7 @@ def _validate(wave: Wave, plan: JointPlan, move: Move) -> None:
     if k not in AUTHORITY[role]:
         raise ValueError(f"{agent} has no authority for move kind {k!r} (allowed: {sorted(AUTHORITY[role])})")
     if role == "ATC" and k in ("speed_reduction", "ground_delay") and cs and cs[0] == getattr(wave, "focus", None):
-        raise ValueError(f"ATC may not set {k} for {cs[0]}: that flight's pilot agent owns it")
+        raise ValueError(f"ATC may not set {k} for {cs[0]}: that flight's airline agent owns it")
     need = 2 if k in ("swap_order", "swap_gates", "swap_own") else 1
     if role == "AIRLINE" and k == "accept":
         if not cs or len(set(cs)) != len(cs):
