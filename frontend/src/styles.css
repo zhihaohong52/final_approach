@@ -314,15 +314,17 @@ tbody tr:hover { background: #18171c; }
 .metar { font: 12px/1.6 var(--mono); color: var(--soft); overflow-wrap: anywhere; padding: 10px 12px; background: var(--sunk); border-radius: 6px; margin-bottom: 14px; }
 
 /* ---------- wave screen: the controller position ---------- */
-.ops { padding-top: 20px; }
-.wavebar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px 32px; flex-wrap: wrap; margin-bottom: 16px; }
-.wavebar h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ops { padding-top: 14px; }
+.wavebar { display: flex; justify-content: space-between; align-items: center; gap: 8px 24px; flex-wrap: wrap; margin-bottom: 12px; }
+.wb-main { display: flex; align-items: baseline; gap: 4px 20px; min-width: 0; flex: 1 1 300px; }
+.wavebar h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; display: flex; align-items: center; gap: 12px; flex: none; white-space: nowrap; }
 .wavebar h1 .mono { font-size: inherit; font-weight: 500; letter-spacing: -0.03em; }
-.alert-count { font-family: var(--font); letter-spacing: 0; }
-.wb-meta { display: flex; flex-wrap: wrap; gap: 4px 0; margin-top: 6px; color: var(--muted); font-size: var(--fs-small); }
+.alert-count { font-family: var(--font); letter-spacing: 0; text-decoration: none; }
+.wb-meta { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; min-width: 0; flex: 0 1 auto; color: var(--muted); font-size: var(--fs-small); }
 .wb-meta > span + span::before { content: "·"; margin: 0 10px; color: var(--control); }
 .wb-meta .mono { font-size: 12px; }
-.wavebar .toolbar { margin: 0; }
+.wavebar .toolbar { margin: 0; flex-wrap: nowrap; flex: none; }
+.wavebar .search-trigger { min-width: 220px; }
 .settings .menu.right { left: auto; right: 0; }
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .check input { accent-color: var(--accent); }
@@ -540,6 +542,10 @@ tbody tr:hover { background: #18171c; }
 .decide label { font-weight: 500; }
 
 .plan-card { margin-top: var(--gap); padding-bottom: 14px; }
+.alerts-card { margin-bottom: var(--gap); }
+.details .row2 { margin-top: 0; }
+.dec-log { align-self: flex-start; font-size: var(--fs-small); color: var(--muted); text-decoration: none; }
+.dec-log:hover { color: var(--text); }
 .plan-card .card-head { align-items: center; justify-content: flex-start; gap: 24px; flex-wrap: wrap; }
 .card-head .push { margin-left: auto; }
 .feed-card { display: flex; flex-direction: column; max-height: 640px; }
@@ -549,6 +555,26 @@ tbody tr:hover { background: #18171c; }
 .check.foot { padding-top: 10px; margin-top: 8px; border-top: 1px solid var(--border); font-size: var(--fs-small); color: var(--muted); }
 .warnline { font-size: 12px; color: var(--warning); margin: 4px 0; }
 .flights-card td { height: 54px; }
+
+/* ---------- home: the whole screen, nothing scrolls the page ----------
+   Radar, airport map and Gantt share one viewport: the scope row takes what is left after the (bounded) Gantt card,
+   and the Gantt scrolls inside its card. Smaller windows fall back to a normal page. */
+@media (min-width: 1100px) and (min-height: 700px) {
+  .ops.home { height: calc(100dvh - 49px); display: flex; flex-direction: column; padding-top: 12px; padding-bottom: 14px; overflow: hidden; }
+  .ops.home .wavebar { flex: none; margin-bottom: 10px; }
+  .ops.home .ops-top { flex: 1 1 0; min-height: 0; gap: 16px; }
+  .ops.home .ops-top > .scope-card { align-self: stretch; max-height: none; min-height: 0; }
+  .ops.home .scope-body, .ops.home .surface-map, .ops.home .radar.fill { min-height: 0; }
+  .ops.home .decision { min-height: 0; overflow-y: auto; gap: 10px; padding: 14px 18px; }
+  .ops.home .dec-intro, .ops.home .dec-result { gap: 8px; flex: 1 0 auto; }
+  .ops.home .plan-card { flex: 0 1 auto; max-height: 42%; min-height: 160px; display: flex; flex-direction: column; margin-top: 12px; padding: 12px 16px 10px; }
+  .ops.home .plan-card .card-head { flex: none; margin-bottom: 6px; }
+  .ops.home .gantt-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; align-content: start; }
+  .ops.home .gantt-foot { flex: none; margin-top: 8px; }
+}
+@media (min-width: 1100px) and (min-height: 700px) and (max-width: 1359px) {
+  .ops.home .ops-top { grid-template-rows: auto minmax(0, 1fr); }
+}
 
 /* ---------- tablet ---------- */
 @media (max-width: 1180px) {

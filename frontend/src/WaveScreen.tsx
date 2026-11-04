@@ -15,6 +15,7 @@ import { agentClass, agentName, clock, clockSec, dateLabel, signed } from "./for
 import { chipLabel as chipOf } from "./scope";
 import { effectiveChoice, shownPanel as pickPanel, type Panel } from "./panel";
 import { vetoConflicts } from "./veto";
+import { parseRoute, waveHash } from "./route";
 
 const SCAN_S = SCAN_MIN * 60;       // the radar picture updates once per antenna revolution
 const BOTH_MQ = "(min-width: 1280px)";   // radar and surface side by side from this width
@@ -52,7 +53,8 @@ function applyEdits(p: JointPlan, edits: Edits, checked: EvaluateResponse | null
 const planKey = (p: JointPlan | null) => (p ? JSON.stringify(p.assignments.map((a) => [a.callsign, a.action, a.runway ?? null, a.slot_min ?? null, a.gate ?? null, a.speed_reduction_min, a.ground_delay_min])) : "");
 type Fetched = { key: string; set: TrajectorySet | null };
 
-export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
+export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home" | "details"; onScope?: (s: string) => void; onWaveId?: (id: string) => void }) {
+  const home = page === "home";
   const [config, setConfig] = useState<Config | null>(null);
   const [waves, setWaves] = useState<WaveSummary[]>([]);
   const [wave, setWave] = useState<WaveScenario | null>(null);
@@ -127,7 +129,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
       // procedures are only served for waves the backend can place; a failure leaves the schematic radar
       if (w.geo_available) api.getGeo(id).then((g) => { if (seq === loadSeq.current) setGeo(g); }).catch((e) => console.warn(`wave ${id}: procedures unavailable, the radar stays schematic`, e));
       // the status quo is on screen from the start; the negotiation then works from it
-      if (w.status_quo) { showTable(w.status_quo.plan); setOpening(w.status_quo); } history.replaceState(null, "", `${location.search}#/wave/${id}`);
+      if (w.status_quo) { showTable(w.status_quo.plan); setOpening(w.status_quo); }
     } catch (e) { if (seq === loadSeq.current) setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); }
   }, []);
 
@@ -138,9 +140,9 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         const [c, ws] = await Promise.all([api.config(), api.waves()]);
         if (gone) return;
         setConfig(c); setMode(c.default_mode === "decision+claude" ? "decision" : c.default_mode); setModel(c.default_model); setReplay(c.replay_available); setWaves(ws);
-        const fromHash = location.hash.match(/#\/wave\/(.+)/)?.[1];
+        const fromHash = parseRoute(location.hash).waveId;
         const first = fromHash ?? ws[0]?.id ?? (await api.randomWave()).id;
-        await loadWave(decodeURIComponent(first));
+        await loadWave(first);
       } catch (e) { if (!gone) setLoadErr(`Couldn't reach the negotiator: ${(e as Error).message}`); }
     })();
     return () => { gone = true; };
@@ -396,6 +398,13 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const shownPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);
+  // the address always names the page and the wave, so a reload or a shared link lands where you were
+  useEffect(() => {
+    if (!wave) return;
+    onWaveId?.(wave.id);
+    const h = waveHash(page, wave.id);
+    if (location.hash !== h) history.replaceState(null, "", `${location.search}${h}`);
+  }, [wave, page, onWaveId]);
   const onTabKey = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     const i = TABS.findIndex((x) => x.id === tab), n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length].id;
@@ -423,11 +432,11 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
   const focusName = wave.focus ? icao(wave.focus) : null;
 
   return (
-    <main className="canvas ops">
+    <main className={`canvas ops ${home ? "home" : "details"}`}>
       <header className="wavebar">
         <div className="wb-main">
           <h1>{wave.airport.iata} arrivals <span className="mono">{t0}–{t1}</span>
-            {red.length + unseen.length > 0 && <span className={`pill alert-count ${red.length ? "neg" : "warn"}`}>{red.length + unseen.length} alert{red.length + unseen.length === 1 ? "" : "s"}</span>}</h1>
+            {red.length + unseen.length > 0 && <a className={`pill alert-count ${red.length ? "neg" : "warn"}`} href={waveHash("details", wave.id)} title="The alerts are on the details page">{red.length + unseen.length} alert{red.length + unseen.length === 1 ? "" : "s"}</a>}</h1>
           <p className="wb-meta">
             <span>{dateLabel(wave.window_start)}</span>
             <span className="mono">{wind}{m ? `, ${m.surface}` : ""}</span>
@@ -472,6 +481,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         </div>
       </header>
 
+      {home && <>
       <div className="ops-top">
         <Strips wave={wave} plan={shown} agreed={agreed} baseline={baseline} edited={(cs) => editsOn && !!edits[cs]} t={tNow}
           tone={tone} selected={selected} onSelect={setSelected} paths={pathsNote ? null : paths} geo={geo} updating={updatingPaths} />
@@ -526,8 +536,6 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
         </section>
 
         <aside className="decision" aria-label="Decision">
-          {alerts.length > 0 && <AlertList alerts={alerts} seen={seen} onSeen={(id) => setSeen((s) => new Set(s).add(id))} onFocus={(cs) => setSelected(cs)} />}
-
           {status === "idle" || status === "error" ? (
             <div className="dec-intro">
               <p className="dec-kicker">Disrupted flight</p>
@@ -620,6 +628,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
               {status === "done" && !decision && <button className="btn text sm again" onClick={negotiate}>Run the negotiation again</button>}
             </div>
           )}
+          <a className="dec-log" href={waveHash("details", wave.id)}>Negotiation log →</a>
         </aside>
       </div>
 
@@ -647,7 +656,15 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
           {result && view === "compare" && <span className="meta">{changes(result.baseline.plan, current, wave.window_start)}</span>}
         </div>
       </section>
+      </>}
 
+      {!home && <>
+      {alerts.length > 0 && (
+        <section className="card alerts-card" aria-label="Alerts">
+          <div className="card-head"><h2>Alerts</h2></div>
+          <AlertList alerts={alerts} seen={seen} onSeen={(id) => setSeen((s) => new Set(s).add(id))} onFocus={(cs) => setSelected(cs)} />
+        </section>
+      )}
       <div className="row2">
         <section className="card feed-card">
           <div className="feed-head">
@@ -679,6 +696,7 @@ export function WaveScreen({ onScope }: { onScope?: (s: string) => void }) {
           {tab === "sources" && <Sources wave={wave} />}
         </div>
       </section>
+      </>}
       <p className="sr-only" aria-live="polite">{status === "running" ? `Negotiating, turn ${lastTurn?.round ?? 1} of 3` : status === "done" ? (nEdits ? (checking ? "Re-checking your edit" : checked?.evaluation.feasible ? "Your edit passes every rule" : "Your edit breaks a rule; approve is locked") : "The plan is ready to approve, edit or override.") : ""}</p>
     </main>
   );

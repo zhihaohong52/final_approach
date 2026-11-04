@@ -58,7 +58,7 @@ export function Radar({ wave, plan, t, tone, selected, onSelect, geo = null, pat
   }, []);
   const wide = W >= 700;
   const stack = W < 900;                                 // below this the left and right notes would collide on one line: the procedures note goes above
-  const H = wide || fill ? Math.max(460, boxH) : Math.round(Math.min(560, Math.max(360, W * 1.05)));
+  const H = wide || fill ? Math.max(200, boxH) : Math.round(Math.min(560, Math.max(360, W * 1.05)));
 
   const ends = wave.airport.runways.filter(hasGeo);
   if (!ends.length) return <div ref={box} className="radar empty-radar"><p className="empty">No runway coordinates for {wave.airport.iata}, so the scope can't be drawn.</p></div>;
