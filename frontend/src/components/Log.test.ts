@@ -39,3 +39,51 @@ describe("Log UNABLE styling", () => {
     expect(html).toContain('<b class="unable-word">UNABLE</b> hold 5 min, PLT-FUEL-RESERVE');
   });
 });
+
+describe("Log vote wording (from vote data, not the rationale)", () => {
+  const br = { callsign: "WN130", metric: "delay_min", floor: 30.7, value: 31.2, allowed: 30.75, floor_source: "best_seen" };
+  const turn = (votes: unknown[], extra = {}) => ({ type: "AGENT_TURN", turn: 2, agent: "AIRLINE:WN", role: "AIRLINE", moves: [], rejected: [], votes,
+    proposal_utility: 0.56, proposal: null, rationale: "ignored; rejects the plan", objections: [], ...extra });
+  const floorVote = { plan_id: "4b2c73fe11", vote: "REJECT", utility: 0.564, reservation: 0.441, reason: "r", decided_by: "floor", floor: [br] };
+  const at = (b: unknown, details: boolean) => render([msg(1, "AIRLINE:WN", b)], { details });
+
+  it("a floor REJECT names the breach and never shows a utility comparison (details on)", () => {
+    const html = at(turn([floorVote]), true);
+    expect(html).toContain("rejects 4b2c73fe11 on its fairness floor: SWA130 delay +0.5 min vs the best plan seen");
+    expect(html).not.toContain("0.56 &lt; 0.44");
+    expect(html).not.toMatch(/0\.56 (&lt;|≥) 0\.44/);
+  });
+  it("a floor REJECT is counted as a floor rejection, not 'below its minimum' (details off)", () => {
+    const html = at(turn([floorVote]), false);
+    expect(html).toContain("rejects 1 on its fairness floor");
+    expect(html).not.toContain("below its minimum");
+  });
+  it("a floor REJECT against the original plan says so", () => {
+    const html = at(turn([{ ...floorVote, floor: [{ ...br, floor_source: "status_quo" }, br] }]), true);
+    expect(html).toContain("vs the original plan (+1 more)");
+  });
+  it("an escape ACCEPT says it accepts below the floor because no plan on the table meets it", () => {
+    const v = { plan_id: "4b2c73fe11", vote: "ACCEPT", utility: 0.564, reservation: 0.373, reason: "r", decided_by: "escape", floor: [br] };
+    expect(at(turn([v]), true)).toContain("accepts 4b2c73fe11 below its fairness floor (SWA130 delay +0.5 min vs the best plan seen): no plan on the table meets it");
+    const off = at(turn([v]), false);
+    expect(off).toContain("accepts one below its fairness floor: no plan on the table meets it");
+    expect(off).not.toContain("rejects");
+  });
+  it("an escape vote recorded before the marker is read from the turn's objections", () => {
+    const v = { plan_id: "4b2c73fe11", vote: "ACCEPT", utility: 0.564, reservation: 0.373, p_accept: 0.98, reason: "model" };
+    const obj = { ...br, plan_id: "4b2c73fe11", proposed_by: "ATC" };
+    expect(at(turn([v], { objections: [obj] }), true)).toContain("accepts 4b2c73fe11 below its fairness floor (SWA130 delay +0.5 min vs the best plan seen)");
+    // a turn with a floor REJECT is not an escape turn: the ACCEPT on a non-objected plan stays a plain accept
+    const other = { ...v, plan_id: "f5ab8b1b14" };
+    const html = at(turn([other, floorVote], { objections: [{ ...obj }] }), true);
+    expect(html).not.toContain("accepts f5ab8b1b14 below");
+  });
+  it("a utility REJECT keeps the comparison; a model REJECT above the minimum does not claim '<'", () => {
+    const u = { plan_id: "aaaaaaaaaa", vote: "REJECT", utility: 0.2, reservation: 0.4, reason: "r" };
+    const b = { ...turn([u]), agent: "ATC", role: "ATC" };
+    expect(render([msg(1, "ATC", b)], { details: true })).toContain("rejects aaaaaaaaaa (0.20 &lt; 0.40)");
+    expect(render([msg(1, "ATC", b)], { details: false })).toContain("rejects 1 below its minimum");
+    const m = { ...b, votes: [{ ...u, utility: 0.6, p_accept: 0.1 }] };
+    expect(render([msg(1, "ATC", m)], { details: true })).toContain("rejects aaaaaaaaaa (the model&#x27;s call: 0.60 ≥ 0.40)");
+  });
+});

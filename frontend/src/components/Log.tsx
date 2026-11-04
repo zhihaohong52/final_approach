@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AgentId, AgentTurnBody, AirlineGroup, Assignment, DecisionMeta, JointPlan, NegotiationMessage, RuleId } from "../api/types";
-import { objectionLine, roster, unableLine } from "../agents";
+import { objectionLine, roster, unableLine, voteSummary } from "../agents";
 import { icaoText } from "../callsign";
 import { agentClass, agentName as rawAgentName } from "../format";
 import { rulesCount } from "../rules";
@@ -147,8 +147,7 @@ function Turn({ b, details, diff }: { b: AgentTurnBody; details: boolean; diff?:
       ) : null}
       <div className="msg-why">
         Own plan scores {b.proposal_utility.toFixed(2)} · accepts {acc} of {b.votes.length} plan{b.votes.length === 1 ? "" : "s"} on the table
-        {details ? b.votes.filter((v) => v.vote === "REJECT").map((v) => ` · rejects ${v.plan_id} (${v.utility.toFixed(2)} < ${v.reservation.toFixed(2)})${v.decided_by === "floor" ? " by its fairness floor" : ""}`).join("")
-          : (() => { const n = b.votes.filter((v) => v.vote === "REJECT").length; return n ? ` · rejects ${n} below its minimum` : ""; })()}
+        {voteSummary(b, details)}
       </div>
       {details && b.moves.map((x) => <div key={x.move.id} className="msg-dec">{x.move.label.split(" ").slice(0, 2).join(" ")} · {meta(x.decision)}</div>)}
       {details && b.decision && <div className="msg-dec">vote · {meta(b.decision)}{b.decision.fallback_from?.length ? <span style={{ color: "var(--warning)" }}> · after {b.decision.fallback_from.join(", ")} failed</span> : null}</div>}

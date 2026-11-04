@@ -1,4 +1,5 @@
-import type { AgentId, AirlineGroup, Objection, UnableBody } from "./api/types";
+import type { AgentId, AgentTurnBody, AirlineGroup, FloorBreach, Objection, UnableBody, Vote } from "./api/types";
+import { icaoText } from "./callsign";
 import { agentClass, agentName, signed } from "./format";
 
 export interface RosterEntry { id: string; cls: "atc" | "airline" | "ground" | "pilot"; name: string; what: string }
@@ -47,4 +48,53 @@ export function participants(wave: { airlines?: AirlineGroup[]; flights: { calls
       pilots: wave.flights.map((f) => `PILOT:${f.callsign}`), airlines: wave.airlines };
   }
   return { agents: ["ATC", ...(wave?.focus ? [`PILOT:${wave.focus}` as AgentId] : []), "GROUND"] as AgentId[], pilots: undefined, airlines: undefined };
+}
+
+export type VoteKind = "floor" | "escape" | "utility";
+
+/** Why a vote went the way it did, from the vote data only (never the rationale text). "escape": an airline's
+ * utility vote on a plan that breaches its fairness floor while no plan on the table meets it. Runs recorded before
+ * the `decided_by: "escape"` marker are read from the turn's objections: a non-floor airline vote on an objected plan,
+ * in a turn with no floor REJECT, is an escape vote. */
+export function voteKind(b: Pick<AgentTurnBody, "agent" | "votes" | "objections">, v: Vote): VoteKind {
+  if (v.decided_by === "floor") return "floor";
+  if (v.decided_by === "escape") return "escape";
+  if (agentClass(b.agent) !== "airline" || b.votes.some((x) => x.decided_by === "floor")) return "utility";
+  return b.objections?.some((o) => o.plan_id === v.plan_id) ? "escape" : "utility";
+}
+
+/** The breaches behind a floor or escape vote: its own `floor`, else the turn's objections to that plan. */
+export function voteBreaches(b: Pick<AgentTurnBody, "objections">, v: Vote): FloorBreach[] {
+  return v.floor?.length ? v.floor : (b.objections ?? []).filter((o) => o.plan_id === v.plan_id);
+}
+
+/** "AA2712 delay +15.5 min over the best plan seen (+1 more)". */
+export function breachText(br: FloorBreach[]): string {
+  const x = br[0];
+  if (!x) return "a flight over its floor";
+  const what = x.metric === "delay_min" ? `delay ${signed(x.value - x.floor)} min` : `fuel ${signed(x.value - x.floor)} kg`;
+  const vs = x.floor_source === "best_seen" ? "the best plan seen" : "the original plan";
+  return icaoText(`${x.callsign} ${what} vs ${vs}`) + (br.length > 1 ? ` (+${br.length - 1} more)` : "");
+}
+
+/** The vote part of a turn line. Details on: one clause per notable vote, with ids; off: counts by reason. A floor
+ * REJECT is never worded as a utility comparison. */
+export function voteSummary(b: Pick<AgentTurnBody, "agent" | "votes" | "objections">, details: boolean): string {
+  const kinds = b.votes.map((v) => [v, voteKind(b, v)] as const);
+  const cmp = (v: Vote) => `${v.utility.toFixed(2)} ${v.utility < v.reservation ? "<" : "≥"} ${v.reservation.toFixed(2)}`;
+  if (details) {
+    return kinds.map(([v, k]) => {
+      if (k === "floor") return ` · rejects ${v.plan_id} on its fairness floor: ${breachText(voteBreaches(b, v))}`;
+      if (k === "escape" && v.vote === "ACCEPT")
+        return ` · accepts ${v.plan_id} below its fairness floor (${breachText(voteBreaches(b, v))}): no plan on the table meets it`;
+      if (v.vote === "REJECT") return ` · rejects ${v.plan_id} (${v.utility < v.reservation ? "" : "the model's call: "}${cmp(v)})`;
+      return "";
+    }).join("");
+  }
+  const n = (f: (v: Vote, k: VoteKind) => boolean) => kinds.filter(([v, k]) => f(v, k)).length;
+  const fl = n((_, k) => k === "floor");
+  const ut = n((v, k) => k !== "floor" && v.vote === "REJECT");
+  const es = n((v, k) => k === "escape" && v.vote === "ACCEPT");
+  return (fl ? ` · rejects ${fl} on its fairness floor` : "") + (ut ? ` · rejects ${ut} below its minimum` : "")
+    + (es ? ` · accepts ${es === 1 ? "one" : es} below its fairness floor: no plan on the table meets it` : "");
 }
