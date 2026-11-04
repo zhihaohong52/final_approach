@@ -254,6 +254,12 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   const [ownZoom, setOwnZoom] = useState(1);
   const zoom = onZoom ? zoomIn ?? 1 : ownZoom, setZoom = onZoom ?? setOwnZoom;
   const centre = useRef<{ who: string | null; xy: XY } | null>(null);
+  // dragging pans the map: an offset in metres from the fitted or followed centre, cleared by a zoom button or a new field
+  const [pan, setPan] = useState<XY>([0, 0]);
+  const panned = pan[0] !== 0 || pan[1] !== 0;
+  const dragRef = useRef<{ id: number; x: number; y: number; pan: XY; moved: boolean } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const pickZoom = (z: number) => { setPan([0, 0]); setZoom(z); };
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -263,6 +269,7 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   }, []);
   const surf = geo.surface;
   const g = useMemo(() => (surf && surf.status === "real" ? prepare(surf) : null), [surf]);
+  useEffect(() => setPan([0, 0]), [g]);
   const gt = geo.ground_traffic ?? null;
   const traffic = useMemo(() => (g && gt ? prepareTraffic(gt, g) : null), [g, gt]);
   // the plan's own tracks: waits with their direction and runway crossings, once per trajectory set
@@ -359,13 +366,15 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   }
   // zoomed in, the view re-centres only when the followed aircraft nears the edge (as a ground display pages),
   // so the airfield layer is redrawn on those pages, not every second
+  // while the map is panned it holds still, so the followed aircraft does not page the view out from under the user
   if (!target) centre.current = null;
-  else {
+  else if (!panned || !centre.current) {
     const cur = centre.current;
     const off = cur && cur.who === who ? Math.max(Math.abs(target[0] - cur.xy[0]) * S / (W / 2), Math.abs(target[1] - cur.xy[1]) * S / ((H - top - BOTTOM) / 2)) : Infinity;
     if (off > 0.6) centre.current = { who, xy: target };
   }
-  const c: XY = centre.current?.xy ?? [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2];
+  const c0: XY = centre.current?.xy ?? [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2];
+  const c: XY = [c0[0] + pan[0], c0[1] + pan[1]];
   const P = screen(W, H, S, c[0], c[1], top);
   const line = (xy: XY[]) => polyline(P, xy);
 
@@ -435,9 +444,23 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   return (
     <div ref={box} className="surface-map">
       <div className="range seg" role="group" aria-label="Surface zoom">
-        {ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => setZoom(z)} title={z === 1 ? "The whole field" : `×${z}, centred on ${who ? icao(who) : "the field"}`}>{z === 1 ? "Field" : `×${z}`}</button>)}
+        {ZOOMS.map((z) => <button key={z} aria-pressed={zoom === z} onClick={() => pickZoom(z)} title={z === 1 ? "The whole field" : `×${z}, centred on ${who ? icao(who) : "the field"}`}>{z === 1 ? "Field" : `×${z}`}</button>)}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" onClick={() => onSelect(null)}
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" className={panning ? "panning" : undefined}
+        onPointerDown={(e) => { if (e.button !== 0) return; dragRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY, pan, moved: false }; }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (!d || d.id !== e.pointerId) return;
+          const dx = e.clientX - d.x, dy = e.clientY - d.y;
+          if (!d.moved && Math.hypot(dx, dy) < 4) return;   // a click on an aircraft stays a click
+          if (!d.moved) { d.moved = true; setPanning(true); (e.currentTarget as Element).setPointerCapture(e.pointerId); }
+          setPan([d.pan[0] - dx / S, d.pan[1] + dy / S]);
+        }}
+        onPointerUp={(e) => { const d = dragRef.current; if (d?.moved) (e.currentTarget as Element).releasePointerCapture?.(e.pointerId); setPanning(false); window.setTimeout(() => { if (dragRef.current === d) dragRef.current = null; }); }}
+        onPointerCancel={() => { dragRef.current = null; setPanning(false); }}
+        onClickCapture={(e) => { if (dragRef.current?.moved) { e.stopPropagation(); dragRef.current = null; } }}
+        onDoubleClick={() => setPan([0, 0])}
+        onClick={() => onSelect(null)}
         aria-label={`Airport surface: ${nOnGround} negotiated aircraft taxiing, ${fixedNow.length} other aircraft moving${failing.length ? `, ${failing.length} taxi conflict${failing.length > 1 ? "s" : ""}` : ""}`}>
         <rect width={W} height={H} fill="var(--scope)" />
         <Airfield g={g} W={W} H={H} S={S} cx={c[0]} cy={c[1]} top={top} keyX={keyX} />

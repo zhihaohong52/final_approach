@@ -637,3 +637,6 @@ tbody tr:hover { background: #18171c; }
   .blip .halo, .alert.red::before, .gantt .ghost { animation: none; }
   .btn:active { transform: none; }
 }
+
+.surface-map svg { cursor: grab; touch-action: none; }
+.surface-map svg.panning, .surface-map svg.panning * { cursor: grabbing !important; user-select: none; }
