@@ -24,7 +24,7 @@ from backend.wave.utility import DELAY_CAP_MIN, fuel_budget, metrics_map
 log = logging.getLogger(__name__)
 
 VARIANTS = ("firm", "relaxing")
-FAIRNESS_DEFAULT = "firm"     # until A10 picks the shipped variant
+FAIRNESS_DEFAULT = "relaxing"     # until A10 picks the shipped variant
 FLOOR_SOURCES = ("status_quo", "best_seen")
 DELAY_EPS_MIN = 0.05          # metrics are rounded to 0.1 min / 0.1 kg; eps absorbs that, nothing more
 FUEL_EPS_KG = 0.5

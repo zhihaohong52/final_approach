@@ -1,0 +1,2777 @@
+{
+  "engine_version": "v4-airlines",
+  "fairness": "firm",
+  "generated_at": "2026-11-04T00:12:29+00:00",
+  "n_waves": 50,
+  "n_common": 50,
+  "seed": 7,
+  "source": "flights2015",
+  "arms": [
+    {
+      "model": "typesafe/jev-1.14",
+      "provider": "openrouter",
+      "label": "typesafe/jev-1.14",
+      "summary": {
+        "consensus_rate_pct": 94.0,
+        "mean_rounds": 1.98,
+        "fallback_rate_pct": 6.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 334.134,
+        "fuel_kg": 148.72,
+        "pax_protected_pct": 34.72,
+        "overtime_min": 2.214,
+        "lap_share_pct": 2.13,
+        "taxi_wait_min": 0.783,
+        "agreement_with_formula_pct": 62.0,
+        "brier": 0.0083,
+        "latency_p50_ms": 416.0,
+        "latency_p95_ms": 508.6,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0,
+        "max_prompt_chars": 8173,
+        "worse_than_status_quo_pct": 0.0,
+        "worse_flight_pct": 0.0,
+        "model_calls_per_wave": 20.66
+      },
+      "delay_min_vs_feasible_status_quo": 320.904,
+      "veto_counts": {
+        "PLT-FUEL-RESERVE": 7
+      },
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 508.6,
+      "model_decisions": 708,
+      "worse_than_sq_consensus_pct": 0.0,
+      "infeasible_sq_waves": 24,
+      "consensus_pct_infeasible_sq": 87.5,
+      "delay_min_ci95": [
+        287.4,
+        380.868
+      ],
+      "gap_to_optimiser": 4.694,
+      "share_of_optimiser_gain_pct": 34.49,
+      "share_n": 22
+    },
+    {
+      "model": "liquid/d1-ultra",
+      "provider": "openrouter",
+      "label": "liquid/d1-ultra",
+      "summary": {
+        "consensus_rate_pct": 96.0,
+        "mean_rounds": 1.88,
+        "fallback_rate_pct": 4.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 333.996,
+        "fuel_kg": 132.48,
+        "pax_protected_pct": 34.72,
+        "overtime_min": 1.742,
+        "lap_share_pct": 2.08,
+        "taxi_wait_min": 0.944,
+        "agreement_with_formula_pct": 70.0,
+        "brier": 0.0012,
+        "latency_p50_ms": 545.0,
+        "latency_p95_ms": 956.5,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0,
+        "max_prompt_chars": 8329,
+        "worse_than_status_quo_pct": 0.0,
+        "worse_flight_pct": 0.0,
+        "model_calls_per_wave": 18.7
+      },
+      "delay_min_vs_feasible_status_quo": 320.623,
+      "veto_counts": {
+        "PLT-FUEL-RESERVE": 8
+      },
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 956.5,
+      "model_decisions": 606,
+      "worse_than_sq_consensus_pct": 0.0,
+      "infeasible_sq_waves": 24,
+      "consensus_pct_infeasible_sq": 91.67,
+      "delay_min_ci95": [
+        287.155,
+        380.837
+      ],
+      "gap_to_optimiser": 4.556,
+      "share_of_optimiser_gain_pct": 37.06,
+      "share_n": 22
+    },
+    {
+      "model": "baseten/elephant-1",
+      "provider": "openrouter",
+      "label": "baseten/elephant-1",
+      "summary": {
+        "consensus_rate_pct": 94.0,
+        "mean_rounds": 2.0,
+        "fallback_rate_pct": 6.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 334.39,
+        "fuel_kg": 152.56,
+        "pax_protected_pct": 34.4,
+        "overtime_min": 2.074,
+        "lap_share_pct": 2.13,
+        "taxi_wait_min": 0.771,
+        "agreement_with_formula_pct": 60.0,
+        "brier": 0.0137,
+        "latency_p50_ms": 484.0,
+        "latency_p95_ms": 586.6,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0,
+        "max_prompt_chars": 8329,
+        "worse_than_status_quo_pct": 0.0,
+        "worse_flight_pct": 0.0,
+        "model_calls_per_wave": 20.54
+      },
+      "delay_min_vs_feasible_status_quo": 320.946,
+      "veto_counts": {
+        "PLT-FUEL-RESERVE": 5
+      },
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 586.6,
+      "model_decisions": 703,
+      "worse_than_sq_consensus_pct": 0.0,
+      "infeasible_sq_waves": 24,
+      "consensus_pct_infeasible_sq": 87.5,
+      "delay_min_ci95": [
+        287.585,
+        381.195
+      ],
+      "gap_to_optimiser": 4.95,
+      "share_of_optimiser_gain_pct": 34.1,
+      "share_n": 22
+    },
+    {
+      "model": "formula",
+      "provider": "formula",
+      "label": "formula",
+      "summary": {
+        "consensus_rate_pct": 98.0,
+        "mean_rounds": 1.92,
+        "fallback_rate_pct": 2.0,
+        "rule_violations_in_agreed_plans": 0,
+        "delay_min": 335.54,
+        "fuel_kg": 154.72,
+        "pax_protected_pct": 34.438,
+        "overtime_min": 2.012,
+        "lap_share_pct": 2.04,
+        "taxi_wait_min": 0.846,
+        "agreement_with_formula_pct": 100.0,
+        "brier": null,
+        "latency_p50_ms": null,
+        "latency_p95_ms": null,
+        "error_rate_pct": 0.0,
+        "cost_usd_per_wave": 0.0,
+        "max_prompt_chars": 0,
+        "worse_than_status_quo_pct": 0.0,
+        "worse_flight_pct": 0.0,
+        "model_calls_per_wave": 0.0
+      },
+      "delay_min_vs_feasible_status_quo": 322.985,
+      "veto_counts": {
+        "PLT-FUEL-RESERVE": 10
+      },
+      "n_ok": 50,
+      "failed_ids": [],
+      "p95_all_ms": 0.0,
+      "model_decisions": 0,
+      "worse_than_sq_consensus_pct": 0.0,
+      "infeasible_sq_waves": 24,
+      "consensus_pct_infeasible_sq": 95.83,
+      "delay_min_ci95": [
+        289.252,
+        381.828
+      ],
+      "gap_to_optimiser": 6.1,
+      "share_of_optimiser_gain_pct": 15.41,
+      "share_n": 22
+    }
+  ],
+  "baseline": {
+    "delay_min": 326.69,
+    "fuel_kg": 1.36,
+    "pax_protected_pct": 36.92,
+    "overtime_min": 1.748,
+    "diversions": 0.0,
+    "lap_share_pct": 0.0,
+    "taxi_wait_min": 1.083,
+    "n_feasible": 26,
+    "infeasible_ids": [
+      "F2015-102056",
+      "F2015-105396",
+      "F2015-110532",
+      "F2015-112396",
+      "F2015-124231",
+      "F2015-144568",
+      "F2015-165543",
+      "F2015-205196",
+      "F2015-208678",
+      "F2015-208692",
+      "F2015-209722",
+      "F2015-210010",
+      "F2015-246479",
+      "F2015-251827",
+      "F2015-254935",
+      "F2015-267904",
+      "F2015-282726",
+      "F2015-298859",
+      "F2015-335957",
+      "F2015-343919",
+      "F2015-43962",
+      "F2015-60842",
+      "F2015-63104",
+      "F2015-63860"
+    ],
+    "feasible_only": {
+      "delay_min": 324.665,
+      "fuel_kg": 2.615,
+      "pax_protected_pct": 30.858,
+      "overtime_min": 1.658,
+      "diversions": 0.0
+    }
+  },
+  "optimiser": {
+    "n": 50,
+    "delay_min": 329.44,
+    "delay_min_ci95": [
+      282.467,
+      376.413
+    ],
+    "fuel_kg": 83.2,
+    "pax_protected_pct": 34.704,
+    "n_feasible": 50,
+    "elapsed_ms_mean": 5125.884,
+    "methods": {
+      "safety net: all-divert": 1,
+      "beam(width=12, evaluated=400): max-min utility": 46,
+      "beam(width=12, evaluated=378): max-min utility": 1,
+      "beam(width=12, evaluated=400): FCFS already best": 1,
+      "beam(width=12, evaluated=304): max-min utility": 1
+    }
+  },
+  "ablation_no_engine_unsafe_pct": 48.0,
+  "outage_test": {
+    "primary_disabled": "invalid/model-does-not-exist",
+    "waves": 20,
+    "resolved": 20,
+    "fallbacks_used": {
+      "liquid/d1-ultra-20261015": 246
+    }
+  },
+  "selection": {
+    "winner": "liquid/d1-ultra",
+    "rule": "best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier",
+    "reasons": [
+      "liquid/d1-ultra is the best model arm: it meets all three thresholds (error, p95, consensus) and has the best outcome among the qualifying model arms.",
+      "Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.",
+      "cost_usd_per_wave = 0.0: output tokens free; input cost not measured.",
+      "fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).",
+      "typesafe/jev-1.14 p95 all decisions incl. fallbacks: 508.6 ms",
+      "typesafe/jev-1.14 outcomes partly from solver fallback on 3/50 waves",
+      "liquid/d1-ultra p95 all decisions incl. fallbacks: 956.5 ms",
+      "liquid/d1-ultra outcomes partly from solver fallback on 2/50 waves",
+      "baseten/elephant-1 p95 all decisions incl. fallbacks: 586.6 ms",
+      "baseten/elephant-1 outcomes partly from solver fallback on 3/50 waves",
+      "Mean delay: liquid/d1-ultra 333.996 min vs formula 335.54 min vs status quo 326.69 min."
+    ]
+  },
+  "failures": [
+    {
+      "wave_id": "F2015-112396",
+      "model": "typesafe/jev-1.14",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-208692",
+      "model": "typesafe/jev-1.14",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-246479",
+      "model": "typesafe/jev-1.14",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-208692",
+      "model": "liquid/d1-ultra",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-246479",
+      "model": "liquid/d1-ultra",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-208692",
+      "model": "baseten/elephant-1",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-246479",
+      "model": "baseten/elephant-1",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-124231",
+      "model": "baseten/elephant-1",
+      "reason": "no consensus: deterministic solver fallback"
+    },
+    {
+      "wave_id": "F2015-246479",
+      "model": "formula",
+      "reason": "no consensus: deterministic solver fallback"
+    }
+  ],
+  "wave_ids": [
+    "F2015-144520",
+    "F2015-343919",
+    "F2015-210010",
+    "F2015-156608",
+    "F2015-317184",
+    "F2015-105396",
+    "F2015-324426",
+    "F2015-53108",
+    "F2015-60842",
+    "F2015-209722",
+    "F2015-314303",
+    "F2015-302254",
+    "F2015-115532",
+    "F2015-112396",
+    "F2015-169005",
+    "F2015-161169",
+    "F2015-251827",
+    "F2015-209820",
+    "F2015-298859",
+    "F2015-112468",
+    "F2015-43962",
+    "F2015-291336",
+    "F2015-205196",
+    "F2015-144568",
+    "F2015-18435",
+    "F2015-208692",
+    "F2015-268625",
+    "F2015-271058",
+    "F2015-84851",
+    "F2015-15580",
+    "F2015-63860",
+    "F2015-106428",
+    "F2015-272020",
+    "F2015-165543",
+    "F2015-282726",
+    "F2015-208678",
+    "F2015-74915",
+    "F2015-274783",
+    "F2015-131437",
+    "F2015-246479",
+    "F2015-163396",
+    "F2015-254935",
+    "F2015-335957",
+    "F2015-124231",
+    "F2015-63104",
+    "F2015-334031",
+    "F2015-267904",
+    "F2015-102056",
+    "F2015-110532",
+    "F2015-273632"
+  ],
+  "coverage": {
+    "procedures": {
+      "star+iap": 49,
+      "none": 1
+    },
+    "surface": {
+      "real": 44,
+      "generic": 6
+    },
+    "ground_traffic": {
+      "real": 50
+    }
+  },
+  "taxi_validation": {
+    "n": 42,
+    "mae_min": 3.37,
+    "bias_min": -2.78,
+    "per_airport": {
+      "ATL": {
+        "n": 1,
+        "routed_median": 4.25,
+        "bts_median": 8.0
+      },
+      "BNA": {
+        "n": 2,
+        "routed_median": 4.4,
+        "bts_median": 6.0
+      },
+      "BOS": {
+        "n": 2,
+        "routed_median": 7.44,
+        "bts_median": 6.0
+      },
+      "BWI": {
+        "n": 2,
+        "routed_median": 4.05,
+        "bts_median": 6.0
+      },
+      "DCA": {
+        "n": 2,
+        "routed_median": 2.44,
+        "bts_median": 5.0
+      },
+      "DEN": {
+        "n": 2,
+        "routed_median": 6.9,
+        "bts_median": 7.0
+      },
+      "DFW": {
+        "n": 1,
+        "routed_median": 9.57,
+        "bts_median": 10.0
+      },
+      "DTW": {
+        "n": 1,
+        "routed_median": 8.37,
+        "bts_median": 8.0
+      },
+      "EWR": {
+        "n": 2,
+        "routed_median": 5.98,
+        "bts_median": 9.0
+      },
+      "FLL": {
+        "n": 2,
+        "routed_median": 3.37,
+        "bts_median": 5.0
+      },
+      "IAD": {
+        "n": 2,
+        "routed_median": 6.1,
+        "bts_median": 6.0
+      },
+      "JFK": {
+        "n": 1,
+        "routed_median": 6.23,
+        "bts_median": 8.0
+      },
+      "LAX": {
+        "n": 2,
+        "routed_median": 3.87,
+        "bts_median": 9.0
+      },
+      "LGA": {
+        "n": 2,
+        "routed_median": 3.19,
+        "bts_median": 7.0
+      },
+      "MCO": {
+        "n": 1,
+        "routed_median": 5.0,
+        "bts_median": 7.0
+      },
+      "MDW": {
+        "n": 1,
+        "routed_median": 4.85,
+        "bts_median": 6.0
+      },
+      "MIA": {
+        "n": 2,
+        "routed_median": 3.61,
+        "bts_median": 7.0
+      },
+      "MSP": {
+        "n": 2,
+        "routed_median": 5.57,
+        "bts_median": 5.0
+      },
+      "ORD": {
+        "n": 1,
+        "routed_median": 9.23,
+        "bts_median": 12.0
+      },
+      "PHL": {
+        "n": 1,
+        "routed_median": 4.46,
+        "bts_median": 6.0
+      },
+      "PHX": {
+        "n": 2,
+        "routed_median": 4.22,
+        "bts_median": 6.0
+      },
+      "SAN": {
+        "n": 1,
+        "routed_median": 4.78,
+        "bts_median": 4.0
+      },
+      "SEA": {
+        "n": 2,
+        "routed_median": 3.83,
+        "bts_median": 7.0
+      },
+      "SFO": {
+        "n": 2,
+        "routed_median": 5.14,
+        "bts_median": 5.0
+      },
+      "SLC": {
+        "n": 1,
+        "routed_median": 7.44,
+        "bts_median": 5.0
+      },
+      "TPA": {
+        "n": 2,
+        "routed_median": 4.51,
+        "bts_median": 4.0
+      }
+    },
+    "worst": [
+      {
+        "wave_id": "F2015-334031",
+        "callsign": "WN2338",
+        "routed": 3.8,
+        "real": 24.0,
+        "cause": "BTS includes gate wait"
+      },
+      {
+        "wave_id": "F2015-317184",
+        "callsign": "AA1465",
+        "routed": 2.7,
+        "real": 13.0,
+        "cause": "BTS includes gate wait"
+      },
+      {
+        "wave_id": "F2015-115532",
+        "callsign": "UA1623",
+        "routed": 4.0,
+        "real": 12.0,
+        "cause": "-"
+      },
+      {
+        "wave_id": "F2015-251827",
+        "callsign": "WN998",
+        "routed": 3.4,
+        "real": 11.0,
+        "cause": "-"
+      },
+      {
+        "wave_id": "F2015-106428",
+        "callsign": "DL1212",
+        "routed": 4.4,
+        "real": 12.0,
+        "cause": "-"
+      }
+    ]
+  },
+  "per_wave": {
+    "typesafe/jev-1.14": {
+      "F2015-102056": {
+        "delay_min": 882.0,
+        "fuel_kg": 3200.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-105396": {
+        "delay_min": 140.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-106428": {
+        "delay_min": 40.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-110532": {
+        "delay_min": 474.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-112396": {
+        "delay_min": 372.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-112468": {
+        "delay_min": 179.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-115532": {
+        "delay_min": 236.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-124231": {
+        "delay_min": 349.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-131437": {
+        "delay_min": 475.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144520": {
+        "delay_min": 630.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144568": {
+        "delay_min": 510.1,
+        "fuel_kg": 288.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-15580": {
+        "delay_min": 387.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-156608": {
+        "delay_min": 341.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 2.1 min"
+      },
+      "F2015-161169": {
+        "delay_min": 282.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.8 min"
+      },
+      "F2015-163396": {
+        "delay_min": 185.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-165543": {
+        "delay_min": 209.6,
+        "fuel_kg": 348.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.6 min, taxi wait 0.8 min"
+      },
+      "F2015-169005": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-18435": {
+        "delay_min": 377.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-205196": {
+        "delay_min": 307.9,
+        "fuel_kg": 464.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208678": {
+        "delay_min": 698.2,
+        "fuel_kg": 156.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-208692": {
+        "delay_min": 147.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-209722": {
+        "delay_min": 148.6,
+        "fuel_kg": 1088.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-209820": {
+        "delay_min": 253.8,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-210010": {
+        "delay_min": 431.2,
+        "fuel_kg": 24.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
+      },
+      "F2015-246479": {
+        "delay_min": 178.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-251827": {
+        "delay_min": 244.9,
+        "fuel_kg": 180.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-254935": {
+        "delay_min": 315.9,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-267904": {
+        "delay_min": 346.3,
+        "fuel_kg": 148.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-268625": {
+        "delay_min": 331.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-271058": {
+        "delay_min": 628.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-272020": {
+        "delay_min": 443.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.5 min"
+      },
+      "F2015-273632": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-274783": {
+        "delay_min": 236.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.6 min"
+      },
+      "F2015-282726": {
+        "delay_min": 210.1,
+        "fuel_kg": 32.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.1 min"
+      },
+      "F2015-291336": {
+        "delay_min": 191.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-298859": {
+        "delay_min": 449.7,
+        "fuel_kg": 52.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.6 min"
+      },
+      "F2015-302254": {
+        "delay_min": 307.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-314303": {
+        "delay_min": 557.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-317184": {
+        "delay_min": 380.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.9 min"
+      },
+      "F2015-324426": {
+        "delay_min": 85.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-334031": {
+        "delay_min": 160.8,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.1 min"
+      },
+      "F2015-335957": {
+        "delay_min": 343.5,
+        "fuel_kg": 1204.0,
+        "cause": "hold 28.6 min (5 lap(s)), vector 1.5 min, taxi wait 0.0 min"
+      },
+      "F2015-343919": {
+        "delay_min": 249.2,
+        "fuel_kg": 4.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-43962": {
+        "delay_min": 416.3,
+        "fuel_kg": 68.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.8 min"
+      },
+      "F2015-53108": {
+        "delay_min": 192.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-60842": {
+        "delay_min": 284.6,
+        "fuel_kg": 16.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63104": {
+        "delay_min": 362.9,
+        "fuel_kg": 96.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63860": {
+        "delay_min": 289.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 12.8 min"
+      },
+      "F2015-74915": {
+        "delay_min": 334.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-84851": {
+        "delay_min": 666.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      }
+    },
+    "liquid/d1-ultra": {
+      "F2015-102056": {
+        "delay_min": 882.0,
+        "fuel_kg": 3200.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-105396": {
+        "delay_min": 140.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-106428": {
+        "delay_min": 43.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-110532": {
+        "delay_min": 474.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-112396": {
+        "delay_min": 378.5,
+        "fuel_kg": 260.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-112468": {
+        "delay_min": 179.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-115532": {
+        "delay_min": 236.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-124231": {
+        "delay_min": 349.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-131437": {
+        "delay_min": 475.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144520": {
+        "delay_min": 630.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144568": {
+        "delay_min": 511.5,
+        "fuel_kg": 144.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-15580": {
+        "delay_min": 387.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-156608": {
+        "delay_min": 328.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-161169": {
+        "delay_min": 282.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.8 min"
+      },
+      "F2015-163396": {
+        "delay_min": 185.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-165543": {
+        "delay_min": 209.6,
+        "fuel_kg": 348.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.6 min, taxi wait 0.8 min"
+      },
+      "F2015-169005": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-18435": {
+        "delay_min": 377.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-205196": {
+        "delay_min": 307.8,
+        "fuel_kg": 464.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208678": {
+        "delay_min": 700.3,
+        "fuel_kg": 168.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208692": {
+        "delay_min": 147.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-209722": {
+        "delay_min": 136.8,
+        "fuel_kg": 4.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 9.8 min"
+      },
+      "F2015-209820": {
+        "delay_min": 253.8,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-210010": {
+        "delay_min": 428.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
+      },
+      "F2015-246479": {
+        "delay_min": 178.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-251827": {
+        "delay_min": 244.9,
+        "fuel_kg": 180.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-254935": {
+        "delay_min": 315.9,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-267904": {
+        "delay_min": 346.3,
+        "fuel_kg": 148.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-268625": {
+        "delay_min": 331.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-271058": {
+        "delay_min": 628.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-272020": {
+        "delay_min": 443.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.5 min"
+      },
+      "F2015-273632": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-274783": {
+        "delay_min": 236.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.6 min"
+      },
+      "F2015-282726": {
+        "delay_min": 211.8,
+        "fuel_kg": 248.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.1 min"
+      },
+      "F2015-291336": {
+        "delay_min": 191.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-298859": {
+        "delay_min": 451.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.6 min"
+      },
+      "F2015-302254": {
+        "delay_min": 307.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-314303": {
+        "delay_min": 562.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-317184": {
+        "delay_min": 380.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.9 min"
+      },
+      "F2015-324426": {
+        "delay_min": 85.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-334031": {
+        "delay_min": 160.8,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.1 min"
+      },
+      "F2015-335957": {
+        "delay_min": 343.5,
+        "fuel_kg": 1204.0,
+        "cause": "hold 28.6 min (5 lap(s)), vector 1.5 min, taxi wait 0.0 min"
+      },
+      "F2015-343919": {
+        "delay_min": 251.1,
+        "fuel_kg": 8.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-43962": {
+        "delay_min": 416.3,
+        "fuel_kg": 68.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.8 min"
+      },
+      "F2015-53108": {
+        "delay_min": 192.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-60842": {
+        "delay_min": 284.6,
+        "fuel_kg": 16.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63104": {
+        "delay_min": 362.9,
+        "fuel_kg": 96.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63860": {
+        "delay_min": 289.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 12.8 min"
+      },
+      "F2015-74915": {
+        "delay_min": 332.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-84851": {
+        "delay_min": 666.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      }
+    },
+    "baseten/elephant-1": {
+      "F2015-102056": {
+        "delay_min": 882.0,
+        "fuel_kg": 3200.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-105396": {
+        "delay_min": 140.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-106428": {
+        "delay_min": 40.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-110532": {
+        "delay_min": 474.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-112396": {
+        "delay_min": 377.5,
+        "fuel_kg": 260.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-112468": {
+        "delay_min": 179.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-115532": {
+        "delay_min": 236.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-124231": {
+        "delay_min": 353.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-131437": {
+        "delay_min": 475.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144520": {
+        "delay_min": 630.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144568": {
+        "delay_min": 510.5,
+        "fuel_kg": 288.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-15580": {
+        "delay_min": 387.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-156608": {
+        "delay_min": 341.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 2.1 min"
+      },
+      "F2015-161169": {
+        "delay_min": 282.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.8 min"
+      },
+      "F2015-163396": {
+        "delay_min": 185.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-165543": {
+        "delay_min": 209.6,
+        "fuel_kg": 360.0,
+        "cause": "hold 0.6 min (0 lap(s)), vector 0.6 min, taxi wait 0.2 min"
+      },
+      "F2015-169005": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-18435": {
+        "delay_min": 377.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-205196": {
+        "delay_min": 307.9,
+        "fuel_kg": 232.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-208678": {
+        "delay_min": 700.3,
+        "fuel_kg": 168.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208692": {
+        "delay_min": 147.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-209722": {
+        "delay_min": 148.6,
+        "fuel_kg": 1088.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-209820": {
+        "delay_min": 253.8,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-210010": {
+        "delay_min": 428.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
+      },
+      "F2015-246479": {
+        "delay_min": 178.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-251827": {
+        "delay_min": 244.9,
+        "fuel_kg": 180.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-254935": {
+        "delay_min": 315.9,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-267904": {
+        "delay_min": 346.3,
+        "fuel_kg": 148.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-268625": {
+        "delay_min": 331.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-271058": {
+        "delay_min": 628.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-272020": {
+        "delay_min": 443.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.5 min"
+      },
+      "F2015-273632": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-274783": {
+        "delay_min": 236.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.6 min"
+      },
+      "F2015-282726": {
+        "delay_min": 211.8,
+        "fuel_kg": 248.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.1 min"
+      },
+      "F2015-291336": {
+        "delay_min": 191.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-298859": {
+        "delay_min": 451.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.6 min"
+      },
+      "F2015-302254": {
+        "delay_min": 307.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-314303": {
+        "delay_min": 562.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-317184": {
+        "delay_min": 380.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.9 min"
+      },
+      "F2015-324426": {
+        "delay_min": 84.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-334031": {
+        "delay_min": 160.8,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.1 min"
+      },
+      "F2015-335957": {
+        "delay_min": 343.5,
+        "fuel_kg": 1204.0,
+        "cause": "hold 28.6 min (5 lap(s)), vector 1.5 min, taxi wait 0.0 min"
+      },
+      "F2015-343919": {
+        "delay_min": 249.2,
+        "fuel_kg": 4.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-43962": {
+        "delay_min": 416.3,
+        "fuel_kg": 68.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.8 min"
+      },
+      "F2015-53108": {
+        "delay_min": 192.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-60842": {
+        "delay_min": 284.6,
+        "fuel_kg": 16.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63104": {
+        "delay_min": 362.9,
+        "fuel_kg": 96.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63860": {
+        "delay_min": 289.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 12.8 min"
+      },
+      "F2015-74915": {
+        "delay_min": 332.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-84851": {
+        "delay_min": 666.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      }
+    },
+    "formula": {
+      "F2015-102056": {
+        "delay_min": 882.0,
+        "fuel_kg": 3200.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-105396": {
+        "delay_min": 140.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-106428": {
+        "delay_min": 43.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-110532": {
+        "delay_min": 469.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-112396": {
+        "delay_min": 378.5,
+        "fuel_kg": 260.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-112468": {
+        "delay_min": 179.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-115532": {
+        "delay_min": 236.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-124231": {
+        "delay_min": 349.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-131437": {
+        "delay_min": 475.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144520": {
+        "delay_min": 630.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-144568": {
+        "delay_min": 508.0,
+        "fuel_kg": 380.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-15580": {
+        "delay_min": 387.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-156608": {
+        "delay_min": 341.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 2.1 min"
+      },
+      "F2015-161169": {
+        "delay_min": 282.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.8 min"
+      },
+      "F2015-163396": {
+        "delay_min": 240.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.3 min"
+      },
+      "F2015-165543": {
+        "delay_min": 208.4,
+        "fuel_kg": 388.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.3 min"
+      },
+      "F2015-169005": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-18435": {
+        "delay_min": 377.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-205196": {
+        "delay_min": 307.8,
+        "fuel_kg": 464.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208678": {
+        "delay_min": 702.8,
+        "fuel_kg": 316.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-208692": {
+        "delay_min": 180.2,
+        "fuel_kg": 732.0,
+        "cause": "hold 11.4 min (1 lap(s)), vector 4.3 min, taxi wait 0.0 min"
+      },
+      "F2015-209722": {
+        "delay_min": 148.6,
+        "fuel_kg": 1088.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-209820": {
+        "delay_min": 253.8,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 1.0 min"
+      },
+      "F2015-210010": {
+        "delay_min": 428.2,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
+      },
+      "F2015-246479": {
+        "delay_min": 178.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-251827": {
+        "delay_min": 244.9,
+        "fuel_kg": 180.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.3 min"
+      },
+      "F2015-254935": {
+        "delay_min": 315.9,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-267904": {
+        "delay_min": 346.0,
+        "fuel_kg": 152.0,
+        "cause": "hold 0.4 min (0 lap(s)), vector 0.4 min, taxi wait 1.0 min"
+      },
+      "F2015-268625": {
+        "delay_min": 331.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-271058": {
+        "delay_min": 628.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-272020": {
+        "delay_min": 443.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 6.5 min"
+      },
+      "F2015-273632": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-274783": {
+        "delay_min": 236.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.6 min"
+      },
+      "F2015-282726": {
+        "delay_min": 212.8,
+        "fuel_kg": 100.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 3.1 min"
+      },
+      "F2015-291336": {
+        "delay_min": 191.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-298859": {
+        "delay_min": 449.7,
+        "fuel_kg": 52.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 1.2 min"
+      },
+      "F2015-302254": {
+        "delay_min": 307.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-314303": {
+        "delay_min": 555.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-317184": {
+        "delay_min": 380.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.9 min"
+      },
+      "F2015-324426": {
+        "delay_min": 85.6,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-334031": {
+        "delay_min": 160.8,
+        "fuel_kg": 28.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.1 min"
+      },
+      "F2015-335957": {
+        "delay_min": 319.0,
+        "fuel_kg": 68.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-343919": {
+        "delay_min": 251.1,
+        "fuel_kg": 8.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-43962": {
+        "delay_min": 419.1,
+        "fuel_kg": 144.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.8 min"
+      },
+      "F2015-53108": {
+        "delay_min": 192.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-60842": {
+        "delay_min": 286.2,
+        "fuel_kg": 40.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "F2015-63104": {
+        "delay_min": 362.9,
+        "fuel_kg": 96.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      },
+      "F2015-63860": {
+        "delay_min": 289.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 12.8 min"
+      },
+      "F2015-74915": {
+        "delay_min": 332.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "F2015-84851": {
+        "delay_min": 666.4,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      }
+    },
+    "baseline": {
+      "F2015-102056": {
+        "delay_min": 416.4,
+        "fuel_kg": 0.0
+      },
+      "F2015-105396": {
+        "delay_min": 140.3,
+        "fuel_kg": 0.0
+      },
+      "F2015-106428": {
+        "delay_min": 43.4,
+        "fuel_kg": 0.0
+      },
+      "F2015-110532": {
+        "delay_min": 490.4,
+        "fuel_kg": 0.0
+      },
+      "F2015-112396": {
+        "delay_min": 371.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-112468": {
+        "delay_min": 179.6,
+        "fuel_kg": 0.0
+      },
+      "F2015-115532": {
+        "delay_min": 236.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-124231": {
+        "delay_min": 349.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-131437": {
+        "delay_min": 475.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-144520": {
+        "delay_min": 630.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-144568": {
+        "delay_min": 520.0,
+        "fuel_kg": 0.0
+      },
+      "F2015-15580": {
+        "delay_min": 387.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-156608": {
+        "delay_min": 341.2,
+        "fuel_kg": 0.0
+      },
+      "F2015-161169": {
+        "delay_min": 282.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-163396": {
+        "delay_min": 240.0,
+        "fuel_kg": 0.0
+      },
+      "F2015-165543": {
+        "delay_min": 196.3,
+        "fuel_kg": 0.0
+      },
+      "F2015-169005": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-18435": {
+        "delay_min": 383.8,
+        "fuel_kg": 28.0
+      },
+      "F2015-205196": {
+        "delay_min": 301.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-208678": {
+        "delay_min": 704.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-208692": {
+        "delay_min": 150.1,
+        "fuel_kg": 0.0
+      },
+      "F2015-209722": {
+        "delay_min": 126.3,
+        "fuel_kg": 0.0
+      },
+      "F2015-209820": {
+        "delay_min": 253.8,
+        "fuel_kg": 12.0
+      },
+      "F2015-210010": {
+        "delay_min": 421.4,
+        "fuel_kg": 0.0
+      },
+      "F2015-246479": {
+        "delay_min": 184.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-251827": {
+        "delay_min": 242.2,
+        "fuel_kg": 0.0
+      },
+      "F2015-254935": {
+        "delay_min": 312.4,
+        "fuel_kg": 0.0
+      },
+      "F2015-267904": {
+        "delay_min": 355.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-268625": {
+        "delay_min": 331.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-271058": {
+        "delay_min": 628.1,
+        "fuel_kg": 0.0
+      },
+      "F2015-272020": {
+        "delay_min": 443.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-273632": {
+        "delay_min": 216.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-274783": {
+        "delay_min": 236.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-282726": {
+        "delay_min": 213.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-291336": {
+        "delay_min": 191.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-298859": {
+        "delay_min": 484.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-302254": {
+        "delay_min": 307.7,
+        "fuel_kg": 0.0
+      },
+      "F2015-314303": {
+        "delay_min": 578.0,
+        "fuel_kg": 0.0
+      },
+      "F2015-317184": {
+        "delay_min": 380.6,
+        "fuel_kg": 0.0
+      },
+      "F2015-324426": {
+        "delay_min": 91.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-334031": {
+        "delay_min": 160.8,
+        "fuel_kg": 28.0
+      },
+      "F2015-335957": {
+        "delay_min": 318.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-343919": {
+        "delay_min": 246.2,
+        "fuel_kg": 0.0
+      },
+      "F2015-43962": {
+        "delay_min": 414.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-53108": {
+        "delay_min": 192.8,
+        "fuel_kg": 0.0
+      },
+      "F2015-60842": {
+        "delay_min": 291.9,
+        "fuel_kg": 0.0
+      },
+      "F2015-63104": {
+        "delay_min": 360.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-63860": {
+        "delay_min": 279.3,
+        "fuel_kg": 0.0
+      },
+      "F2015-74915": {
+        "delay_min": 334.5,
+        "fuel_kg": 0.0
+      },
+      "F2015-84851": {
+        "delay_min": 673.6,
+        "fuel_kg": 0.0
+      }
+    }
+  },
+  "regressions": [
+    {
+      "wave_id": "F2015-112468",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 168.2,
+      "v_cur": 179.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-124231",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 348.0,
+      "v_cur": 349.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-131437",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 475.4,
+      "v_cur": 475.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-144520",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 629.8,
+      "v_cur": 630.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-144568",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 507.8,
+      "v_cur": 510.1,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-156608",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 335.3,
+      "v_cur": 341.2,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-161169",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 278.0,
+      "v_cur": 282.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-169005",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 204.1,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-268625",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 327.3,
+      "v_cur": 331.5,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-273632",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 200.9,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 222.9,
+      "v_cur": 236.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-291336",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 187.6,
+      "v_cur": 191.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 159.8,
+      "v_cur": 160.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "typesafe/jev-1.14",
+      "metric": "fuel_kg",
+      "v_prev": 8.0,
+      "v_cur": 28.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-60842",
+      "arm": "typesafe/jev-1.14",
+      "metric": "delay_min",
+      "v_prev": 279.7,
+      "v_cur": 284.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-60842",
+      "arm": "typesafe/jev-1.14",
+      "metric": "fuel_kg",
+      "v_prev": 0.0,
+      "v_cur": 16.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-112468",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 168.2,
+      "v_cur": 179.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-124231",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 348.0,
+      "v_cur": 349.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-131437",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 475.2,
+      "v_cur": 475.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-144520",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 629.8,
+      "v_cur": 630.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-161169",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 278.0,
+      "v_cur": 282.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-169005",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 204.1,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-208678",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 698.3,
+      "v_cur": 700.3,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-208678",
+      "arm": "liquid/d1-ultra",
+      "metric": "fuel_kg",
+      "v_prev": 88.0,
+      "v_cur": 168.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-209722",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 132.4,
+      "v_cur": 136.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-251827",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 240.8,
+      "v_cur": 244.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-251827",
+      "arm": "liquid/d1-ultra",
+      "metric": "fuel_kg",
+      "v_prev": 12.0,
+      "v_cur": 180.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-268625",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 327.3,
+      "v_cur": 331.5,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-273632",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 200.9,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 222.9,
+      "v_cur": 236.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-291336",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 187.6,
+      "v_cur": 191.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-302254",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 306.7,
+      "v_cur": 307.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 159.8,
+      "v_cur": 160.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "liquid/d1-ultra",
+      "metric": "fuel_kg",
+      "v_prev": 8.0,
+      "v_cur": 28.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-84851",
+      "arm": "liquid/d1-ultra",
+      "metric": "delay_min",
+      "v_prev": 656.4,
+      "v_cur": 666.4,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-112468",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 178.9,
+      "v_cur": 179.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-131437",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 475.2,
+      "v_cur": 475.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-144520",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 629.8,
+      "v_cur": 630.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-156608",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 335.3,
+      "v_cur": 341.2,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-161169",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 278.0,
+      "v_cur": 282.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-165543",
+      "arm": "baseten/elephant-1",
+      "metric": "fuel_kg",
+      "v_prev": 348.0,
+      "v_cur": 360.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-169005",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 204.1,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-268625",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 318.6,
+      "v_cur": 331.5,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-273632",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 200.9,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 222.9,
+      "v_cur": 236.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-291336",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 187.6,
+      "v_cur": 191.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-298859",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 451.0,
+      "v_cur": 451.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-302254",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 306.7,
+      "v_cur": 307.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "baseten/elephant-1",
+      "metric": "delay_min",
+      "v_prev": 159.8,
+      "v_cur": 160.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "baseten/elephant-1",
+      "metric": "fuel_kg",
+      "v_prev": 8.0,
+      "v_cur": 28.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-112468",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 168.2,
+      "v_cur": 179.6,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-131437",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 475.2,
+      "v_cur": 475.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-144520",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 629.8,
+      "v_cur": 630.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-156608",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 331.0,
+      "v_cur": 341.2,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-161169",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 280.9,
+      "v_cur": 282.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-163396",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 185.6,
+      "v_cur": 240.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-165543",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 200.9,
+      "v_cur": 208.4,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-165543",
+      "arm": "formula",
+      "metric": "fuel_kg",
+      "v_prev": 264.0,
+      "v_cur": 388.0,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-169005",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 206.9,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-268625",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 320.7,
+      "v_cur": 331.5,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-273632",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 201.8,
+      "v_cur": 216.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-274783",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 218.6,
+      "v_cur": 236.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-291336",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 184.9,
+      "v_cur": 191.9,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-302254",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 306.7,
+      "v_cur": 307.7,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "formula",
+      "metric": "delay_min",
+      "v_prev": 159.8,
+      "v_cur": 160.8,
+      "cause": "negotiation"
+    },
+    {
+      "wave_id": "F2015-334031",
+      "arm": "formula",
+      "metric": "fuel_kg",
+      "v_prev": 8.0,
+      "v_cur": 28.0,
+      "cause": "negotiation"
+    }
+  ],
+  "engine_history": [
+    {
+      "engine_version": "v2",
+      "arm": "baseline",
+      "delay_min": 343.158,
+      "fuel_kg": 0.72,
+      "lap_share_pct": null,
+      "taxi_wait_min": null,
+      "pax_protected_pct": 26.538,
+      "overtime_min": 1.76,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 34
+    },
+    {
+      "engine_version": "v2",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 351.192,
+      "fuel_kg": 107.84,
+      "lap_share_pct": null,
+      "taxi_wait_min": null,
+      "pax_protected_pct": 25.798,
+      "overtime_min": 1.2,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v2",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 351.438,
+      "fuel_kg": 111.28,
+      "lap_share_pct": null,
+      "taxi_wait_min": null,
+      "pax_protected_pct": 25.502,
+      "overtime_min": 1.2,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v2",
+      "arm": "baseten/elephant-1",
+      "delay_min": 351.438,
+      "fuel_kg": 111.28,
+      "lap_share_pct": null,
+      "taxi_wait_min": null,
+      "pax_protected_pct": 25.798,
+      "overtime_min": 1.2,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v2",
+      "arm": "formula",
+      "delay_min": 351.198,
+      "fuel_kg": 108.08,
+      "lap_share_pct": null,
+      "taxi_wait_min": null,
+      "pax_protected_pct": 25.502,
+      "overtime_min": 1.2,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-air",
+      "arm": "baseline",
+      "delay_min": 343.158,
+      "fuel_kg": 0.72,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 26.538,
+      "overtime_min": 1.76,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 34
+    },
+    {
+      "engine_version": "v3-air",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 352.328,
+      "fuel_kg": 230.48,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 25.726,
+      "overtime_min": 1.966,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 64.71,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-air",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 352.256,
+      "fuel_kg": 224.16,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 25.726,
+      "overtime_min": 1.84,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 64.71,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-air",
+      "arm": "baseten/elephant-1",
+      "delay_min": 351.744,
+      "fuel_kg": 211.84,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 25.726,
+      "overtime_min": 1.746,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 58.82,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-air",
+      "arm": "formula",
+      "delay_min": 352.302,
+      "fuel_kg": 235.76,
+      "lap_share_pct": 6.12,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 26.0,
+      "overtime_min": 1.906,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 64.71,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-time",
+      "arm": "baseline",
+      "delay_min": 335.474,
+      "fuel_kg": 1.36,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.098,
+      "overtime_min": 1.856,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 33
+    },
+    {
+      "engine_version": "v3-time",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 344.85,
+      "fuel_kg": 218.24,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 33.564,
+      "overtime_min": 1.88,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 54.55,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-time",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 344.902,
+      "fuel_kg": 221.68,
+      "lap_share_pct": 4.17,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 33.518,
+      "overtime_min": 1.766,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 57.58,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-time",
+      "arm": "baseten/elephant-1",
+      "delay_min": 344.278,
+      "fuel_kg": 199.76,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 33.564,
+      "overtime_min": 1.554,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 45.45,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-time",
+      "arm": "formula",
+      "delay_min": 344.59,
+      "fuel_kg": 221.2,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.48,
+      "overtime_min": 1.728,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 54.55,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-taxi",
+      "arm": "baseline",
+      "delay_min": 325.612,
+      "fuel_kg": 1.36,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 37.316,
+      "overtime_min": 1.696,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 32
+    },
+    {
+      "engine_version": "v3-taxi",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 332.354,
+      "fuel_kg": 190.56,
+      "lap_share_pct": 2.04,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.56,
+      "overtime_min": 1.29,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 59.38,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-taxi",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 332.286,
+      "fuel_kg": 186.4,
+      "lap_share_pct": 2.04,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.324,
+      "overtime_min": 1.126,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 59.38,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-taxi",
+      "arm": "baseten/elephant-1",
+      "delay_min": 332.75,
+      "fuel_kg": 186.0,
+      "lap_share_pct": 2.08,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.324,
+      "overtime_min": 1.07,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 56.25,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-taxi",
+      "arm": "formula",
+      "delay_min": 331.66,
+      "fuel_kg": 197.6,
+      "lap_share_pct": 2.04,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 34.72,
+      "overtime_min": 1.088,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 65.62,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-traffic",
+      "arm": "baseline",
+      "delay_min": 326.69,
+      "fuel_kg": 1.36,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 1.083,
+      "pax_protected_pct": 36.92,
+      "overtime_min": 1.748,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 26
+    },
+    {
+      "engine_version": "v3-traffic",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 334.256,
+      "fuel_kg": 245.76,
+      "lap_share_pct": 4.08,
+      "taxi_wait_min": 0.414,
+      "pax_protected_pct": 34.56,
+      "overtime_min": 1.966,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 65.38,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-traffic",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 334.036,
+      "fuel_kg": 218.08,
+      "lap_share_pct": 4.17,
+      "taxi_wait_min": 0.44,
+      "pax_protected_pct": 34.56,
+      "overtime_min": 1.558,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 61.54,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-traffic",
+      "arm": "baseten/elephant-1",
+      "delay_min": 334.386,
+      "fuel_kg": 238.4,
+      "lap_share_pct": 4.17,
+      "taxi_wait_min": 0.414,
+      "pax_protected_pct": 34.24,
+      "overtime_min": 1.8,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 61.54,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v3-traffic",
+      "arm": "formula",
+      "delay_min": 333.378,
+      "fuel_kg": 233.36,
+      "lap_share_pct": 2.04,
+      "taxi_wait_min": 0.432,
+      "pax_protected_pct": 34.278,
+      "overtime_min": 1.886,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 65.38,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v4-airlines",
+      "arm": "baseline",
+      "delay_min": 326.69,
+      "fuel_kg": 1.36,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 1.083,
+      "pax_protected_pct": 36.92,
+      "overtime_min": 1.748,
+      "consensus_rate_pct": null,
+      "rule_violations_in_agreed_plans": null,
+      "worse_than_status_quo_pct": null,
+      "n_feasible": 26
+    },
+    {
+      "engine_version": "v4-airlines",
+      "arm": "typesafe/jev-1.14",
+      "delay_min": 334.134,
+      "fuel_kg": 148.72,
+      "lap_share_pct": 2.13,
+      "taxi_wait_min": 0.783,
+      "pax_protected_pct": 34.72,
+      "overtime_min": 2.214,
+      "consensus_rate_pct": 94.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 0.0,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v4-airlines",
+      "arm": "liquid/d1-ultra",
+      "delay_min": 333.996,
+      "fuel_kg": 132.48,
+      "lap_share_pct": 2.08,
+      "taxi_wait_min": 0.944,
+      "pax_protected_pct": 34.72,
+      "overtime_min": 1.742,
+      "consensus_rate_pct": 96.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 0.0,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v4-airlines",
+      "arm": "baseten/elephant-1",
+      "delay_min": 334.39,
+      "fuel_kg": 152.56,
+      "lap_share_pct": 2.13,
+      "taxi_wait_min": 0.771,
+      "pax_protected_pct": 34.4,
+      "overtime_min": 2.074,
+      "consensus_rate_pct": 94.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 0.0,
+      "n_feasible": 50
+    },
+    {
+      "engine_version": "v4-airlines",
+      "arm": "formula",
+      "delay_min": 335.54,
+      "fuel_kg": 154.72,
+      "lap_share_pct": 2.04,
+      "taxi_wait_min": 0.846,
+      "pax_protected_pct": 34.438,
+      "overtime_min": 2.012,
+      "consensus_rate_pct": 98.0,
+      "rule_violations_in_agreed_plans": 0,
+      "worse_than_status_quo_pct": 0.0,
+      "n_feasible": 50
+    }
+  ],
+  "attribution": {
+    "from": "v3-traffic",
+    "to": "v4-airlines",
+    "prev_has_per_wave": true,
+    "physics_delta": {
+      "delay_min": 0.0,
+      "fuel_kg": 0.0,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 0.0,
+      "pax_protected_pct": 0.0,
+      "overtime_min": 0.0
+    },
+    "negotiation_delta": {
+      "typesafe/jev-1.14": {
+        "delay_min": 7.444,
+        "fuel_kg": 147.36,
+        "lap_share_pct": 2.13,
+        "taxi_wait_min": -0.3,
+        "pax_protected_pct": -2.2,
+        "overtime_min": 0.466
+      },
+      "liquid/d1-ultra": {
+        "delay_min": 7.306,
+        "fuel_kg": 131.12,
+        "lap_share_pct": 2.08,
+        "taxi_wait_min": -0.139,
+        "pax_protected_pct": -2.2,
+        "overtime_min": -0.006
+      },
+      "baseten/elephant-1": {
+        "delay_min": 7.7,
+        "fuel_kg": 151.2,
+        "lap_share_pct": 2.13,
+        "taxi_wait_min": -0.312,
+        "pax_protected_pct": -2.52,
+        "overtime_min": 0.326
+      },
+      "formula": {
+        "delay_min": 8.85,
+        "fuel_kg": 153.36,
+        "lap_share_pct": 2.04,
+        "taxi_wait_min": -0.237,
+        "pax_protected_pct": -2.482,
+        "overtime_min": 0.264
+      }
+    },
+    "notes": []
+  }
+}

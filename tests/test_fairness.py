@@ -128,19 +128,19 @@ def test_floor_source():
 
 
 def test_current(monkeypatch, caplog):
-    assert VARIANTS == ("firm", "relaxing") and FAIRNESS_DEFAULT == "firm"
+    assert VARIANTS == ("firm", "relaxing") and FAIRNESS_DEFAULT == "relaxing"
     monkeypatch.delenv("ATM_FAIRNESS", raising=False)
     monkeypatch.setattr(fairness, "_warned", set())
+    assert current() == FAIRNESS_DEFAULT
+    monkeypatch.setenv("ATM_FAIRNESS", "firm")
     assert current() == "firm"
-    monkeypatch.setenv("ATM_FAIRNESS", "relaxing")
-    assert current() == "relaxing"
     monkeypatch.setenv("ATM_FAIRNESS", "bogus")
     with caplog.at_level(logging.WARNING, logger="backend.wave.fairness"):
         assert current() == FAIRNESS_DEFAULT
         assert current() == FAIRNESS_DEFAULT      # warned once per bad value, not on every call
     assert len([r for r in caplog.records if "ATM_FAIRNESS" in r.getMessage()]) == 1
     monkeypatch.setenv("ATM_FAIRNESS", "")
-    assert current() == "firm"
+    assert current() == FAIRNESS_DEFAULT
     assert not hasattr(fairness, "set_override") and not hasattr(fairness, "_override")   # per-call only (I-1)
 
 
