@@ -146,11 +146,15 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
     (async () => {
       try {
         const fromHash = parseRoute(location.hash).waveId;
-        const listed = api.waves();   // a linked wave loads beside the list, not after it (a cold list builds the replays)
-        const opening = fromHash ? loadWave(fromHash) : null;
-        const [c, ws] = await Promise.all([api.config(), listed]);
+        const listed = api.waves();   // the first wave loads beside the list, not after it (a cold list builds the replays)
+        const c = await api.config();
         if (gone) return;
-        setConfig(c); setMode(c.default_mode === "decision+claude" ? "decision" : c.default_mode); setModel(c.default_model); setReplay(c.replay_available); setWaves(ws);
+        setConfig(c); setMode(c.default_mode === "decision+claude" ? "decision" : c.default_mode); setModel(c.default_model); setReplay(c.replay_available);
+        const first = fromHash ?? c.default_wave;
+        const opening = first ? loadWave(first) : null;
+        const ws = await listed;
+        if (gone) return;
+        setWaves(ws);
         await (opening ?? loadWave(ws[0]?.id ?? (await api.randomWave()).id));
       } catch (e) { if (!gone) setLoadErr(`Couldn't reach the negotiator: ${(e as Error).message}`); }
     })();

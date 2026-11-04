@@ -271,3 +271,10 @@ def test_benchmark_dataset_serves_the_labelled_report(client, tmp_path):
     assert client.get("/api/benchmark?dataset=bts2024").json()["source"] == "bts"
     r = client.get("/api/benchmark?dataset=../benchmark")
     assert r.status_code == 404 and r.json()["error"]["code"] == "not_generated"
+
+
+def test_config_names_the_first_recorded_2024_hour(monkeypatch):
+    from backend import server
+    assert server._default_wave({"F2015-7", "JFK-2024-08-30-12", "ATL-2024-07-18-21"}) == "ATL-2024-07-18-21"
+    assert server._default_wave({"F2015-9", "F2015-7"}) == "F2015-7"
+    assert server._default_wave(set()) is None

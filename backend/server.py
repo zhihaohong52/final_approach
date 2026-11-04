@@ -126,8 +126,14 @@ def config():
             "llm_available": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
             "tracing": bool(os.environ.get("LANGSMITH_API_KEY")),
             "replay_available": bool(_replay_ids()),
+            "default_wave": _default_wave(_replay_ids()),
             "rule_ids": list(RULE_IDS),
             "store": get_store().status().to_dict()}
+
+
+def _default_wave(ids: set[str]) -> str | None:
+    """The wave the app opens first: the first recorded 2024 hour, else the first recorded flights.csv row."""
+    return min(ids, key=lambda i: (i.startswith("F2015-"), i), default=None)
 
 
 @app.get("/api/disruptions")

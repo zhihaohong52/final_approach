@@ -23,6 +23,7 @@ export interface Config {
   llm_available: boolean;              // Claude narration available
   tracing: boolean;                    // LangSmith on
   replay_available: boolean;           // pre-recorded waves exist
+  default_wave?: string | null;        // v2.3: the wave the app opens first (a recorded 2024 hour), loaded beside GET /api/waves
   store?: StoreStatus;                 // v2.1.1: where runs and decisions are kept
   rule_ids?: RuleId[];                 // v2.2.1: every rule the engine checks (rules.RULE_IDS)
 }
