@@ -247,6 +247,9 @@ def test_old_replay_passes_through(client, tmp_path):
     d = json.load(open(src))
     d.pop("engine_version", None)
     d["result"].pop("engine_version", None)
+    for k in ("airlines", "pilots", "fairness"):    # strip the v4 fields so it has the old 3-agent shape
+        d["result"].pop(k, None)
+    d["result"]["agents"] = ["ATC", "AIRLINE", "GROUND"]
     assert len(d["result"]["agents"]) == 3 and "airlines" not in d["result"]
     (tmp_path / "replay").mkdir(exist_ok=True)
     (tmp_path / "replay" / f"{WID}.json").write_text(json.dumps(d))
