@@ -1021,8 +1021,35 @@
   ],
   "severity": null,
   "focus": "MQ3269",
-  "engine_version": "v3-traffic",
+  "engine_version": "v4-airlines",
   "geo_available": true,
+  "airlines": [
+    {
+      "code": "AA",
+      "name": "American Airlines Inc.",
+      "callsigns": [
+        "MQ3269"
+      ],
+      "basis": "Envoy (MQ) flies only as American Eagle"
+    },
+    {
+      "code": "OO",
+      "name": "Skywest Airlines Inc.",
+      "callsigns": [
+        "OO6254"
+      ],
+      "basis": "SkyWest (OO) flies for AA, DL, UA and AS; no single partner major at ORD, so its own airline"
+    },
+    {
+      "code": "UA",
+      "name": "United Air Lines Inc.",
+      "callsigns": [
+        "EV3273",
+        "EV4125"
+      ],
+      "basis": "ExpressJet (EV) at ORD flew United Express"
+    }
+  ],
   "status_quo": {
     "plan": {
       "id": "f8919a1abf",
@@ -2104,7 +2131,9 @@
       ],
       "utilities": {
         "ATC": 0.686,
-        "PILOT:MQ3269": 0.45,
+        "AIRLINE:AA": 0.4,
+        "AIRLINE:OO": 0.651,
+        "AIRLINE:UA": 0.437,
         "GROUND": 0.629
       },
       "totals": {
