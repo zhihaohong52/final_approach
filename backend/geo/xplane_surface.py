@@ -1,7 +1,8 @@
 """Pure X-Plane apt.dat (Scenery Gateway) -> Overpass-like `elements`, so `osm_surface.build_surface` builds the graph.
 
 apt.dat 1100 rows used: 1201 taxi node, 1202 taxi edge (+ 1204 runway hot zone), 1300 ramp start, 100 land runway.
-- each 1202 edge becomes a two-node way: aeroway=runway (ref "15L/33R") or aeroway=taxiway (ref "B" from "taxiway_B");
+- each 1202 edge (`1202 u v twoway|oneway runway|taxiway_<width class> <name>`) becomes a two-node way:
+  aeroway=runway (ref "15L/33R") or aeroway=taxiway (ref = the name, e.g. "WR");
 - a taxi node joining an edge inside a runway's hot zone to one outside it becomes an aeroway=holding_position
   (the hold-short line), unless it lies on the runway itself;
 - gate and tie-down ramp starts become aeroway=parking_position nodes (ref = the ramp name, e.g. "CC1").
@@ -15,11 +16,7 @@ RAMP_KINDS = {"gate", "tie_down"}
 
 
 def _name(raw: str) -> str | None:
-    n = raw.strip()
-    for p in ("taxiway_", "taxilane_", "runway_"):
-        if n.lower().startswith(p):
-            n = n[len(p):]
-    return n or None
+    return raw.strip() or None
 
 
 def parse(text: str) -> dict:

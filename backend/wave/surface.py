@@ -37,6 +37,7 @@ class TaxiGraph:
     stands: dict[str, dict]
     reach_pct: dict[str, float]
     holds: dict[int, str | None] = field(default_factory=dict)   # OSM holding_position node -> strip (or None)
+    source: str = "OpenStreetMap"   # the surface document's header source: "OpenStreetMap" or "X-Plane Scenery Gateway"
     _trees: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def __getstate__(self) -> dict:
@@ -107,7 +108,7 @@ def _from_doc(icao: str, doc: dict) -> TaxiGraph:
     for h in sorted(doc.get("holding_positions") or [], key=lambda h: (h["node"], h.get("strip") or "")):
         if holds.get(int(h["node"])) is None:          # a node listed twice keeps a named strip over null
             holds[int(h["node"])] = h.get("strip")
-    return TaxiGraph(icao, nodes, adj, exits, stands, reach, holds)
+    return TaxiGraph(icao, nodes, adj, exits, stands, reach, holds, (doc.get("header") or {}).get("source") or "OpenStreetMap")
 
 
 @lru_cache(maxsize=16)   # waves of one airport share the graph object (and its cached trees)
@@ -871,6 +872,18 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
 #   none    - no runway coordinates (or a gate with no coordinates): v2's near/far `utility.taxi_min`, no ROT.
 
 SRC_ROUTED = "OpenStreetMap surface (ODbL), routed"
+SRC_ROUTED_XPLANE = "X-Plane Scenery Gateway surface (GPL), routed"
+XPLANE = "X-Plane Scenery Gateway"
+
+
+def source_label(header: dict | None) -> str:
+    """The surface's source as the UI and provenance name it: "OpenStreetMap 2026-11-02" or
+    "X-Plane Scenery Gateway (scenery 99761)"."""
+    h = header or {}
+    if h.get("source") == XPLANE:
+        return f"{XPLANE} (scenery {h['gateway_scenery']})" if h.get("gateway_scenery") else XPLANE
+    ts = str(h.get("osm_timestamp") or "")[:10]
+    return f"OpenStreetMap {ts or 'snapshot'}"
 SRC_GENERIC = "generic surface (straight line x1.4 at 15 kt)"
 SRC_NO_GEOMETRY = "ops rule (no geometry)"
 TIER_REACH = 0.80             # quality gate: each open end in OSM reaches >= 80 % of the wave's bound stands
@@ -886,7 +899,7 @@ class GateGeo:
     graph: TaxiGraph | None
     bind: dict[str, dict]
     stand_label: dict[str, str]
-    osm_timestamp: str | None
+    source: str | None              # `source_label` of the surface document
 
     def __deepcopy__(self, memo):
         return self
@@ -907,6 +920,7 @@ class TaxiInfo:
     path: TaxiPath | None = None
     no_path: str | None = None    # real tier: no exit of the end reaches the stand (ATC-TAXI-ROUTE fails)
     line: tuple | None = None     # generic tier: ((lat, lon) runway midpoint, (lat, lon) gate)
+    routed_on: str = "OpenStreetMap"   # TaxiGraph.source of the routed path
 
     @property
     def total_min(self) -> float:
@@ -915,7 +929,9 @@ class TaxiInfo:
 
     @property
     def source(self) -> str:
-        return SRC_ROUTED if self.src == "osm" else SRC_NO_GEOMETRY if self.tier == "none" else SRC_GENERIC
+        if self.src == "osm":
+            return SRC_ROUTED_XPLANE if self.routed_on == XPLANE else SRC_ROUTED
+        return SRC_NO_GEOMETRY if self.tier == "none" else SRC_GENERIC
 
 
 _LOCK = threading.Lock()
@@ -961,7 +977,7 @@ def gate_geo(icao: str, gates: list[tuple[str, bool]]) -> GateGeo:
         b = bind_gates(list(gates), doc)
         names = stand_labels(doc.get("stands") or [], {str(x["stand"]) for x in b.values() if x.get("geo_src") != "synth"})
         labels = {gid: names.get(x["stand"], x["stand"]) for gid, x in b.items()}
-        geo = GateGeo(icao, load_graph(icao), b, labels, (doc.get("header") or {}).get("osm_timestamp"))
+        geo = GateGeo(icao, load_graph(icao), b, labels, source_label(doc.get("header")))
     _put(_GEO, key, geo)
     return geo
 
@@ -1078,7 +1094,7 @@ def _compute(wave, geo: GateGeo, tier_w: str, runway_end: str | None, gate_id: s
                 continue
             name = next((n for n in p.names if n), None)
             return TaxiInfo("real", rw.id, gate.id, label, name or f"{rw.id} exit {e['dist_m']:.0f} m", e,
-                            rot_s(e, v_td), p.unimpeded_min, "osm", p)
+                            rot_s(e, v_td), p.unimpeded_min, "osm", p, routed_on=getattr(g, "source", "OpenStreetMap"))
         return TaxiInfo("real", rw.id, gate.id, label, None, first, rot_s(first, v_td),
                         generic_taxi_min(rw, gate.lat, gate.lon), "synth",
                         no_path=f"no taxi route from any exit of {rw.id} to gate {gate.id} (stand {label}) on the "
@@ -1131,13 +1147,14 @@ def provenance(wave, geo: GateGeo):
     open_ends = [r.id for r in wave.airport.runways if r.open]
     missing = [e for e in open_ends if e not in g.exits]
     bound = len(_bound_nodes(geo.bind))
-    det = (f"{tier} quality gate: every open runway end in OSM reaches >= {TIER_REACH:.0%} of the wave's "
-           f"{bound} OSM-bound stands" if tier == "real" else
-           f"generic: an open runway end in OSM reaches < {TIER_REACH:.0%} of the wave's {bound} OSM-bound stands "
+    src = "X-Plane" if g.source == XPLANE else "OSM"
+    det = (f"{tier} quality gate: every open runway end in {src} reaches >= {TIER_REACH:.0%} of the wave's "
+           f"{bound} {src}-bound stands" if tier == "real" else
+           f"generic: an open runway end in {src} reaches < {TIER_REACH:.0%} of the wave's {bound} {src}-bound stands "
            f"(or none is bound); taxi is the straight-line estimate")
     if missing:
-        det += f"; open ends missing from today's OSM ({', '.join(missing)}) use the straight-line estimate"
-    return Provenance("surface", tier, f"OpenStreetMap {geo.osm_timestamp or 'snapshot'}", det)
+        det += f"; open ends missing from today's {src} ({', '.join(missing)}) use the straight-line estimate"
+    return Provenance("surface", tier, geo.source or "OpenStreetMap snapshot", det)
 
 
 def precompute(wave) -> None:

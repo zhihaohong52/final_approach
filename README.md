@@ -231,7 +231,7 @@ Screenshots (replay mode, no keys): the status-quo plan of `F2015-7053` with ASQ
 | Tail to aircraft type, wake category, gate size | FAA aircraft registry | real (US-registered tails) |
 | Gates and wide-body gates | OpenStreetMap, 10 hubs | real |
 | Arrival procedures (STARs, approaches, hold fixes) | FAA CIFP, cycle 2611, pinned (`scripts/fetch_cifp.py`) | real; **Procedures: FAA CIFP 2611, not for navigation** |
-| Airport surface (taxiways, runways, stands, holding positions) | OpenStreetMap via Overpass (`scripts/fetch_surface.py`), ODbL | real; **© OpenStreetMap contributors**, not for navigation |
+| Airport surface (taxiways, runways, stands, holding positions) | OpenStreetMap via Overpass (`scripts/fetch_surface.py`), ODbL; where OSM fails the 80 % quality gate, the X-Plane Scenery Gateway's recommended layout (`scripts/fetch_surface_xplane.py`, 96 airports incl. IAH, listed in `data/ref/surface/XPLANE.md`), GPL v2 or later | real; **© OpenStreetMap contributors**; **X-Plane Scenery Gateway contributors (GPL)**; not for navigation |
 | Real ground traffic of the wave hour (arrivals, departures, taxi times) | BTS On-Time 2015 (`flights.csv` movements, `data/ref/movements2015`) | real |
 | Gate occupancy | seeded simulation | simulated, badged |
 | Fuel on board | seeded simulation | simulated, badged |
@@ -239,7 +239,7 @@ Screenshots (replay mode, no keys): the status-quo plan of `F2015-7053` with ASQ
 | Passenger connections | seeded simulation | simulated, badged |
 | Two wide gates per hub where OSM has none | simulated | simulated, badged |
 
-Layers missing for a flight fall back to a generic model and are badged in the UI. Procedures: FAA CIFP 2611, not for navigation. The derived procedure and surface files are for this simulation only and are not for navigation. Map data © OpenStreetMap contributors (ODbL).
+Layers missing for a flight fall back to a generic model and are badged in the UI. Procedures: FAA CIFP 2611, not for navigation. The derived procedure and surface files are for this simulation only and are not for navigation. Map data © OpenStreetMap contributors (ODbL). Surfaces listed in `data/ref/surface/XPLANE.md` are derived from the X-Plane Scenery Gateway and stay under the GNU GPL v2 or later (`data/ref/surface/COPYING.xplane`); the rest of the repository is MIT.
 
 ### Data: Postgres (Neon) with file fallback
 

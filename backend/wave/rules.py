@@ -101,7 +101,7 @@ LIMITS = [
      "note": "not in workbook; spare_gates from workbook remain binding; exempt from gate notice"},
     {"limit": "taxi route", "value": "fastest route on the OpenStreetMap taxiway graph, runway exit to the gate's "
      "stand; in-block = landing slot + ROT + taxi", "source": "real data",
-     "note": "taxiways, stands, runway exits and holding positions from OSM (ODbL); gates bound to OSM stands (ref, "
+     "note": "taxiways, stands, runway exits and holding positions from OSM (ODbL), or the X-Plane Scenery Gateway (GPL) where OSM fails the quality gate; gates bound to stands (ref, "
              "then nearest within 150 m, else a generic stand); 20 kt, 10 kt on taxilanes and turns > 30 deg, +30 s to "
              "park (assumptions); exit = first forward exit past the required roll (narrow 1,500 m, wide 2,000 m, "
              "x1.15 wet), exits whose taxi network holds no stand skipped; ROT = 2d / (v_td + v_exit), v_exit 25 kt "

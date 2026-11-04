@@ -156,8 +156,9 @@ def surface_part(wave: Wave) -> dict | None:
         if h.get("strip"):
             d["runway"] = h["strip"]
         holding_positions.append(d)
-    ts = str(hdr.get("osm_timestamp") or "")[:10]
-    return {"source": f"OpenStreetMap {ts}".strip(), "status": status,
+    from backend.wave.surface import source_label
+    label = source_label(hdr)
+    return {"source": label.removesuffix(" snapshot"), "status": status,
             "attribution": hdr.get("attribution") or "© OpenStreetMap contributors",
             "taxiways": [{"name": t.get("name"), "kind": t["kind"], "line": _line(t["line"])} for t in draw.get("taxiways") or []],
             "runways": [{"ids": list(r["ids"]), "line": _line(r["line"]), "width_m": r.get("width_m")} for r in draw.get("runways") or []],
