@@ -385,6 +385,15 @@ class FileStore:
         except (OSError, ValueError):
             return None
 
+    def benchmark_report(self, label: str) -> dict | None:
+        if not re.fullmatch(r"[a-z0-9-]+", label):
+            return None
+        p = self.paths.benchmark_path if label == "main" else self.paths.benchmark_path.parent / label / "benchmark.json"
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            return None
+
     def put_benchmark(self, report: dict, markdown: str | None, label: str, current: bool = True) -> None:
         if not current:
             return

@@ -40,6 +40,9 @@ async function get<T>(path: string, fallback: () => Promise<T>, valid: (x: any) 
   }
 }
 
+// GET /api/benchmark?dataset=: the 2024 busy hours (the headline) or the challenge flights.csv rows
+export type BenchmarkDataset = "bts2024" | "flights2015";
+
 export const api = {
   config: () => get<Config>("/api/config", async () => (await mock()).mockConfig, (c) => Array.isArray(c?.modes) && Array.isArray(c?.models)),
   waves: (q = "", airport = "", limit = 300) => get<WaveSummary[]>(`/api/waves?limit=${limit}${q ? `&q=${encodeURIComponent(q)}` : ""}${airport ? `&airport=${encodeURIComponent(airport)}` : ""}`, async () => (await mock()).mockWaves),
@@ -50,7 +53,7 @@ export const api = {
     return { flights: rows, total: rows.length };
   }),
   wave: (id: string) => get<WaveScenario>(`/api/wave/${encodeURIComponent(id)}`, async () => (await mock()).wave),
-  benchmark: () => get<BenchmarkReport>("/api/benchmark", async () => {
+  benchmark: (dataset: BenchmarkDataset = "bts2024") => get<BenchmarkReport>(`/api/benchmark?dataset=${dataset}`, async () => {
     return (await mock()).mockBenchmark;
   }),
 

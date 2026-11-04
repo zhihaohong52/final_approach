@@ -58,7 +58,7 @@ Keys are optional and live in `.env` (gitignored): `OPENROUTER_API_KEY`, `TYPESA
 
 ## 3. Architecture
 
-Input: pick a flight with `GET /api/flights`, id `F2015-<row_id>` (BTS 2024 wave ids still work).
+Input: pick a wave from `GET /api/waves` (2024 busy hours, id `<IATA>-<date>-<hour>`, spread over the 30 hubs and filterable by `airport`), or a flight with `GET /api/flights`, id `F2015-<row_id>` (the challenge `flights.csv`).
 
 ### System
 
@@ -209,7 +209,7 @@ Every change and assumption is returned in `result.limits`. Summary:
 The plan is no longer only a table of slots. Every landing now has a flown path, and the same plan drives the radar and the surface map on one replay clock.
 
 - **Air.** Each flight flies a published route: the FAA CIFP 2611 STAR and approach (or a synthetic corner-post and downwind route where the airport has none, drawn dashed), at the terminal speed profile. Flights that lap enter a holding stack (1,000 ft levels, bottom-first exit) at the hold fix of its STAR (the first fix of the common route, else the last enroute-transition fix). The slot, the fuel burned in the hold and the lap count all come from that same path, so the radar draws what the engine used and nothing else.
-- **Ground.** After touchdown the flight rolls to the first forward exit past the required roll and taxis the fastest route on the OpenStreetMap taxiway graph to its bound stand. The real 2015 movements of the same hour (queue arrivals and departures) are scheduled once as fixed traffic, and each wave flight waits at a node or a runway hold until the headway, crossing gap and runway-vacate rules are met. Those waits are the amber bars on the surface map and they add to in-block time.
+- **Ground.** After touchdown the flight rolls to the first forward exit past the required roll and taxis the fastest route on the OpenStreetMap taxiway graph to its bound stand. The real movements of the same hour (queue arrivals and departures; BTS 2015, or BTS 2024 at the 30 hubs for June to August) are scheduled once as fixed traffic, and each wave flight waits at a node or a runway hold until the headway, crossing gap and runway-vacate rules are met. Those waits are the amber bars on the surface map and they add to in-block time.
 - **Legality stays in the rule engine.** `ATC-HOLD-STACK` and `ATC-TAXI-CONFLICT` are deterministic rules like the other twelve (14 in all); no model decides whether a path is legal. Every point and segment carries `src: "cifp" | "osm" | "synth"` and synthesized parts are drawn dashed.
 - **Offline.** Procedures, surface and movements are derived files in `data/ref/` (and seeded into Postgres); the runtime never fetches CIFP, OSM or BTS.
 
@@ -232,7 +232,7 @@ Screenshots (replay mode, no keys): the status-quo plan of `F2015-7053` with ASQ
 | Gates and wide-body gates | OpenStreetMap, 10 hubs | real |
 | Arrival procedures (STARs, approaches, hold fixes) | FAA CIFP, cycle 2611, pinned (`scripts/fetch_cifp.py`) | real; **Procedures: FAA CIFP 2611, not for navigation** |
 | Airport surface (taxiways, runways, stands, holding positions) | OpenStreetMap via Overpass (`scripts/fetch_surface.py`), ODbL; where OSM fails the 80 % quality gate, the X-Plane Scenery Gateway's recommended layout (`scripts/fetch_surface_xplane.py`, 96 airports incl. IAH, listed in `data/ref/surface/XPLANE.md`), GPL v2 or later | real; **© OpenStreetMap contributors**; **X-Plane Scenery Gateway contributors (GPL)**; not for navigation |
-| Real ground traffic of the wave hour (arrivals, departures, taxi times) | BTS On-Time 2015 (`flights.csv` movements, `data/ref/movements2015`) | real |
+| Real ground traffic of the wave hour (arrivals, departures, taxi times) | BTS On-Time 2015 (`data/ref/movements2015`, `scripts/fetch_bts.py --movements2015`) and BTS On-Time 2024, Jun-Aug, 30 hubs (`data/ref/movements2024`, `--movements2024`); both seeded into `geo.movements2015_day`, keyed by airport and date | real |
 | Gate occupancy | seeded simulation | simulated, badged |
 | Fuel on board | seeded simulation | simulated, badged |
 | Crew shifts | seeded simulation, anchored to the flight's actual delayed ETA | simulated, badged |
@@ -308,6 +308,30 @@ The `statement_timeout` line gives `atm_app` the same 5 s limit that `0006` give
 
 ## 5. Evaluation
 
+### Headline: 50 busy hours from 2024 (d1-ultra)
+
+Run: `python3 -m backend.wave.benchmark --source bts --n 50 --arms openrouter:liquid/d1-ultra,formula --concurrency 4 --seed 7 --outage-n 20` (5 Nov 2026, engine `v4-airlines`, firm fairness, live `liquid/d1-ultra`). 50 seeded busy hours from the US DOT 2024 arrivals (June to August, 30 hubs), each with up to 5 late flights negotiated among every arrival of the hour and the real departures of BTS 2024. Every number below is from `eval/bts2024/benchmark.json`; full tables in `eval/bts2024/BENCHMARK.md`. The app's Benchmark page opens on this run and switches to the 2015 one.
+
+| Arm | Consensus | Fallback to solver | Mean rounds | Rule violations in agreed plans | Delay, all arrivals (min) | Fuel (kg) | Pax protected | p50 / p95 ms | Errors | Same decision as formulas | Model calls per wave |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| liquid/d1-ultra | 92% | 8% | 1.56 | 0 | 571.5 | 244.9 | 19.2% | 578 / 1,194 | 0% | 62% | 16.7 |
+| formula | 94% | 6% | 1.56 | 0 | 561.6 | 194.1 | 19.6% | n/a | 0% | 100% | 0 |
+| centralised optimiser (beam search, no negotiation) | - | - | - | 0 infeasible | 577.5 | 229.8 | 19.4% | - | - | - | - |
+| status quo (no negotiation) | - | - | - | breaks a rule on 32/50 waves | 560.1 | 11.7 | 19.5% | - | - | - | - |
+
+- **Legality is the gain.** The uncoordinated status quo breaks at least one rule on 32 of the 50 hours (64%, against 24 of 50 on the 2015 rows); every agreed plan breaks none. With the rule engine switched off, 54% of the formula arm's plans would be illegal.
+- **Delay is about neutral where it can be compared.** On the 18 hours whose status quo is legal: d1-ultra 763.8 min, formulas 763.7 min, status quo 767.4 min. The all-50 means above favour the status quo only because it is illegal on 32 of them.
+- **No flight left worse.** Under the firm floor no agreed plan leaves any flight worse than in the status quo on delay or fuel (0.0% of agreed hours with a legal status quo, both arms).
+- **Fallbacks:** the solver decided 4 hours for d1-ultra (`SAN-2024-07-09-22`, `DEN-2024-07-03-19`, `ATL-2024-07-24-19`, `BNA-2024-07-15-18`) and 3 for formulas (the same without DEN).
+- **Selection on this data picks the formulas.** d1-ultra's p95 latency is 1,194 ms, above the 1 s bar, and its mean delay is 9.9 min above the formulas'. The shipped chain still starts with d1-ultra, the pick of the 2015 run below; n = 50 is indicative, not significant.
+- **Outage test:** primary model replaced by a dead id on 20 hours; 20/20 resolved with a legal plan.
+- **Cost, measured:** the whole run (50 hours in the d1-ultra arm plus the 20-hour outage test) moved the OpenRouter usage counter by $0.054.
+- The engine history table in `eval/bts2024/BENCHMARK.md` is copied from the archived engines, which ran on 2015 rows: do not compare it with this run.
+
+### Challenge input: 50 rows of the 2015 `flights.csv`
+
+Run on 4 Nov 2026, before the X-Plane maps: two of its 50 waves are at IAH (`F2015-112468`, `F2015-273632`) and now route on the X-Plane surface, so their taxi times differ from this run.
+
 **What the measured impact is:** every agreed plan obeys every rule (0 violations in agreed plans, every arm, both fairness variants), while the uncoordinated status quo breaks at least one rule on 24 of 50 waves; with the rule engine switched off, 48% of the formula arm's plans are illegal. Delay is roughly neutral: on the 26 waves where the status quo is legal, the negotiated plans are 1.7 to 4.0 min better in total (320.6 to 323.0 min against 324.7). On all 50 waves the negotiated mean delay is above the status quo's (334.0 to 335.5 min against 326.7); the status quo is illegal on 24 of them, so that comparison is not like for like. Negotiation buys legality first; minutes are a small bonus. The airline agents add a second guarantee: under the shipped firm floor no agreed plan leaves any flight worse than in the status quo on delay or fuel (0.0% of agreed waves with a feasible status quo, against 57.7 to 61.5% under relaxing). That costs consensus and rounds, listed below.
 
 Method (`python3 -m backend.wave.benchmark --n 50 --arms <models>,formula --concurrency 4 --seed 7`):
@@ -382,6 +406,15 @@ Measured on 31 Oct 2026 from the OpenRouter key's usage counter before and after
 Replays cost nothing (no model calls). The path and surface layers add no model calls either: trajectories, taxi routes and the hold-short schedule are deterministic code, and `GET /api/wave/{id}/geo` and `POST /api/trajectories` are pure computation. The v3 and v4 benchmarks record no cost (`cost_usd_per_wave` is 0.0, output tokens free, input cost not measured), so the per-call price comes from the 31 Oct measurement on the v2 call pattern. Pilot agents make no model calls.
 
 ### Demo replays
+
+The wave list opens on these. Five 2024 busy hours recorded on 5 Nov 2026 (engine v4-airlines, decision mode, firm fairness, `liquid/d1-ultra`, with real 2024 departures as ground traffic); all five reach consensus, $0.0037 in model calls to record:
+- `ATL-2024-07-18-21` (DL, 5 late, 79 other arrivals, 114 departures; 2 turns): Delta's airline agent bargains over its five flights.
+- `CLT-2024-07-29-19` (AA, 5 late, 64 other arrivals; 2 turns).
+- `BWI-2024-08-02-21` (WN, thunderstorm with 30 kt gusts and 1 SM visibility; 3 turns): the pilots of the Southwest flights put 7 UNABLEs on the record, and two d1-ultra calls failed (HTTP 422 from the provider) and fell back to the formula, logged as `MODEL_FALLBACK`.
+- `TPA-2024-07-12-16` (thunderstorm, 4 airlines late at once; 1 turn).
+- `JFK-2024-08-30-12` (AA, B6 and DL airline agents bargaining; 3 turns).
+
+The five 2015 rows below were recorded on 4 Nov 2026.
 
 Recorded runs in `data/replay/` (engine v4-airlines, decision mode, firm fairness, live decision model `liquid/d1-ultra`, 0 model fallbacks) play back with no model calls. All 5 reach consensus. An airline agent put an objection on the record in every one of them, and the agreed plan has a flight in a holding pattern (a "lap" on the radar) in 2 of the 5 (ORD, MIA). ATL laps only in the status quo. There is no UNABLE in any replay: UNABLE appears only when a pilot-side rule fails for that aircraft on a rejected move, a new proposal or the opening plan, and none did here. Waves without a recording run live. Delay and fuel are wave totals of the agreed plan against the status quo (first come, first served), from the recordings.
 - `F2015-7053` ORD (airlines AA, OO, UA; 3 turns): MQ3269 on 32R, gate B22, +395 min. ATC proposes moving EV4125 to 22R and EV3273 to 28R to remove EV4125's lap. UA rejects it in every turn on its floor (EV3273 delay +6.3 min against the original plan, and 3 more objections). ATC gives way in turn 3 and the agreed plan is the status quo: delay 644.0 min, fuel 228 kg, pax protected 17.9 %, unchanged. EV4125 still laps once (5.7 min).

@@ -156,6 +156,7 @@ def _load_runs(conn) -> int:
 
 _BENCH = [   # (label, report json, markdown, current)
     ("main", EVAL / "benchmark.json", EVAL / "BENCHMARK.md", True),
+    ("bts2024", EVAL / "bts2024" / "benchmark.json", EVAL / "bts2024" / "BENCHMARK.md", False),   # 2024 busy hours
     *[(d.name, d / "benchmark.json", d / "BENCHMARK.md", False)   # every frozen engine report
       for d in sorted((EVAL / "archive").glob("engine-*")) if (d / "benchmark.json").is_file()],
     ("100", EVAL / "benchmark_100.json", EVAL / "BENCHMARK_100.md", False),

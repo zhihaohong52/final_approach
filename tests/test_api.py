@@ -259,3 +259,15 @@ def test_old_replay_passes_through(client, tmp_path):
     assert fr[-1][0] == "result" and res["paths_unavailable"] is True and "trajectories" not in res
     assert len(res["agents"]) == 3 and res["engine_version"] == "v2"
     assert sum(1 for e, _ in fr if e == "message") == len(d["messages"])
+
+
+def test_benchmark_dataset_serves_the_labelled_report(client, tmp_path):
+    import json
+    (tmp_path / "benchmark.json").write_text(json.dumps({"source": "flights2015"}))
+    (tmp_path / "bts2024").mkdir()
+    (tmp_path / "bts2024" / "benchmark.json").write_text(json.dumps({"source": "bts"}))
+    assert client.get("/api/benchmark").json()["source"] == "flights2015"
+    assert client.get("/api/benchmark?dataset=flights2015").json()["source"] == "flights2015"
+    assert client.get("/api/benchmark?dataset=bts2024").json()["source"] == "bts"
+    r = client.get("/api/benchmark?dataset=../benchmark")
+    assert r.status_code == 404 and r.json()["error"]["code"] == "not_generated"

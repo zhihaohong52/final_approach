@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "./api/client";
+import { api, ApiError, type BenchmarkDataset } from "./api/client";
 import type { BenchmarkReport, ModelInfo } from "./api/types";
 import { dateLabel } from "./format";
 
@@ -21,10 +21,15 @@ export function Benchmark() {
   const [rep, setRep] = useState<BenchmarkReport | null>(null);
   const [err, setErr] = useState<{ code: string; message: string } | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [dataset, setDataset] = useState<BenchmarkDataset>("bts2024");
   useEffect(() => { api.config().then((c) => setModels(c.models)).catch(() => setModels([])); }, []);
   useEffect(() => {
-    api.benchmark().then(setRep).catch((e) => setErr(e instanceof ApiError ? { code: e.code, message: e.message } : { code: "error", message: String(e) }));
-  }, []);
+    let gone = false;
+    setRep(null); setErr(null);
+    api.benchmark(dataset).then((r) => { if (!gone) setRep(r); })
+      .catch((e) => { if (!gone) setErr(e instanceof ApiError ? { code: e.code, message: e.message } : { code: "error", message: String(e) }); });
+    return () => { gone = true; };
+  }, [dataset]);
 
   // the backend's reasons mix the verdict with column definitions and per-arm latency lines already in the table
   const reasons = rep?.selection.reasons ?? [];
@@ -45,7 +50,13 @@ export function Benchmark() {
           <h1>Benchmark</h1>
           <p className="sub">{rep ? <>{rep.n_waves} real waves, seed {rep.seed}, every arm on the same waves. <b>Winner: {rep.selection.winner}</b> ({symbols(rep.selection.rule)}).</> : "Each decision model against the formulas and the status quo on the same real waves."}</p>
         </div>
-        {rep && <span className="muted" style={{ fontSize: 13 }}>Generated {dateLabel(rep.generated_at)}</span>}
+        <div className="toolbar">
+          <div className="seg" role="group" aria-label="Waves benchmarked">
+            <button aria-pressed={dataset === "bts2024"} onClick={() => setDataset("bts2024")} title="Busy hours from the US DOT 2024 arrivals, several late flights each">2024 busy hours</button>
+            <button aria-pressed={dataset === "flights2015"} onClick={() => setDataset("flights2015")} title="Rows of the challenge flights.csv (2015), one disrupted flight each">2015 flights.csv</button>
+          </div>
+          {rep && <span className="muted" style={{ fontSize: 13 }}>Generated {dateLabel(rep.generated_at)}</span>}
+        </div>
       </header>
 
       {!rep ? (

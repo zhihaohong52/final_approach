@@ -78,7 +78,7 @@ STORE_METHODS = (
     "flight2015_row", "flights2015_day", "search_flights2015",
     "iem_get", "iem_put",
     "save_run", "get_run", "list_runs", "record_decision",
-    "replay", "replay_ids", "put_replay", "benchmark_current", "put_benchmark", "v1_eval",
+    "replay", "replay_ids", "put_replay", "benchmark_current", "benchmark_report", "put_benchmark", "v1_eval",
     "procedures", "surface", "movements_day",
     "status",
 )
@@ -551,6 +551,12 @@ class PgStore:
             row = go()
             cached = self._benchmark = None if row is None else row[0]
         return copy.deepcopy(cached)
+
+    def benchmark_report(self, label: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute("select report from eval.benchmark_reports where label = %s "
+                               "order by generated_at desc, id desc limit 1", (label,)).fetchone()
+        return None if row is None else row[0]
 
     def put_benchmark(self, report: dict, markdown: str | None, label: str, current: bool = True) -> None:
         with self._conn() as conn:    # one transaction: the previous current row is cleared with the insert

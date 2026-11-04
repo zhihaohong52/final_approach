@@ -707,8 +707,17 @@ def list_runs(wave_id: str, limit: int = 20):
     return {"runs": get_store().list_runs(wave_id, max(1, min(limit, 100)))}
 
 
+BENCHMARK_DATASETS = {"bts2024": "bts2024"}   # ?dataset= -> eval.benchmark_reports label; default: the current report
+
+
 @app.get("/api/benchmark")
-def benchmark():
+def benchmark(dataset: str | None = None):
+    if dataset and dataset != "flights2015":
+        label = BENCHMARK_DATASETS.get(dataset)
+        b = get_store().benchmark_report(label) if label else None
+        if b is None:
+            return _err(404, "not_generated", f"no benchmark report for dataset {dataset!r}")
+        return b
     b = _benchmark(live=True)
     if b is None:
         return _err(404, "not_generated", "benchmark report not generated yet")
