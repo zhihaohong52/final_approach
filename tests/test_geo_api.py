@@ -234,7 +234,7 @@ def test_include_trajectories_must_be_bool():
 
 def test_replays_are_current_engine_and_show_laps():
     from backend.wave.edit import plan_from_dicts
-    files = sorted(glob.glob("data/replay/*.json")); assert len(files) == 5
+    files = sorted(glob.glob("data/replay/*.json")); assert len(files) == 10   # 5 flights.csv rows, 5 2024 hours
     with_lap = 0
     for f in files:
         d = json.load(open(f)); assert d["engine_version"] == ENGINE_VERSION   # stays valid after the M2a/M2/M3 re-records

@@ -63,7 +63,9 @@ def test_decision_appends_both_shapes(tmp_path):
 
 
 def test_replay_ids_are_the_demo_set():
-    assert FileStore().replay_ids() == {"F2015-7053", "F2015-292602", "F2015-152758", "F2015-75", "F2015-77162"}
+    assert FileStore().replay_ids() == {"F2015-7053", "F2015-292602", "F2015-152758", "F2015-75", "F2015-77162",
+                                        "ATL-2024-07-18-21", "CLT-2024-07-29-19", "BWI-2024-08-02-21",
+                                        "TPA-2024-07-12-16", "JFK-2024-08-30-12"}
 
 
 def test_iem_cache_roundtrip(tmp_path):
