@@ -588,9 +588,9 @@ def _fixture_movements(monkeypatch):
     from tests.test_ground_traffic import DAYS, FIXTURES
     real = files._movements
     frames = {k: pd.read_csv(FIXTURES / v, dtype=str, keep_default_na=False) for k, v in DAYS.items()}
-    monkeypatch.setattr(files, "_movements", lambda iata: (frames[iata], "date") if iata in frames else real(iata))
+    monkeypatch.setattr(files, "_movements", lambda iata, year="2015": (frames[iata, year], "date") if (iata, year) in frames else real(iata, year))
     real_text = files._movements_text   # the fixture frames replace the file text path for those airports too
-    monkeypatch.setattr(files, "_movements_text", lambda iata: None if iata in frames else real_text(iata))
+    monkeypatch.setattr(files, "_movements_text", lambda iata, year="2015": None if (iata, year) in frames else real_text(iata, year))
     store.load_movements.cache_clear(); ground_traffic._cache_clear(); trajectory.build.cache_clear()
     yield
     store.load_movements.cache_clear(); ground_traffic._cache_clear(); trajectory.build.cache_clear()

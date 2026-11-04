@@ -1,4 +1,5 @@
-"""Fixed ground traffic (spec section 6.4): the wave's queue arrivals and, where the BTS 2015 movements exist, the real
+"""Fixed ground traffic (spec section 6.4): the wave's queue arrivals and, where the BTS movements exist (2015, and the
+2024 hub months), the real
 departures in [T0 - 30, T0 + 120] min, scheduled once per wave on the OSM taxi graph, first come first served by
 start time, into the reservation table that the wave flights give way to (v2's convention: fixed traffic is never
 vetoed). Pure and deterministic; no model decides anything here.
@@ -44,7 +45,7 @@ TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one 
 LANDING_TAKEOFF_GAP_MIN = 1.0
 HOLD_UNTIL_TAKEOFF = True     # a departure waits in the holding bay until it lines up (False: it leaves the holding
                               # point as it arrives; the takeoff time is unchanged)
-SRC_REAL = "BTS 2015 movements"
+SRC_REAL = "BTS {year} movements"   # .format(year=) the wave date's year
 SRC_PARTIAL = "challenge flights.csv subset"
 _TOL = 1e-9
 
@@ -85,7 +86,7 @@ class FixedTraffic:
     tracks: list[GroundTrack]
     failures: list[tuple[str, str]]            # (callsign, reason) for every schedule() with ok=False
     mode: tuple[bool, str | None, list[str]]   # departure_mode(wave)
-    real: bool                                 # BTS 2015 movements exist for this wave
+    real: bool                                 # BTS movements exist for this wave
     takeoffs_shifted: int = 0                  # takeoffs moved past WHEELS_OFF by taxi waits
     stats: dict = field(default_factory=dict)
     # strip -> (t_in, t_out, label, "crossing", hold node) of every scheduled fixed runway crossing (from leaving the
@@ -108,7 +109,7 @@ def _t0(wave: Wave) -> tuple[str, int]:
 
 
 def movements(wave: Wave) -> list[store.Movement] | None:
-    """The airport's 2015 movements around the wave (scheduled in [T0 - 30 - 360, T0 + 120 + 15) local min), or None
+    """The airport's BTS movements around the wave (scheduled in [T0 - 30 - 360, T0 + 120 + 15) local min), or None
     when there is no movements data for that airport and day."""
     date, t0 = _t0(wave)
     return store.load_movements(wave.airport.iata, date, int(t0 - WINDOW_BEFORE_MIN - LOAD_EARLY_MIN),
@@ -739,7 +740,7 @@ def _put(k: str, ft: FixedTraffic) -> None:
 
 
 def fixed_traffic(wave: Wave) -> list[FixedMover]:
-    """Queue arrivals plus real 2015 departures with wheels-off in [T0 - 30, T0 + 120], in FCFS (t_start) order."""
+    """Queue arrivals plus real BTS departures (2015, or 2024 at the hubs) with wheels-off in [T0 - 30, T0 + 120], in FCFS (t_start) order."""
     return list(_get(wave).movers)
 
 
@@ -778,7 +779,7 @@ def hold_stats(ft: FixedTraffic) -> dict:
             "queue_median": q(qw, 0.5), "queue_max": qw[-1] if qw else 0.0}
 
 
-def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
+def provenance(ft: FixedTraffic, partial_source: str, year: str = "2015") -> Provenance:
     deps = [m for m in ft.movers if m.kind == "departure"]
     arrs = [m for m in ft.movers if m.kind == "arrival"]
     mixed, arr_rw, cands = ft.mode
@@ -791,7 +792,7 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
             parts.append(f"departure runway {'/'.join(dep_rw) or '-'}: "
                          + (f"mixed mode on {arr_rw}" if mixed else f"parallel to arrival runway {arr_rw}"))
     else:
-        parts.append(f"partial: {len(arrs)} queue arrivals only, no departures (no BTS 2015 movements for this "
+        parts.append(f"partial: {len(arrs)} queue arrivals only, no departures (no BTS movements for this "
                      f"airport and day)")
     unrouted = [m for m in ft.movers if m.path is None]
     parts.append(f"scheduled over the 30-min horizon or with an unresolved conflict (still reserved): "
@@ -828,7 +829,7 @@ def provenance(ft: FixedTraffic, partial_source: str) -> Provenance:
         parts.append(f"departures without BTS TAXI_OUT (pushback from the unimpeded taxi): {ft.stats['no_taxi_out']}")
     detail = "; ".join(parts)
     if ft.real:
-        return Provenance("ground_traffic", "real", SRC_REAL, detail)
+        return Provenance("ground_traffic", "real", SRC_REAL.format(year=year), detail)
     return Provenance("ground_traffic", "generic", partial_source, detail)
 
 
@@ -837,7 +838,7 @@ def annotate(wave: Wave, partial_source: str = SRC_PARTIAL) -> Wave:
     scheduled or not routed, never dropped silently) and cache the result under the wave's final content key."""
     from backend.wave.route import wave_key
     ft = _compute(wave)
-    wave.provenance.append(provenance(ft, partial_source))
+    wave.provenance.append(provenance(ft, partial_source, _t0(wave)[0][:4]))
     wave.__dict__.pop("_key", None)    # the key hashes the provenance: recompute it now
     k = wave_key(wave)
     _put(k, ft)

@@ -86,6 +86,7 @@ MOVE_COLS = ["date", "kind", "carrier", "flight_no", "tail", "other", "sched", "
 MOVE_SRC = ["FlightDate", "Reporting_Airline", "Flight_Number_Reporting_Airline", "Tail_Number", "Origin", "Dest",
             "CRSDepTime", "CRSArrTime", "WheelsOff", "TaxiOut", "WheelsOn", "TaxiIn", "Cancelled"]
 MOVEMENTS = ROOT / "data" / "ref" / "movements2015"
+MOVEMENTS_2024 = ROOT / "data" / "ref" / "movements2024"
 BENCHMARK = ROOT / "eval" / "benchmark.json"
 FLIGHTS_INDEX = ROOT / "data" / "challenge2" / "flights_index.csv"
 
@@ -103,7 +104,11 @@ def wrap_after(actual: pd.Series, sched: pd.Series) -> pd.Series:
 
 
 def _read_2015(month: int, cols: list[str]) -> pd.DataFrame:
-    with zipfile.ZipFile(download(f"2015-{month:02d}")) as z:  # read only; nothing is extracted/executed
+    return _read_month(f"2015-{month:02d}", cols)
+
+
+def _read_month(month: str, cols: list[str]) -> pd.DataFrame:
+    with zipfile.ZipFile(download(month)) as z:  # read only; nothing is extracted/executed
         names = [n for n in z.namelist() if n.lower().endswith(".csv")]
         with z.open(names[0]) as f:
             return pd.read_csv(f, usecols=cols, low_memory=False,
@@ -173,11 +178,25 @@ def movements2015() -> None:
     print(f"MOVEMENT_AIRPORTS = {tuple(union)!r}")
 
 
+def movements2024() -> None:
+    """The 2024 wave months (hubs.MONTHS) at the hubs, same columns as movements2015, so 2024 waves get real
+    departures in ground traffic."""
+    frames = [month_movements(_read_month(m, MOVE_SRC), set(HUBS)) for m in MONTHS]
+    for old in MOVEMENTS_2024.glob("*.csv.gz"):
+        old.unlink()
+    total = write_movements(frames, sorted(HUBS), MOVEMENTS_2024)
+    print(f"{len(HUBS)} airports, {total / 1e6:.1f} MB (not in git: seeded to Postgres only)")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--movements2015", action="store_true", help="write data/ref/movements2015/{IATA}.csv.gz")
     if ap.parse_known_args()[0].movements2015:
         movements2015()
+        return
+    ap.add_argument("--movements2024", action="store_true", help="write data/ref/movements2024/{IATA}.csv.gz")
+    if ap.parse_known_args()[0].movements2024:
+        movements2024()
         return
     ap.add_argument("--months", nargs="+", default=MONTHS,
                     help="YYYY-MM months to include (default: hubs.MONTHS)")

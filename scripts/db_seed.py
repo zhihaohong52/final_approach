@@ -657,7 +657,8 @@ def _load_surface(conn) -> int:
 
 
 def _files_movements() -> list[Path]:
-    return sorted((REF / "movements2015").glob("*.csv.gz"))
+    """2015 and 2024 movements share geo.movements2015_day: keyed by (airport, date), the years never collide."""
+    return sorted([*(REF / "movements2015").glob("*.csv.gz"), *(REF / "movements2024").glob("*.csv.gz")])
 
 
 def _movements_lines() -> Iterable[str]:

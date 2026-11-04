@@ -64,9 +64,10 @@ REF = ROOT / "data/ref"
 
 
 @functools.lru_cache(maxsize=4)
-def _movements(iata: str) -> tuple[pd.DataFrame | None, str | None]:
-    """(all rows as text, date column name) of one airport's data/ref/movements2015 file."""
-    p = REF / "movements2015" / f"{iata}.csv.gz"
+def _movements(iata: str, year: str = "2015") -> tuple[pd.DataFrame | None, str | None]:
+    """(all rows as text, date column name) of one airport's data/ref/movements{year} file (2015, or 2024 for the
+    hub months)."""
+    p = REF / f"movements{year}" / f"{iata}.csv.gz"
     if not p.exists():
         return None, None
     df = pd.read_csv(p, dtype=str, keep_default_na=False)
@@ -77,10 +78,10 @@ def _movements(iata: str) -> tuple[pd.DataFrame | None, str | None]:
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-def _movements_text(iata: str) -> str | None:
+def _movements_text(iata: str, year: str = "2015") -> str | None:
     """The decompressed text of one airport's movements file (None without one), memoised on its path, size and
     mtime. ~30 ms for ORD where parsing it into a frame of strings takes ~250 ms (and ~10x the memory)."""
-    p = REF / "movements2015" / f"{iata}.csv.gz"
+    p = REF / f"movements{year}" / f"{iata}.csv.gz"
     try:
         st = p.stat()
     except OSError:
@@ -219,12 +220,13 @@ class FileStore:
         return p.read_bytes() if p.is_file() else None
 
     def movements_day(self, iata: str, date: str) -> bytes | None:
-        text = _movements_text(iata.upper())
+        year = date[:4] if date[:4].isdigit() else "2015"
+        text = _movements_text(iata.upper(), year)
         if text is not None:
             got = _day_block(text, date)
             if got is not False:
                 return None if got is None else pack.gzip_bytes(got)
-        df, col = _movements(iata.upper())
+        df, col = _movements(iata.upper(), year)
         if df is None or col is None:
             return None
         sub = df[df[col] == date]

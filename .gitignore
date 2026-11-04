@@ -21,6 +21,7 @@ frontend/dist/
 
 # generated BTS 2015 ground movements (~94 MB): seeded to Postgres only, never committed
 data/ref/movements2015
+data/ref/movements2024
 
 # scratch benchmark runs and analysis
 eval/runs/

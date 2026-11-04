@@ -14,8 +14,10 @@ from backend.wave.model import QueueArrival, Runway
 # Real BTS On-Time 2015 movement rows (US DOT, public domain) for the fixture days, cut to the scheduled window the
 # waves read: ORD 2015-08-19 (F2015-270287), ATL 2015-03-01 (F2015-69315), DFW 2015-01-01 (F2015-75, also a replay).
 # F2015-270287 and F2015-69315 were the ORD / ATL replays when these fixtures were cut; they are fixture waves now.
+# ATL 2024-07-18 (ATL-2024-07-18-21) is BTS On-Time 2024 (data/ref/movements2024), cut the same way.
 FIXTURES = Path(__file__).resolve().parent / "data" / "movements"
-DAYS = {"ORD": "ORD-2015-08-19.csv", "ATL": "ATL-2015-03-01.csv", "DFW": "DFW-2015-01-01.csv"}
+DAYS = {("ORD", "2015"): "ORD-2015-08-19.csv", ("ATL", "2015"): "ATL-2015-03-01.csv",
+        ("DFW", "2015"): "DFW-2015-01-01.csv", ("ATL", "2024"): "ATL-2024-07-18.csv"}
 
 
 @pytest.fixture(autouse=True)
@@ -25,9 +27,9 @@ def _fixture_movements(monkeypatch):
     from backend.datastore import files
     real = files._movements
     frames = {k: pd.read_csv(FIXTURES / v, dtype=str, keep_default_na=False) for k, v in DAYS.items()}
-    monkeypatch.setattr(files, "_movements", lambda iata: (frames[iata], "date") if iata in frames else real(iata))
+    monkeypatch.setattr(files, "_movements", lambda iata, year="2015": (frames[iata, year], "date") if (iata, year) in frames else real(iata, year))
     real_text = files._movements_text   # the fixture frames replace the file text path for those airports too
-    monkeypatch.setattr(files, "_movements_text", lambda iata: None if iata in frames else real_text(iata))
+    monkeypatch.setattr(files, "_movements_text", lambda iata, year="2015": None if (iata, year) in frames else real_text(iata, year))
     store.load_movements.cache_clear(); reservations.cache_clear()
     yield
     store.load_movements.cache_clear(); reservations.cache_clear()
@@ -117,6 +119,13 @@ def test_provenance_counts_movers_and_failures():
     pv = next(p for p in w.provenance if p.layer == "ground_traffic")
     assert pv.source == "BTS 2015 movements"
     assert "departures" in pv.detail and "arrivals" in pv.detail and "still reserved" in pv.detail
+
+
+def test_2024_wave_takes_its_departures_from_the_2024_movements():
+    w = build.build_wave("ATL-2024-07-18-21")
+    pv = next(p for p in w.provenance if p.layer == "ground_traffic")
+    assert (pv.status, pv.source) == ("real", "BTS 2024 movements")
+    assert any(m.kind == "departure" for m in fixed_traffic(w))
 
 
 def _two_parallel_wave(open27=True):
