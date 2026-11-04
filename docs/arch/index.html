@@ -28,12 +28,12 @@ svg { position:absolute; inset:0; }
 <g stroke="#6b7d8f" stroke-width="2.5" fill="none" marker-end="url(#a)">
 <path d="M400 330 L470 330"/><path d="M400 560 L470 400"/>
 <path d="M760 360 L830 360"/>
-<path d="M1120 250 L1190 250"/><path d="M1120 420 L1190 420"/>
+<path d="M1170 250 L1190 250"/><path d="M1170 520 L1190 460"/>
 <path d="M1335 300 L1335 370"/>
 <path d="M1480 420 L1550 420"/><path d="M1480 520 L1550 640"/>
 <path d="M1700 500 L1700 590"/>
 <path d="M1700 732 L1700 785"/>
-<path d="M975 600 L975 520"/><path d="M845 525 L700 770" stroke="#b48cff" stroke-dasharray="6 6"/>
+<path d="M1000 650 L1000 618"/><path d="M830 620 L700 770" stroke="#b48cff" stroke-dasharray="6 6"/>
 </g></svg>
 
 <div class="grp" style="left:60px;top:150px;width:350px;height:510px"><div class="k" style="color:var(--blue)">Real data in</div></div>
@@ -43,10 +43,11 @@ svg { position:absolute; inset:0; }
 
 <div class="b" style="left:475px;top:270px;width:280px"><b>Wave builder</b><p>focus flight + the other arrivals in the window, triage severity</p></div>
 
-<div class="grp" style="left:820px;top:150px;width:680px;height:420px"><div class="k" style="color:var(--green)">LangGraph negotiation · max 3 turns</div></div>
-<div class="b" style="left:840px;top:185px;width:275px"><b>ATC → PILOT → GROUND</b><p>one structured message each per turn; moves only inside own authority</p></div>
-<div class="b" style="left:840px;top:360px;width:275px;border-color:var(--violet)"><div class="k" style="color:var(--violet)">Decision layer</div><p>code computes verdicts → <b style="display:inline;font-size:18px;color:var(--ink)">jev-1.14</b> picks a move and votes · chain d1-ultra → elephant-1 → formula</p></div>
-<div class="b" style="left:1195px;top:185px;width:285px;border-color:var(--green)"><div class="k" style="color:var(--green)">Rule engine</div><p>12 deterministic rules CHECK every move and plan; vetoes cite rule, source, values</p></div>
+<div class="grp" style="left:820px;top:150px;width:680px;height:495px"><div class="k" style="color:var(--green)">LangGraph negotiation · max 3 turns</div></div>
+<div class="b" style="left:840px;top:180px;width:325px;padding:12px 20px"><b style="font-size:18px;margin-bottom:6px;white-space:nowrap">ATC · AIRLINE:AA … · GROUND</b><p style="font-size:17px">voters: ATC, one AIRLINE agent per airline in the wave, GROUND; one message each per turn</p></div>
+<div class="b" style="left:840px;top:333px;width:325px;padding:12px 20px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">PILOT:callsign · formula</div><p style="font-size:17px">one per aircraft, never votes; only says UNABLE (PLT-* and wind rules)</p></div>
+<div class="b" style="left:840px;top:462px;width:325px;border-color:var(--violet);padding:14px 20px"><div class="k" style="color:var(--violet)">Decision layer</div><p style="font-size:17px">code computes verdicts → <b style="display:inline;font-size:17px;color:var(--ink)">jev-1.14</b> picks a move and votes · chain d1-ultra → elephant-1 → formula</p></div>
+<div class="b" style="left:1195px;top:185px;width:285px;border-color:var(--green)"><div class="k" style="color:var(--green)">Rule engine</div><p>14 deterministic rules CHECK every move and plan; vetoes cite rule, source, values</p></div>
 <div class="b" style="left:1195px;top:375px;width:285px"><b>Consensus?</b><p>one legal plan accepted by all voters (ATC, airlines, GROUND)</p></div>
 
 <div class="b" style="left:1555px;top:370px;width:300px;border-color:var(--green)"><b>Agreed plan</b><p>revised arrival time, runway, gate</p></div>
@@ -54,11 +55,11 @@ svg { position:absolute; inset:0; }
 <div class="b" style="left:1555px;top:790px;width:300px;padding:14px 22px"><b>Duty manager</b><p>approve or override (reason required) in the web UI</p></div>
 <div class="b" style="left:1555px;top:940px;width:300px;padding:12px 18px;border-color:var(--blue)"><div class="k" style="color:var(--blue)">Claude Haiku 5.5</div><p>writes the brief from the log; decides nothing</p></div>
 
-<div class="b" style="left:820px;top:610px;width:620px"><div class="k" style="color:var(--muted)">Benchmark · picks the default</div><p>50 seeded rows (+1,000-row scale run): status quo, optimiser, formulas, 3 models · outage and engine-off tests</p></div>
+<div class="b" style="left:820px;top:655px;width:620px;padding:8px 22px"><div class="k" style="color:var(--muted)">Benchmark · picks the default</div><p>50 seeded rows (+1,000-row scale run): status quo, optimiser, formulas, 3 models · outage and engine-off tests</p></div>
 <div class="grp" style="left:60px;top:775px;width:1440px;height:270px;border-color:var(--violet)"><div class="k" style="color:var(--violet)">What jev-1.14 is asked (TypeSafe System One) · code does the maths, the model judges</div></div>
 <div class="q" style="left:85px"><div class="k" style="color:var(--violet)">1 · Triage · Score</div><b>“How severe is this wave?”</b><p><i>Given:</i> closures, wind, queue, delays</p><p><i>Out:</i> level 0–3 + probability → sets moves per turn</p></div>
 <div class="q" style="left:560px"><div class="k" style="color:var(--violet)">2 · Move · Choice</div><b>“Pick ONE move for your authority, or no move”</b><p><i>Given per option:</i> fixes / adds rule breaches · better / worse for you · engine rank</p><p><i>Out:</i> option key + probabilities → engine CHECK, veto if it adds a breach</p></div>
-<div class="q" style="left:1035px"><div class="k" style="color:var(--violet)">3 · Vote · Noul (yes/no)</div><b>“Do you accept plan P?”</b><p><i>Given:</i> passes every rule · meets your minimum (yes, clearly / just; no) · best for you?</p><p><i>Out:</i> P(accept) ≥ 0.7 ACCEPT · ≤ 0.3 REJECT · in between the formula decides; code tallies 3 of 3</p></div>
+<div class="q" style="left:1035px"><div class="k" style="color:var(--violet)">3 · Vote · Noul (yes/no)</div><b>“Do you accept plan P?”</b><p><i>Given:</i> passes every rule · meets your minimum (yes, clearly / just; no) · best for you?</p><p><i>Out:</i> P(accept) ≥ 0.7 ACCEPT · ≤ 0.3 REJECT · in between the formula decides; code tallies all voters</p></div>
 </div></div>
 <script>const tl = gsap.timeline({ paused: true }); window.__timelines["main"] = tl; tl.seek(0);</script>
 </body></html>
