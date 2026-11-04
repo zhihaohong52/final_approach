@@ -640,3 +640,7 @@ tbody tr:hover { background: #18171c; }
 
 .surface-map svg { cursor: grab; touch-action: none; }
 .surface-map svg.panning, .surface-map svg.panning * { cursor: grabbing !important; user-select: none; }
+.scope-body > .pane.map-loading { justify-content: center; align-items: center; background: var(--scope); color: var(--muted); font: 13px var(--mono); }
+.map-loading span { animation: map-wait 1.4s ease-in-out infinite; }
+@keyframes map-wait { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .map-loading span { animation: none; } }

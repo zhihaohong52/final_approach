@@ -98,7 +98,8 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
   const [playing, setPlaying] = useState(false);
   const [ranReplay, setRanReplay] = useState(false);   // the result on screen was streamed from a recording
   const [speed, setSpeed] = useState(60);          // replay speed: replayed seconds per real second
-  const [geo, setGeo] = useState<WaveGeo | null>(null);           // procedures for the wave; null = the radar stays schematic
+  const [geo, setGeo] = useState<WaveGeo | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);              // a wave or its airport map is on its way: the map frame says so           // procedures for the wave; null = the radar stays schematic
   const [fetched, setFetched] = useState<Fetched | null>(null);   // the engine's paths for a plan the run did not embed
   const [pathsBusy, setPathsBusy] = useState(false);
   const [panel, setPanel] = useState<Panel | null>(null);        // the duty manager's pick of picture; null = the default (see panel.ts)
@@ -126,16 +127,18 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
     abort.current?.abort();
     setStatus("idle"); setMessages([]); showTable(null); setResult(null); setRejection(null); setRunErr(null); setOpening(null);
     setDecision(null); setOverriding(false); setNote(""); setView("after"); setSelected(null); setT(null); setPlaying(false); resetEdits();
-    setGeo(null); setFetched(null);
+    setGeo(null); setFetched(null); setMapLoading(true);
     try {
       const w = await api.wave(id);
       if (seq !== loadSeq.current) return;
       setWave(w); setLoadErr(null);
       // procedures are only served for waves the backend can place; a failure leaves the schematic radar
-      if (w.geo_available) api.getGeo(id).then((g) => { if (seq === loadSeq.current) setGeo(g); }).catch((e) => console.warn(`wave ${id}: procedures unavailable, the radar stays schematic`, e));
+      if (!w.geo_available) setMapLoading(false);
+      else api.getGeo(id).then((g) => { if (seq === loadSeq.current) setGeo(g); }).catch((e) => console.warn(`wave ${id}: procedures unavailable, the radar stays schematic`, e))
+        .finally(() => { if (seq === loadSeq.current) setMapLoading(false); });
       // the status quo is on screen from the start; the negotiation then works from it
       if (w.status_quo) { showTable(w.status_quo.plan); setOpening(w.status_quo); }
-    } catch (e) { if (seq === loadSeq.current) setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); }
+    } catch (e) { if (seq === loadSeq.current) { setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); setMapLoading(false); } }
   }, []);
 
   useEffect(() => {
@@ -400,7 +403,10 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
   const choice = effectiveChoice({ choice: panel, surface: surf?.status ?? null, canBoth });
   // a replay names the run that was recorded (its own mode and model), not the picker's default
   const chipLabel = chipOf({ fromReplay: ranReplay, result, models: config?.models ?? [], mode, model, modeLabel: MODE_LABEL });
-  const shownPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
+  const pickedPanel = pickPanel({ choice: panel, surface: surf?.status ?? null, canBoth, touchdown: focusDown, t: tNow });
+  // while the map loads, its frame holds a "Loading map" note beside the radar, rather than the radar taking the whole card
+  const mapPending = mapLoading && !surf && wideScreen && panel !== "radar";
+  const shownPanel = mapPending ? "both" : pickedPanel;
 
   useEffect(() => { if (wave) onScope?.(`${wave.airport.icao} · ${wave.id}`); }, [wave, onScope]);
   // the address always names the page and the wave, so a reload or a shared link lands where you were
@@ -523,6 +529,7 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
               <Radar wave={wave} plan={shown} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
                 geo={geo} paths={paths} pathsNote={pathsNote} updating={updatingPaths} fill={shownPanel === "both"} range={radarRange} onRange={setRadarRange} />
             </div>
+            {mapPending && <div className="pane map-loading" role="status"><span>Loading map…</span></div>}
             {surf && (
               <div className={`pane${shownPanel === "radar" ? " off" : ""}`}>
                 <Surface geo={geo!} traj={pathsNote ? null : paths} t={tNow} tone={tone} selected={selected} onSelect={setSelected}
