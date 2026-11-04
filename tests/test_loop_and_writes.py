@@ -187,6 +187,9 @@ def test_replay_summaries_built_once_in_one_session(monkeypatch):
             sessions.append(1)
             yield
 
+        def wave_summary(self, wid):
+            return None   # FileStore: no precomputed summary, so every replay is built
+
     monkeypatch.setattr(server, "_REPLAY_SUMMARIES", None)
     monkeypatch.setattr(server, "WB", SimpleNamespace(build_wave=build_wave))
     monkeypatch.setattr(server, "_replay_ids", lambda live=False: {"F2015-1", "F2015-2", "ATL-x"})

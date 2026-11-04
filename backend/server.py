@@ -555,8 +555,9 @@ def _replay_summaries() -> list[dict]:
             out = []
             with get_store().session():
                 for wid in sorted(_replay_ids(live=True), key=lambda i: (i.startswith("F2015-"), i)):
-                    try:
-                        out.append(_f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
+                    try:   # a 2024 hour has its summary precomputed in the store; a flights.csv row is built
+                        pre = None if wid.startswith("F2015-") else get_store().wave_summary(wid)
+                        out.append(pre or _f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
                     except (KeyError, ValueError):
                         continue
             _REPLAY_SUMMARIES = out
