@@ -283,6 +283,15 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
     };
   }, [g, traj]);
   // every crossing, the plan's and the fixed traffic's, in time order: a tick finds its window by binary search
+  // picking a flight (its strip, or its mark) brings the camera to it: zoomed in, the view follows it from the centre;
+  // at the whole field, the map pans so the aircraft (else its stand) sits in the middle
+  const selNav = useRef<{ pos: XY | null; field: XY | null; zoomed: boolean }>({ pos: null, field: null, zoomed: false });
+  useEffect(() => {
+    if (!selected) return;
+    const { pos, field, zoomed } = selNav.current;
+    centre.current = null;
+    setPan(!zoomed && pos && field ? [pos[0] - field[0], pos[1] - field[1]] : [0, 0]);
+  }, [selected]);
   const crossings = useMemo(() => [...(traffic?.crossings ?? []), ...(plan?.crossings ?? [])].sort((a, b) => a.t - b.t), [traffic, plan]);
   const [hover, setHover] = useState<Hover>(null);
   const [faded, setFaded] = useState<number | null>(null);   // the rejection whose flash has run its course
@@ -375,6 +384,8 @@ function SurfaceMap({ geo, traj, t, tone, selected, onSelect, focus = null, upda
   }
   const c0: XY = centre.current?.xy ?? [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2];
   const c: XY = [c0[0] + pan[0], c0[1] + pan[1]];
+  selNav.current = { pos: selected ? acs.find((a) => a.x.callsign === selected)?.p ?? standXY(selected) : null,
+    field: [(g.box.x0 + g.box.x1) / 2, (g.box.y0 + g.box.y1) / 2], zoomed: zoom > 1 };
   const P = screen(W, H, S, c[0], c[1], top);
   const line = (xy: XY[]) => polyline(P, xy);
 
