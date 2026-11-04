@@ -94,10 +94,9 @@ def test_unable_after_rejected_pilot_side_move(wid):
     _unable_follows_rejections(r)
 
 
-def test_forced_fuel_breaking_push_gets_one_unable(monkeypatch):
+def _forced_unable_run(monkeypatch):
     """Formulas never pick a fuel-breaking push, so a stub decider forces ATC's first pick: the only option is
-    `Vector AA302 +2 min`, which breaks AA302's PLT-FUEL-RESERVE (1 min extra fuel). The engine rejects it and
-    PILOT:AA302 sends exactly one UNABLE naming that instruction, right after ATC's AGENT_TURN."""
+    `Vector AA302 +2 min`, which breaks AA302's PLT-FUEL-RESERVE (1 min extra fuel)."""
     w = make_wave()
     w = replace(w, flights=[replace(f, fuel={**f.fuel, "extra_min": 1}) if f.callsign == "AA302" else f
                             for f in w.flights])
@@ -119,7 +118,13 @@ def test_forced_fuel_breaking_push_gets_one_unable(monkeypatch):
         return orig_choice(self, state, instructions, options, formula)
     monkeypatch.setattr(moves, "legal_moves", lm)
     monkeypatch.setattr(Decider, "choice", choice)
-    r = negotiate_wave(w, "formulas")
+    return w, push, negotiate_wave(w, "formulas")
+
+
+def test_forced_fuel_breaking_push_gets_one_unable(monkeypatch):
+    """The engine rejects the push and PILOT:AA302 sends exactly one UNABLE naming that instruction, right
+    after ATC's AGENT_TURN."""
+    w, push, r = _forced_unable_run(monkeypatch)
     _assert_valid(w, r)
     _check_order(r["log"])
     atc1 = _turns(r, "ATC")[0]
@@ -334,3 +339,16 @@ def test_escape_clause_judged_at_end_of_turn(monkeypatch):
     run2 = graph._Run(w, "formulas", None, None, "t2", "firm")
     out2 = graph._decide_turn({**st, "ctx": run2})
     assert out2["route"] == "finalize" and out2["final"].id == p.id
+
+
+def test_narration_mentions_unable_and_airlines(monkeypatch):
+    """A pilot's UNABLE is a key message, so the narration lines carry the refusal; the brief names the voters."""
+    from backend.wave import narrate
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert "UNABLE" in narrate.KEY_TYPES
+    _, _, r = _forced_unable_run(monkeypatch)
+    assert any(m["type"] == "UNABLE" for m in r["log"])
+    out = narrate._template(r)
+    assert any("PILOT:AA302" in line and "UNABLE" in line for line in out["lines"]), out["lines"]
+    assert "airline agent" in out["brief"] and "pilot and ground" not in out["brief"]
+    assert any(m["type"] == "UNABLE" for m in narrate._key_messages(r))

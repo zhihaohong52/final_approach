@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 MODEL = os.environ.get("NARRATION_MODEL", "claude-haiku-5-5")  # fast and cheap; it only explains
 MAX_WORDS = 150
 MAX_LINES = 40
-KEY_TYPES = ("TRIAGE", "OPEN", "AGENT_TURN", "CHECK", "CONSENSUS", "NO_CONSENSUS", "FALLBACK",
+KEY_TYPES = ("TRIAGE", "OPEN", "AGENT_TURN", "UNABLE", "CHECK", "CONSENSUS", "NO_CONSENSUS", "FALLBACK",
              "MODEL_FALLBACK")
 
 
@@ -90,10 +90,19 @@ def _compact(result: dict) -> dict:
     }
 
 
+def _voters(result: dict) -> str:
+    """"ATC, the airlines and ground" for a v4 run, "ATC, pilot and ground" for an old 3-agent run."""
+    agents = result.get("agents") or []
+    if any(str(a).startswith("AIRLINE:") for a in agents):
+        n = sum(str(a).startswith("AIRLINE:") for a in agents)
+        return f"ATC, {n} airline agent{'s' if n != 1 else ''} and ground"
+    return "ATC, pilot and ground"
+
+
 def _template(result: dict) -> dict:
     ev, base = result["evaluation"], result["baseline"]["evaluation"]
     t, b = ev["totals"], base["totals"]
-    how = (f"ATC, pilot and ground agreed in turn {result['rounds']}" if result["outcome"] == "consensus"
+    how = (f"{_voters(result)} agreed in turn {result['rounds']}" if result["outcome"] == "consensus"
            else f"No agreement after {result['rounds']} turns; the deterministic solver chose the plan")
     rev = (result.get("revision") or {}).get("summary")
     if rev:
@@ -132,7 +141,7 @@ def brief(result: dict) -> dict:
         client = anthropic.Anthropic(timeout=20.0, max_retries=1)
         payload = json.dumps(_compact(result), separators=(",", ":"), default=str)
         prompt = ("You narrate the outcome of an automated arrival-wave disruption negotiation between ATC, "
-                  "pilot and ground agents at an airline hub. A deterministic safety engine checked every "
+                  "airline and ground agents at an airline hub; pilots only refuse (UNABLE). A deterministic safety engine checked every "
                   "plan; you explain, you do not decide or re-judge legality. Use only the facts below.\n"
                   f"Write `brief` (at most 110 words, for the hub duty manager: what was agreed, why, "
                   "risks, what needs their approval; compare with the status-quo baseline honestly, including "
