@@ -87,7 +87,7 @@ flowchart LR
   end
 
   ENGINE["Rule engine (deterministic)<br/>14 rules, cites source and values<br/>lists legal moves, CHECKs every plan"]
-  DEC["Decision layer: picks a move / votes<br/>default chain (decide.py, overridable by DECISION_CHAIN): d1-ultra → elephant-1 → jev-1.14 → formula, or formulas only;<br/>one model at a time, the next only on timeout or invalid answer"]
+  DEC["Decision layer: picks a move / votes<br/>default chain (decide.py, overridable by DECISION_CHAIN): jev-1.14 → d1-ultra → elephant-1 → formula, or formulas only;<br/>one model at a time, the next only on timeout or invalid answer"]
   FB["Fallback solver (deterministic)<br/>beam search + safety net<br/>if no consensus after 3 turns"]
   NAR["Claude Haiku 5.5<br/>writes the duty-manager brief<br/>(explains only, decides nothing)"]
 
@@ -396,7 +396,7 @@ Measured before the waves were rebuilt around real landing times, with `typesafe
 
 ### Cost of model calls
 
-**Measured on 5 Nov 2026:** a first run of the two 50-wave benchmarks with d1-ultra alone (about 19 model calls a wave, plus two 20-wave outage tests) cost $0.136 on the OpenRouter usage counter, about $0.001 a wave; the three-arm re-run above (jev-1.14 and d1-ultra) cost $0.29, and recording the 10 demo runs cost under $0.01. Earlier, on 31 Oct 2026, from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call** on the v2 call pattern (9.6 calls per wave). Airline agents add model decisions: the v4-airlines benchmark (firm) counts 18.7 to 20.7 model calls per wave (relaxing 14.5 to 15.3), about twice the v2 pattern. At the measured price per call that is roughly $0.001 per wave. This is an estimate: the benchmark does not measure cost, and the price per call was not re-measured on v4.
+**Measured on 5 Nov 2026:** a first run of the two 50-wave benchmarks with d1-ultra alone (about 19 model calls a wave, plus two 20-wave outage tests) cost $0.136 on the OpenRouter usage counter, about $0.001 a wave; the three-arm re-run above (jev-1.14 and d1-ultra) cost $0.29, and recording the 10 demo runs with jev-1.14 cost $0.012 (about $0.001 a wave). Earlier, on 31 Oct 2026, from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call** on the v2 call pattern (9.6 calls per wave). Airline agents add model decisions: the v4-airlines benchmark (firm) counts 18.7 to 20.7 model calls per wave (relaxing 14.5 to 15.3), about twice the v2 pattern. At the measured price per call that is roughly $0.001 per wave. This is an estimate: the benchmark does not measure cost, and the price per call was not re-measured on v4.
 
 | Item | Per wave | Per 1,000 waves | Source |
 |---|---|---|---|
@@ -409,21 +409,23 @@ Replays cost nothing (no model calls). The path and surface layers add no model 
 
 ### Demo replays
 
-The wave list opens on these: recorded on 5 Nov 2026 on the rebuilt waves (engine v4-airlines, decision mode, firm fairness, `liquid/d1-ultra`, 0 model fallbacks), they play back with no model calls. Delay and fuel are wave totals of the agreed plan against the status quo (first come, first served).
+The wave list opens on these: recorded on 5 Nov 2026 on the rebuilt waves (engine v4-airlines, decision mode, firm fairness, `typesafe/jev-1.14`, 0 model fallbacks, $0.012 to record), they play back with no model calls. All 10 reach consensus. Delay and fuel are wave totals of the agreed plan against the status quo (first come, first served).
 
 Five 2024 hours, each with five flights landing within minutes of each other and the hour's real traffic. In every one the status quo breaks a rule, and the agreed plan is legal with no aircraft holding:
 - `ATL-2024-06-07-20` (airlines DL and WN, 62 other arrivals; 1 turn): the status quo puts too many landings on 26L (ATC-RWY-CAPACITY) and holds DL385 for a lap. Delay 106.0 min unchanged, fuel 368 to 48 kg.
-- `ORD-2024-06-04-21` (AA, OO and WN, 35 other arrivals; 1 turn): the status quo lands a flight while another is still on the runway (ATC-TAXI-CONFLICT). Delay 395.1 to 384.7 min, fuel 218 to 40 kg.
-- `DFW-2024-06-01-15` (AA, 46 other arrivals; 3 turns): the status quo overloads one runway and holds AA2321 (the disrupted flight, 141 min late) for 4 laps and MQ3321 for 2. Delay 249.9 to 187.3 min, fuel 1,668 to 444 kg.
+- `ORD-2024-06-04-21` (AA, OO and WN, 35 other arrivals; 1 turn): the status quo lands a flight while another is still on the runway (ATC-TAXI-CONFLICT). Delay 395.1 to 387.0 min, fuel 218 to 64 kg.
+- `DFW-2024-06-01-15` (AA, 46 other arrivals; 3 turns): the status quo overloads one runway and holds AA2321 (the disrupted flight, 141 min late) for 4 laps and MQ3321 for 2. Delay 249.9 to 189.6 min, fuel 1,668 to 444 kg.
 - `CLT-2024-06-06-19` (AA, 49 other arrivals; 2 turns): runway capacity; AA2712 and AA2704 lap once in the status quo. Delay 175.0 to 169.9 min, fuel 1,164 to 276 kg.
-- `LGA-2024-06-14-22` (DL and YX, 24 other arrivals; 3 turns): runway capacity and a runway conflict on LaGuardia's single arrival runway; YX5826 and YX4575 lap once in the status quo. Delay 953.2 to 954.3 min, fuel 436 to 156 kg.
+- `LGA-2024-06-14-22` (DL and YX, 24 other arrivals; 2 turns): runway capacity and a runway conflict on LaGuardia's single arrival runway; YX5826 and YX4575 lap once in the status quo. Delay 953.2 to 953.1 min, fuel 436 to 132 kg.
 
 Five 2015 `flights.csv` rows (few background arrivals: the file holds only late flights):
 - `F2015-292602` MIA (AA; 2 turns): AA943, 312 min late, on 08L, gate A4. The status quo is legal and is agreed (delay 869.1 min, fuel 0).
-- `F2015-152758` ATL (DL and WN; 2 turns): DL2256, 320 min late, on 27L, gate T11. The status quo fails GND-GATE-FREE; the agreed plan fixes the gates. Delay 1,314.5 to 1,308.1 min, fuel 92 to 596 kg.
+- `F2015-152758` ATL (DL and WN; 2 turns): DL2256, 320 min late, on 27L, gate T11. The status quo fails GND-GATE-FREE; the agreed plan fixes the gates. Delay 1,314.5 to 1,308.2 min, fuel 92 to 596 kg.
 - `F2015-75` DFW (AA; 2 turns): AA1344, 119 min late, to the remote stand. The status quo fails GND-GATE-FREE. Delay 362.6 to 351.9 min, fuel 0 to 4 kg.
 - `F2015-77162` DEN (B6, DL and WN; 2 turns): DL927, 133 min late, on 16L, gate C35. The status quo fails GND-GATE-FREE. Delay 547.9 to 555.4 min, fuel 0 to 408 kg.
-- `F2015-7053` ORD (AA; 3 turns, **the failure case**): MQ3269, 419 min late, with four other flights landing on 32R within 12 minutes. The status quo fails GND-GATE-FREE, and in all three turns no plan on the table passes the engine CHECK, so the log shows three `NO_CONSENSUS` and a `FALLBACK`: the safety net sends two flights to the remote stand and diverts MQ3043 and MQ3541. Legal but costly (delay 1,105.9 to 1,437.8 min). The system declines to invent a plan it cannot prove legal.
+- `F2015-7053` ORD (AA; 2 turns): MQ3269, 419 min late, with four other flights landing on 32R within 12 minutes. The status quo fails GND-GATE-FREE and holds MQ3541 for a lap; the agreed plan moves MQ3043 and MQ3541 to 27L and fixes the gates. Delay 1,105.9 to 1,130.8 min, fuel 264 to 816 kg. (Recorded with d1-ultra earlier the same day, no plan passed CHECK in 3 turns and the safety net diverted two flights.)
+
+Failure case, live (no recording): `F2015-208678` DEN (F9, UA and WN). In all three turns no plan on the table passes the engine CHECK, in every benchmark arm, so the log shows three `NO_CONSENSUS` and a `FALLBACK`: the safety net lands four flights on runway 07, two of them at the remote stand, and diverts WN240. The system declines to invent a plan it cannot prove legal.
 
 ## 6. What went wrong and what we fixed
 

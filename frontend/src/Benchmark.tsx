@@ -38,7 +38,7 @@ export function Benchmark() {
   // the backend writes its footnotes with field names; say them in words
   const noteText = (r: string) =>
     /^Brier is measured/i.test(r) ? "Brier compares each model's accept probability with the formula's verdict, not with ground truth (lower is closer)."
-    : /^cost_usd_per_wave/i.test(r) ? "Cost: output tokens are free on this route and input cost isn't measured here, so it reads as not measured here. Measured on the OpenRouter usage counter (5 Nov 2026, d1-ultra): about $0.001 a wave."
+    : /^cost_usd_per_wave/i.test(r) ? "Cost: output tokens are free on this route and input cost isn't measured here, so it reads as not measured here. Measured on the OpenRouter usage counter (5 Nov 2026): about $0.001 a wave with jev-1.14 (10 recorded runs, $0.012) and with d1-ultra."
     : /^fallback_rate_pct/i.test(r) ? "Fallback: share of waves the deterministic solver had to finish. Errors: share of decisions answered by the next model after this one failed."
     : r;
   const notes = reasons.filter((r) => isNote(r) && !/^outage test/i.test(r)).map(noteText);

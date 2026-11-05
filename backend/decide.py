@@ -15,7 +15,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from typing import Callable
 
-_DEFAULT = ["openrouter:liquid/d1-ultra", "openrouter:baseten/elephant-1", "typesafe:jev"]
+# jev-1.14 first: the 5 Nov benchmarks' pick on both datasets (p95 558-608 ms; d1-ultra 1,085-1,836 ms)
+_DEFAULT = ["openrouter:typesafe/jev-1.14", "openrouter:liquid/d1-ultra", "openrouter:baseten/elephant-1", "typesafe:jev"]
 DEFAULT_CHAIN = [e.strip() for e in os.environ.get("DECISION_CHAIN", "").split(",") if e.strip()] or _DEFAULT
 
 BREAKER_THRESHOLD = 3
