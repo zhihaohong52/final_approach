@@ -310,43 +310,45 @@ The `statement_timeout` line gives `atm_app` the same 5 s limit that `0006` give
 
 ## 5. Evaluation
 
-### Headline: 50 busy hours from 2024 (d1-ultra)
+### Headline: 50 busy hours from 2024
 
-Run: `python3 -m backend.wave.benchmark --source bts --n 50 --arms openrouter:liquid/d1-ultra,formula --concurrency 4 --seed 7 --outage-n 20` (5 Nov 2026, engine `v4-airlines`, firm fairness, live `liquid/d1-ultra`, waves built around real landing times). 50 seeded hours from the US DOT 2024 arrivals (June to August, 30 hubs, sampled from the 10,000 top-ranked hours), each negotiating 5 flights that land together among every arrival of the hour and the hour's real departures. Every number below is from `eval/bts2024/benchmark.json`; full tables in `eval/bts2024/BENCHMARK.md`. The app's Benchmark page opens on this run and switches to the 2015 one.
+Run: `python3 -m backend.wave.benchmark --source bts --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,formula --concurrency 4 --seed 7 --outage-n 20` (5 Nov 2026, engine `v4-airlines`, firm fairness, live models, waves built around real landing times). 50 seeded hours from the US DOT 2024 arrivals (June to August, 30 hubs, sampled from the 10,000 top-ranked hours), each negotiating 5 flights that land together among every arrival of the hour and the hour's real departures. Every number below is from `eval/bts2024/benchmark.json`; full tables in `eval/bts2024/BENCHMARK.md`. The app's Benchmark page opens on this run and switches to the 2015 one.
 
 | Arm | Consensus | Fallback to solver | Mean rounds | Rule violations in agreed plans | Delay, all arrivals (min) | Fuel (kg) | Pax protected | p50 / p95 ms | Errors | Same decision as formulas | Model calls per wave |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| liquid/d1-ultra | 92% | 8% | 1.76 | 0 | 457.5 | 406.5 | 46.4% | 595 / 1,099 | 0% | 58% | 18.5 |
+| typesafe/jev-1.14 | 92% | 8% | 1.88 | 0 | 457.5 | 409.0 | 46.4% | 445 / 608 | 0% | 68% | 21.7 |
+| liquid/d1-ultra | 92% | 8% | 1.76 | 0 | 457.3 | 403.5 | 46.4% | 631 / 1,836 | 0.7% | 60% | 18.3 |
 | formula | 94% | 6% | 1.86 | 0 | 457.8 | 427.2 | 46.3% | n/a | 0% | 100% | 0 |
 | centralised optimiser (beam search, no negotiation) | - | - | - | 0 infeasible | 501.0 | 631.0 | 43.2% | - | - | - | - |
 | status quo (no negotiation) | - | - | - | breaks a rule on 26/50 hours | 432.5 | 136.5 | 47.3% | - | - | - | - |
 
 - **Legality is the gain.** When five late flights really land together, the uncoordinated status quo (first come, first served) breaks at least one rule on 26 of the 50 hours: runway capacity, a runway still occupied at the next landing, a gate still taken. Every agreed plan breaks none. With the rule engine switched off, 48% of the formula arm's plans would be illegal.
-- **Delay is about neutral where it can be compared.** On the 24 hours whose status quo is legal: d1-ultra 473.9 min, formulas 474.4 min, status quo 477.0 min. The all-50 means above favour the status quo only because it is illegal on 26 of them; making those legal costs minutes.
-- **No flight left worse.** Under the firm floor no agreed plan leaves any flight worse than in the status quo on delay or fuel (0.0% of agreed hours with a legal status quo, both arms).
-- **Fallbacks:** the solver decided 4 hours for d1-ultra (`SAN-2024-07-21-20`, `ATL-2024-06-17-21`, `PHX-2024-06-28-21`, `SAN-2024-08-11-20`) and 3 for formulas (the same without PHX).
-- **Selection on this data picks the formulas.** d1-ultra's p95 latency is 1,099 ms, above the 1 s bar. The shipped chain still starts with d1-ultra; n = 50 is indicative, not significant.
+- **Delay is about neutral where it can be compared.** On the 24 hours whose status quo is legal: jev-1.14 474.1 min, d1-ultra 473.9 min, formulas 474.4 min, status quo 477.0 min. The all-50 means above favour the status quo only because it is illegal on 26 of them; making those legal costs minutes.
+- **No flight left worse.** Under the firm floor no agreed plan leaves any flight worse than in the status quo on delay or fuel (0.0% of agreed hours with a legal status quo, every arm).
+- **Fallbacks:** the solver decided 4 hours for each model (`SAN-2024-07-21-20`, `ATL-2024-06-17-21`, `MCO-2024-08-05-01`, `SAN-2024-08-11-20`) and 3 for formulas (the same without MCO).
+- **Selection picks `typesafe/jev-1.14`**, the only model arm under the 1 s p95 bar (608 ms); d1-ultra's p95 is 1,836 ms and 0.7% of its decisions fell back after a failed call. jev-1.14's accept/reject calls agree less with the formula verdict (Brier 0.0069 against d1-ultra's 0.0011) and it makes about 3 more model calls a wave; outcomes are the same within a minute. n = 50 is indicative, not significant.
 - **Outage test:** primary model replaced by a dead id on 20 hours; 20/20 resolved with a legal plan.
-- **Cost, measured:** this run and the 2015 run below together (100 waves in the d1-ultra arms plus two 20-wave outage tests) moved the OpenRouter usage counter by $0.136.
+- **Cost, measured:** this run and the 2015 run below together (two model arms on 100 waves, plus two 20-wave outage tests) moved the OpenRouter usage counter by $0.29.
 - The engine history table in `eval/bts2024/BENCHMARK.md` is copied from the archived engines, which ran on 2015 rows built the old way: do not compare it with this run.
 
 ### Challenge input: 50 rows of the 2015 `flights.csv`
 
-Run: `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:liquid/d1-ultra,formula --concurrency 4 --seed 7 --outage-n 20` (5 Nov 2026, engine `v4-airlines`, firm fairness, live `liquid/d1-ultra`, waves centred on each row's real landing). The same 50 seeded rows as before (stratified over 30 hubs). Every number below is from `eval/benchmark.json`; full tables in `eval/BENCHMARK.md`.
+Run: `python3 -m backend.wave.benchmark --source flights2015 --n 50 --arms openrouter:typesafe/jev-1.14,openrouter:liquid/d1-ultra,formula --concurrency 4 --seed 7 --outage-n 20` (5 Nov 2026, engine `v4-airlines`, firm fairness, live models, waves centred on each row's real landing). The same 50 seeded rows as before (stratified over 30 hubs). Every number below is from `eval/benchmark.json`; full tables in `eval/BENCHMARK.md`.
 
 <!-- BENCHMARK -->
 | Arm | Consensus | Fallback to solver | Mean rounds | Rule violations | Delay, all arrivals (min) | Fuel (kg) | Pax protected | Brier* | p50 / p95 ms | Errors | Same decision as formulas |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| liquid/d1-ultra | 94% | 6% | 1.86 | 0 | 418.3 | 175.4 | 31.4% | 0.0012 | 576 / 1,232 | 0% | 64% |
+| typesafe/jev-1.14 | 96% | 4% | 1.88 | 0 | 417.0 | 174.0 | 31.6% | 0.0081 | 433 / 558 | 0% | 64% |
+| liquid/d1-ultra | 94% | 6% | 1.86 | 0 | 417.4 | 154.8 | 31.4% | 0.0013 | 586 / 1,085 | 0% | 58% |
 | formula | 98% | 2% | 1.98 | 0 | 417.2 | 204.2 | 31.6% | n/a | n/a | 0% | 100% |
 | centralised optimiser (beam search, no negotiation) | - | - | - | 0 infeasible | 417.5 | 57.8 | 32.8% | - | - | - | - |
 | status quo (no negotiation) | - | - | - | breaks a rule on 23/50 waves | 416.1 | 15.3 | 30.6% | - | - | - | - |
 
 \* Brier is measured against the formula verdict (accept if utility >= reservation), not ground truth.
 
-- **Legality is the gain here too:** the status quo breaks a rule on 23 of 50 waves, the agreed plans on none; 48% of the formula arm's plans are illegal with the rule engine off. On the 27 waves with a legal status quo, delay is 379.4 (d1-ultra) and 379.6 (formulas) against 381.2 min; no agreed plan leaves a flight worse (0.0%).
-- **Fallbacks:** d1-ultra 3 (`F2015-317184`, `F2015-144520`, `F2015-208678`), formulas 1 (`F2015-208678`). **Outage test:** 20/20 resolved.
-- **Selection picks the formulas** (d1-ultra p95 1,232 ms > 1 s). The 4 Nov run on the old waves picked d1-ultra (p95 957 ms); the shipped chain still starts with it.
+- **Legality is the gain here too:** the status quo breaks a rule on 23 of 50 waves, the agreed plans on none; 48% of the formula arm's plans are illegal with the rule engine off. On the 27 waves with a legal status quo, delay is 379.6 (jev-1.14), 379.4 (d1-ultra) and 379.6 (formulas) against 381.2 min; no agreed plan leaves a flight worse (0.0%).
+- **Fallbacks:** jev-1.14 2 (`F2015-144520`, `F2015-208678`), d1-ultra 3 (the same and `F2015-53108`), formulas 1 (`F2015-208678`). **Outage test:** 20/20 resolved.
+- **Selection picks `typesafe/jev-1.14`** here too (p95 558 ms, consensus 96%); d1-ultra misses the 1 s bar (1,085 ms). The 4 Nov run on the old waves picked d1-ultra (p95 957 ms); the shipped chain still starts with it.
 - **Regressions against the archived engine: 106 wave-arm rows** in `eval/benchmark.json`. They are expected: the waves themselves changed on 5 Nov, so these rows compare different flights and are not engine regressions.
 <!-- /BENCHMARK -->
 
@@ -394,7 +396,7 @@ Measured before the waves were rebuilt around real landing times, with `typesafe
 
 ### Cost of model calls
 
-**Measured on 5 Nov 2026:** the two 50-wave benchmarks above (d1-ultra, 18.5 to 19.5 model calls a wave, plus two 20-wave outage tests) cost $0.136 on the OpenRouter usage counter, about $0.001 a wave, and recording the 10 demo runs cost under $0.01. Earlier, on 31 Oct 2026, from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call** on the v2 call pattern (9.6 calls per wave). Airline agents add model decisions: the v4-airlines benchmark (firm) counts 18.7 to 20.7 model calls per wave (relaxing 14.5 to 15.3), about twice the v2 pattern. At the measured price per call that is roughly $0.001 per wave. This is an estimate: the benchmark does not measure cost, and the price per call was not re-measured on v4.
+**Measured on 5 Nov 2026:** a first run of the two 50-wave benchmarks with d1-ultra alone (about 19 model calls a wave, plus two 20-wave outage tests) cost $0.136 on the OpenRouter usage counter, about $0.001 a wave; the three-arm re-run above (jev-1.14 and d1-ultra) cost $0.29, and recording the 10 demo runs cost under $0.01. Earlier, on 31 Oct 2026, from the OpenRouter key's usage counter before and after 20 random live flights.csv waves in decision mode (jev-1.14): **191 model calls for $0.0097**, so about **$0.00005 per call** on the v2 call pattern (9.6 calls per wave). Airline agents add model decisions: the v4-airlines benchmark (firm) counts 18.7 to 20.7 model calls per wave (relaxing 14.5 to 15.3), about twice the v2 pattern. At the measured price per call that is roughly $0.001 per wave. This is an estimate: the benchmark does not measure cost, and the price per call was not re-measured on v4.
 
 | Item | Per wave | Per 1,000 waves | Source |
 |---|---|---|---|
