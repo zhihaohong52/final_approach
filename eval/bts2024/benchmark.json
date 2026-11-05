@@ -1,7 +1,7 @@
 {
   "engine_version": "v4-airlines",
   "fairness": "firm",
-  "generated_at": "2026-11-04T19:20:05+00:00",
+  "generated_at": "2026-11-05T11:59:21+00:00",
   "n_waves": 50,
   "n_common": 50,
   "seed": 7,
@@ -13,42 +13,45 @@
       "label": "liquid/d1-ultra",
       "summary": {
         "consensus_rate_pct": 92.0,
-        "mean_rounds": 1.56,
+        "mean_rounds": 1.76,
         "fallback_rate_pct": 8.0,
         "rule_violations_in_agreed_plans": 0,
-        "delay_min": 571.462,
-        "fuel_kg": 244.88,
-        "pax_protected_pct": 19.172,
-        "overtime_min": 0.176,
-        "lap_share_pct": 2.17,
-        "taxi_wait_min": 1.439,
-        "agreement_with_formula_pct": 62.0,
-        "brier": 0.0011,
-        "latency_p50_ms": 578.0,
-        "latency_p95_ms": 1194.0,
+        "delay_min": 457.488,
+        "fuel_kg": 406.526,
+        "pax_protected_pct": 46.434,
+        "overtime_min": 0.068,
+        "lap_share_pct": 0.0,
+        "taxi_wait_min": 3.272,
+        "agreement_with_formula_pct": 58.0,
+        "brier": 0.0012,
+        "latency_p50_ms": 595.0,
+        "latency_p95_ms": 1098.7,
         "error_rate_pct": 0.0,
         "cost_usd_per_wave": 0.0,
-        "max_prompt_chars": 9234,
+        "max_prompt_chars": 8931,
         "worse_than_status_quo_pct": 0.0,
         "worse_flight_pct": 0.0,
-        "model_calls_per_wave": 16.72
+        "model_calls_per_wave": 18.5
       },
-      "delay_min_vs_feasible_status_quo": 763.828,
-      "veto_counts": {},
+      "delay_min_vs_feasible_status_quo": 473.871,
+      "veto_counts": {
+        "ATC-TAXI-CONFLICT": 1,
+        "GND-GATE-FREE": 1
+      },
       "n_ok": 50,
       "failed_ids": [],
-      "p95_all_ms": 1194.0,
-      "model_decisions": 563,
+      "p95_all_ms": 1098.7,
+      "model_decisions": 582,
       "worse_than_sq_consensus_pct": 0.0,
-      "infeasible_sq_waves": 32,
-      "consensus_pct_infeasible_sq": 87.5,
+      "infeasible_sq_waves": 26,
+      "consensus_pct_infeasible_sq": 84.62,
       "delay_min_ci95": [
-        488.108,
-        654.816
+        367.363,
+        547.613
       ],
-      "gap_to_optimiser": -6.086,
-      "share_of_optimiser_gain_pct": 48.23,
-      "share_n": 14
+      "gap_to_optimiser": -43.468,
+      "share_of_optimiser_gain_pct": 41.9,
+      "share_n": 21
     },
     {
       "model": "formula",
@@ -56,15 +59,15 @@
       "label": "formula",
       "summary": {
         "consensus_rate_pct": 94.0,
-        "mean_rounds": 1.56,
+        "mean_rounds": 1.86,
         "fallback_rate_pct": 6.0,
         "rule_violations_in_agreed_plans": 0,
-        "delay_min": 561.57,
-        "fuel_kg": 194.08,
-        "pax_protected_pct": 19.606,
-        "overtime_min": 0.864,
-        "lap_share_pct": 2.13,
-        "taxi_wait_min": 1.143,
+        "delay_min": 457.846,
+        "fuel_kg": 427.166,
+        "pax_protected_pct": 46.326,
+        "overtime_min": 0.068,
+        "lap_share_pct": 0.0,
+        "taxi_wait_min": 3.403,
         "agreement_with_formula_pct": 100.0,
         "brier": null,
         "latency_p50_ms": null,
@@ -76,205 +79,200 @@
         "worse_flight_pct": 0.0,
         "model_calls_per_wave": 0.0
       },
-      "delay_min_vs_feasible_status_quo": 763.728,
-      "veto_counts": {},
+      "delay_min_vs_feasible_status_quo": 474.375,
+      "veto_counts": {
+        "GND-GATE-FREE": 1
+      },
       "n_ok": 50,
       "failed_ids": [],
       "p95_all_ms": 0.0,
       "model_decisions": 0,
       "worse_than_sq_consensus_pct": 0.0,
-      "infeasible_sq_waves": 32,
-      "consensus_pct_infeasible_sq": 90.62,
+      "infeasible_sq_waves": 26,
+      "consensus_pct_infeasible_sq": 88.46,
       "delay_min_ci95": [
-        479.084,
-        644.056
+        367.843,
+        547.849
       ],
-      "gap_to_optimiser": -15.978,
-      "share_of_optimiser_gain_pct": 49.58,
-      "share_n": 14
+      "gap_to_optimiser": -43.11,
+      "share_of_optimiser_gain_pct": 35.13,
+      "share_n": 21
     }
   ],
   "baseline": {
-    "delay_min": 560.05,
-    "fuel_kg": 11.68,
-    "pax_protected_pct": 19.528,
-    "overtime_min": 3.442,
+    "delay_min": 432.472,
+    "fuel_kg": 136.504,
+    "pax_protected_pct": 47.326,
+    "overtime_min": 0.882,
     "diversions": 0.0,
-    "lap_share_pct": 0.0,
-    "taxi_wait_min": 12.671,
-    "n_feasible": 18,
+    "lap_share_pct": 6.0,
+    "taxi_wait_min": 13.261,
+    "n_feasible": 24,
     "infeasible_ids": [
-      "ATL-2024-06-15-18",
-      "ATL-2024-07-24-19",
-      "AUS-2024-06-09-18",
-      "AUS-2024-07-28-20",
-      "BNA-2024-07-07-21",
-      "BNA-2024-07-15-18",
-      "BOS-2024-07-12-20",
-      "BWI-2024-07-12-19",
-      "BWI-2024-07-19-12",
-      "CLT-2024-08-14-15",
-      "DCA-2024-06-11-21",
-      "DCA-2024-06-22-16",
-      "DEN-2024-07-03-19",
-      "FLL-2024-07-10-20",
-      "FLL-2024-07-17-22",
-      "IAD-2024-07-10-21",
-      "IAH-2024-06-28-20",
-      "JFK-2024-07-06-16",
-      "LAS-2024-07-17-17",
-      "LAS-2024-07-27-19",
-      "LGA-2024-06-27-19",
-      "LGA-2024-08-07-22",
-      "MCO-2024-07-23-16",
-      "MDW-2024-06-06-00",
-      "MDW-2024-08-25-19",
-      "PHL-2024-06-11-19",
-      "SAN-2024-07-09-22",
-      "SAN-2024-07-24-19",
-      "SEA-2024-06-03-20",
-      "SEA-2024-06-27-16",
-      "SFO-2024-08-19-23",
-      "TPA-2024-08-03-20"
+      "ATL-2024-06-17-21",
+      "AUS-2024-07-26-17",
+      "BOS-2024-06-29-17",
+      "CLT-2024-07-25-18",
+      "DCA-2024-08-08-15",
+      "DEN-2024-06-09-13",
+      "DEN-2024-08-16-22",
+      "DFW-2024-08-21-23",
+      "DTW-2024-06-03-10",
+      "EWR-2024-08-31-00",
+      "IAD-2024-07-18-22",
+      "JFK-2024-07-08-20",
+      "JFK-2024-08-30-08",
+      "LGA-2024-06-14-22",
+      "MCO-2024-07-18-16",
+      "MCO-2024-08-05-01",
+      "MSP-2024-07-23-20",
+      "PHL-2024-07-20-22",
+      "PHL-2024-08-20-18",
+      "PHX-2024-06-28-21",
+      "SAN-2024-07-21-20",
+      "SAN-2024-08-11-20",
+      "SEA-2024-06-14-23",
+      "SFO-2024-07-28-23",
+      "SLC-2024-08-23-20",
+      "TPA-2024-08-05-19"
     ],
     "feasible_only": {
-      "delay_min": 767.378,
-      "fuel_kg": 5.778,
-      "pax_protected_pct": 14.306,
-      "overtime_min": 0.006,
+      "delay_min": 476.987,
+      "fuel_kg": 88.333,
+      "pax_protected_pct": 43.238,
+      "overtime_min": 0.142,
       "diversions": 0.0
     }
   },
   "optimiser": {
     "n": 50,
-    "delay_min": 577.548,
+    "delay_min": 500.956,
     "delay_min_ci95": [
-      494.207,
-      660.889
+      404.677,
+      597.235
     ],
-    "fuel_kg": 229.84,
-    "pax_protected_pct": 19.432,
+    "fuel_kg": 630.984,
+    "pax_protected_pct": 43.192,
     "n_feasible": 50,
-    "elapsed_ms_mean": 10568.46,
+    "elapsed_ms_mean": 9493.782,
     "methods": {
-      "beam(width=12, evaluated=400): max-min utility": 47,
-      "safety net: all-divert": 2,
-      "safety net: partial divert": 1
+      "safety net: all-divert": 5,
+      "beam(width=12, evaluated=400): max-min utility": 42,
+      "safety net: partial divert": 3
     }
   },
-  "ablation_no_engine_unsafe_pct": 54.0,
+  "ablation_no_engine_unsafe_pct": 48.0,
   "outage_test": {
     "primary_disabled": "invalid/model-does-not-exist",
     "waves": 20,
     "resolved": 20,
     "fallbacks_used": {
-      "liquid/d1-ultra-20261015": 202
+      "liquid/d1-ultra-20261015": 234,
+      "formula": 1
     }
   },
   "selection": {
-    "winner": "formula",
+    "winner": "liquid/d1-ultra",
     "rule": "best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier",
     "reasons": [
-      "Formula selected: the best model arm, liquid/d1-ultra, is worse than formula on delay (571.462 > 561.57 min) and not better on pax protected.",
-      "No arm met error < 2%, p95 < 1000 ms and consensus >= 90%: liquid/d1-ultra p95 1194.0 ms / error 0.0% / consensus 92.0%. Picked best outcome among eligible model arms: liquid/d1-ultra.",
+      "No arm met error < 2%, p95 < 1000 ms and consensus >= 90%: liquid/d1-ultra p95 1098.7 ms / error 0.0% / consensus 92.0%. Picked best outcome among eligible model arms: liquid/d1-ultra.",
       "Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.",
       "cost_usd_per_wave = 0.0: output tokens free; input cost not measured.",
       "fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).",
-      "liquid/d1-ultra p95 all decisions incl. fallbacks: 1194.0 ms",
-      "liquid/d1-ultra missed p95 < 1000 ms: 1194.0 ms",
+      "liquid/d1-ultra p95 all decisions incl. fallbacks: 1098.7 ms",
+      "liquid/d1-ultra missed p95 < 1000 ms: 1098.7 ms",
       "liquid/d1-ultra outcomes partly from solver fallback on 4/50 waves",
-      "Mean delay: liquid/d1-ultra 571.462 min vs formula 561.57 min vs status quo 560.05 min.",
-      "Outage test ran with the best eligible model arm liquid/d1-ultra (overall winner is formula)."
+      "Mean delay: liquid/d1-ultra 457.488 min vs formula 457.846 min vs status quo 432.472 min."
     ]
   },
   "failures": [
     {
-      "wave_id": "SAN-2024-07-09-22",
+      "wave_id": "SAN-2024-07-21-20",
       "model": "liquid/d1-ultra",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "DEN-2024-07-03-19",
+      "wave_id": "ATL-2024-06-17-21",
       "model": "liquid/d1-ultra",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "ATL-2024-07-24-19",
+      "wave_id": "PHX-2024-06-28-21",
       "model": "liquid/d1-ultra",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "BNA-2024-07-15-18",
+      "wave_id": "SAN-2024-08-11-20",
       "model": "liquid/d1-ultra",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "SAN-2024-07-09-22",
+      "wave_id": "SAN-2024-07-21-20",
       "model": "formula",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "ATL-2024-07-24-19",
+      "wave_id": "SAN-2024-08-11-20",
       "model": "formula",
       "reason": "no consensus: deterministic solver fallback"
     },
     {
-      "wave_id": "BNA-2024-07-15-18",
+      "wave_id": "ATL-2024-06-17-21",
       "model": "formula",
       "reason": "no consensus: deterministic solver fallback"
     }
   ],
   "wave_ids": [
-    "DCA-2024-06-22-16",
-    "DTW-2024-07-22-23",
-    "ATL-2024-06-15-18",
-    "LAS-2024-07-27-19",
-    "AUS-2024-06-09-18",
-    "SAN-2024-07-09-22",
-    "PHL-2024-06-11-19",
-    "MDW-2024-06-06-00",
-    "ORD-2024-06-23-14",
-    "FLL-2024-07-10-20",
-    "EWR-2024-06-20-23",
-    "JFK-2024-07-06-16",
-    "BWI-2024-07-19-12",
-    "SFO-2024-08-19-23",
-    "BNA-2024-07-07-21",
-    "LGA-2024-06-27-19",
-    "CLT-2024-08-14-15",
-    "LAX-2024-06-15-11",
-    "MIA-2024-06-28-21",
-    "SEA-2024-06-27-16",
-    "PHX-2024-08-05-19",
-    "SLC-2024-07-19-15",
-    "TPA-2024-08-03-20",
-    "DEN-2024-07-03-19",
-    "IAH-2024-06-28-20",
-    "MSP-2024-08-19-20",
-    "BOS-2024-07-12-20",
-    "MCO-2024-07-23-16",
-    "IAD-2024-07-10-21",
-    "DFW-2024-08-12-18",
-    "DCA-2024-06-11-21",
-    "DTW-2024-07-19-15",
-    "ATL-2024-07-24-19",
-    "LAS-2024-07-17-17",
-    "AUS-2024-07-28-20",
-    "SAN-2024-07-24-19",
-    "PHL-2024-07-29-19",
-    "MDW-2024-08-25-19",
-    "ORD-2024-06-30-23",
-    "FLL-2024-07-17-22",
-    "EWR-2024-07-15-18",
-    "JFK-2024-06-29-21",
-    "BWI-2024-07-12-19",
-    "SFO-2024-07-19-15",
-    "BNA-2024-07-15-18",
-    "LGA-2024-08-07-22",
-    "CLT-2024-07-07-17",
-    "LAX-2024-06-14-00",
-    "MIA-2024-07-08-21",
-    "SEA-2024-06-03-20"
+    "TPA-2024-08-05-19",
+    "JFK-2024-08-30-08",
+    "DFW-2024-08-21-23",
+    "SEA-2024-06-16-01",
+    "MCO-2024-07-18-16",
+    "BNA-2024-07-07-22",
+    "PHX-2024-06-23-22",
+    "LGA-2024-06-14-22",
+    "ORD-2024-06-04-15",
+    "SLC-2024-08-09-23",
+    "DEN-2024-08-16-22",
+    "SAN-2024-07-21-20",
+    "BOS-2024-08-19-19",
+    "MIA-2024-06-17-22",
+    "CLT-2024-06-12-23",
+    "MDW-2024-06-28-00",
+    "ATL-2024-06-17-21",
+    "PHL-2024-08-20-18",
+    "DTW-2024-06-03-10",
+    "DCA-2024-07-20-19",
+    "LAS-2024-08-03-22",
+    "LAX-2024-06-26-00",
+    "BWI-2024-08-19-16",
+    "MSP-2024-07-23-20",
+    "IAH-2024-06-12-00",
+    "FLL-2024-06-26-21",
+    "AUS-2024-07-26-17",
+    "SFO-2024-07-28-23",
+    "IAD-2024-07-18-22",
+    "EWR-2024-08-31-00",
+    "TPA-2024-07-21-21",
+    "JFK-2024-07-08-20",
+    "DFW-2024-07-29-01",
+    "SEA-2024-06-14-23",
+    "MCO-2024-08-05-01",
+    "BNA-2024-06-27-16",
+    "PHX-2024-06-28-21",
+    "LGA-2024-07-13-00",
+    "ORD-2024-06-07-20",
+    "SLC-2024-08-23-20",
+    "DEN-2024-06-09-13",
+    "SAN-2024-08-11-20",
+    "BOS-2024-06-29-17",
+    "MIA-2024-08-30-01",
+    "CLT-2024-07-25-18",
+    "MDW-2024-06-25-21",
+    "ATL-2024-07-22-02",
+    "PHL-2024-07-20-22",
+    "DTW-2024-07-18-19",
+    "DCA-2024-08-08-15"
   ],
   "coverage": {
     "procedures": {
@@ -298,708 +296,708 @@
   },
   "per_wave": {
     "liquid/d1-ultra": {
-      "ATL-2024-06-15-18": {
-        "delay_min": 321.0,
-        "fuel_kg": 256.0,
-        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 7.0 min"
-      },
-      "ATL-2024-07-24-19": {
-        "delay_min": 644.0,
-        "fuel_kg": 0.0,
+      "ATL-2024-06-17-21": {
+        "delay_min": 696.0,
+        "fuel_kg": 4000.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "AUS-2024-06-09-18": {
-        "delay_min": 226.9,
+      "ATL-2024-07-22-02": {
+        "delay_min": 1744.3,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+      },
+      "AUS-2024-07-26-17": {
+        "delay_min": 323.2,
+        "fuel_kg": 76.0,
+        "cause": "hold 1.5 min (0 lap(s)), vector 1.4 min, taxi wait 1.8 min"
+      },
+      "BNA-2024-06-27-16": {
+        "delay_min": 141.2,
         "fuel_kg": 24.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 5.7 min"
+        "cause": "hold 0.6 min (0 lap(s)), vector 0.6 min, taxi wait 1.7 min"
       },
-      "AUS-2024-07-28-20": {
-        "delay_min": 277.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.1 min"
+      "BNA-2024-07-07-22": {
+        "delay_min": 466.5,
+        "fuel_kg": 44.0,
+        "cause": "hold 0.4 min (0 lap(s)), vector 0.4 min, taxi wait 2.1 min"
       },
-      "BNA-2024-07-07-21": {
-        "delay_min": 301.7,
-        "fuel_kg": 268.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 1.2 min"
+      "BOS-2024-06-29-17": {
+        "delay_min": 159.0,
+        "fuel_kg": 128.0,
+        "cause": "hold 3.2 min (0 lap(s)), vector 3.3 min, taxi wait 0.0 min"
       },
-      "BNA-2024-07-15-18": {
-        "delay_min": 264.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "BOS-2024-07-12-20": {
-        "delay_min": 390.9,
-        "fuel_kg": 28.0,
-        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 1.8 min"
-      },
-      "BWI-2024-07-12-19": {
-        "delay_min": 287.8,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 6.9 min"
-      },
-      "BWI-2024-07-19-12": {
-        "delay_min": 443.8,
-        "fuel_kg": 228.0,
-        "cause": "hold 3.1 min (0 lap(s)), vector 3.1 min, taxi wait 0.0 min"
-      },
-      "CLT-2024-07-07-17": {
-        "delay_min": 1051.8,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "CLT-2024-08-14-15": {
-        "delay_min": 646.0,
+      "BOS-2024-08-19-19": {
+        "delay_min": 302.8,
         "fuel_kg": 0.0,
         "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
       },
-      "DCA-2024-06-11-21": {
-        "delay_min": 306.3,
-        "fuel_kg": 68.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      "BWI-2024-08-19-16": {
+        "delay_min": 331.0,
+        "fuel_kg": 124.0,
+        "cause": "hold 3.1 min (0 lap(s)), vector 3.1 min, taxi wait 0.0 min"
       },
-      "DCA-2024-06-22-16": {
-        "delay_min": 417.6,
-        "fuel_kg": 228.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 1.1 min"
+      "CLT-2024-06-12-23": {
+        "delay_min": 448.5,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
       },
-      "DEN-2024-07-03-19": {
-        "delay_min": 914.0,
+      "CLT-2024-07-25-18": {
+        "delay_min": 668.2,
+        "fuel_kg": 96.0,
+        "cause": "hold 2.1 min (0 lap(s)), vector 2.1 min, taxi wait 0.0 min"
+      },
+      "DCA-2024-07-20-19": {
+        "delay_min": 196.2,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.4 min (0 lap(s)), vector 0.4 min, taxi wait 0.0 min"
+      },
+      "DCA-2024-08-08-15": {
+        "delay_min": 202.3,
+        "fuel_kg": 268.0,
+        "cause": "hold 0.8 min (0 lap(s)), vector 0.8 min, taxi wait 0.0 min"
+      },
+      "DEN-2024-06-09-13": {
+        "delay_min": 217.7,
+        "fuel_kg": 560.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 3.9 min"
+      },
+      "DEN-2024-08-16-22": {
+        "delay_min": 192.7,
+        "fuel_kg": 212.0,
+        "cause": "hold 1.6 min (0 lap(s)), vector 1.6 min, taxi wait 0.0 min"
+      },
+      "DFW-2024-07-29-01": {
+        "delay_min": 632.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.3 min"
+      },
+      "DFW-2024-08-21-23": {
+        "delay_min": 754.1,
+        "fuel_kg": 176.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 4.0 min"
+      },
+      "DTW-2024-06-03-10": {
+        "delay_min": 298.0,
+        "fuel_kg": 168.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.1 min"
+      },
+      "DTW-2024-07-18-19": {
+        "delay_min": 215.8,
+        "fuel_kg": 128.0,
+        "cause": "hold 1.9 min (0 lap(s)), vector 2.0 min, taxi wait 10.8 min"
+      },
+      "EWR-2024-08-31-00": {
+        "delay_min": 410.5,
+        "fuel_kg": 492.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 2.8 min"
+      },
+      "FLL-2024-06-26-21": {
+        "delay_min": 118.2,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+      },
+      "IAD-2024-07-18-22": {
+        "delay_min": 401.8,
+        "fuel_kg": 368.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "IAH-2024-06-12-00": {
+        "delay_min": 341.3,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.4 min, taxi wait 0.0 min"
+      },
+      "JFK-2024-07-08-20": {
+        "delay_min": 952.8,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 2.8 min"
+      },
+      "JFK-2024-08-30-08": {
+        "delay_min": 216.4,
+        "fuel_kg": 576.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 22.6 min"
+      },
+      "LAS-2024-08-03-22": {
+        "delay_min": 267.1,
+        "fuel_kg": 72.0,
+        "cause": "hold 1.8 min (0 lap(s)), vector 1.8 min, taxi wait 34.5 min"
+      },
+      "LAX-2024-06-26-00": {
+        "delay_min": 865.3,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "LGA-2024-06-14-22": {
+        "delay_min": 954.3,
+        "fuel_kg": 156.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 0.0 min"
+      },
+      "LGA-2024-07-13-00": {
+        "delay_min": 563.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "MCO-2024-07-18-16": {
+        "delay_min": 286.5,
+        "fuel_kg": 52.0,
+        "cause": "hold 1.4 min (0 lap(s)), vector 1.4 min, taxi wait 0.0 min"
+      },
+      "MCO-2024-08-05-01": {
+        "delay_min": 578.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "MDW-2024-06-25-21": {
+        "delay_min": 680.6,
+        "fuel_kg": 276.0,
+        "cause": "hold 6.9 min (0 lap(s)), vector 6.9 min, taxi wait 0.0 min"
+      },
+      "MDW-2024-06-28-00": {
+        "delay_min": 135.1,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      },
+      "MIA-2024-06-17-22": {
+        "delay_min": 226.9,
+        "fuel_kg": 148.0,
+        "cause": "hold 3.7 min (0 lap(s)), vector 3.7 min, taxi wait 0.8 min"
+      },
+      "MIA-2024-08-30-01": {
+        "delay_min": 844.8,
+        "fuel_kg": 36.0,
+        "cause": "hold 0.9 min (0 lap(s)), vector 0.9 min, taxi wait 0.0 min"
+      },
+      "MSP-2024-07-23-20": {
+        "delay_min": 225.8,
+        "fuel_kg": 428.0,
+        "cause": "hold 1.7 min (0 lap(s)), vector 1.7 min, taxi wait 30.2 min"
+      },
+      "ORD-2024-06-04-15": {
+        "delay_min": 1150.6,
+        "fuel_kg": 44.0,
+        "cause": "hold 1.1 min (0 lap(s)), vector 1.1 min, taxi wait 0.5 min"
+      },
+      "ORD-2024-06-07-20": {
+        "delay_min": 336.8,
+        "fuel_kg": 312.0,
+        "cause": "hold 7.8 min (0 lap(s)), vector 7.8 min, taxi wait 9.0 min"
+      },
+      "PHL-2024-07-20-22": {
+        "delay_min": 251.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 1.8 min"
+      },
+      "PHL-2024-08-20-18": {
+        "delay_min": 233.2,
+        "fuel_kg": 400.0,
+        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 0.9 min"
+      },
+      "PHX-2024-06-23-22": {
+        "delay_min": 303.9,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 0.0 min"
+      },
+      "PHX-2024-06-28-21": {
+        "delay_min": 791.0,
+        "fuel_kg": 4600.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "SAN-2024-07-21-20": {
+        "delay_min": 262.1,
+        "fuel_kg": 836.0,
+        "cause": "hold 1.3 min (0 lap(s)), vector 1.3 min, taxi wait 1.0 min"
+      },
+      "SAN-2024-08-11-20": {
+        "delay_min": 808.0,
         "fuel_kg": 3800.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "DFW-2024-08-12-18": {
-        "delay_min": 835.7,
+      "SEA-2024-06-14-23": {
+        "delay_min": 952.7,
+        "fuel_kg": 72.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 13.5 min"
+      },
+      "SEA-2024-06-16-01": {
+        "delay_min": 407.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.7 min"
+      },
+      "SFO-2024-07-28-23": {
+        "delay_min": 186.6,
+        "fuel_kg": 1330.3,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 2.3 min"
+      },
+      "SLC-2024-08-09-23": {
+        "delay_min": 421.2,
         "fuel_kg": 0.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "DTW-2024-07-19-15": {
-        "delay_min": 466.1,
+      "SLC-2024-08-23-20": {
+        "delay_min": 177.7,
+        "fuel_kg": 264.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 9.4 min"
+      },
+      "TPA-2024-07-21-21": {
+        "delay_min": 231.5,
         "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 1.0 min"
       },
-      "DTW-2024-07-22-23": {
-        "delay_min": 336.4,
+      "TPA-2024-08-05-19": {
+        "delay_min": 300.7,
         "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "EWR-2024-06-20-23": {
-        "delay_min": 926.1,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "EWR-2024-07-15-18": {
-        "delay_min": 469.8,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "FLL-2024-07-10-20": {
-        "delay_min": 459.5,
-        "fuel_kg": 44.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 3.6 min"
-      },
-      "FLL-2024-07-17-22": {
-        "delay_min": 348.5,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.6 min"
-      },
-      "IAD-2024-07-10-21": {
-        "delay_min": 383.8,
-        "fuel_kg": 12.0,
-        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 0.0 min"
-      },
-      "IAH-2024-06-28-20": {
-        "delay_min": 257.3,
-        "fuel_kg": 276.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "JFK-2024-06-29-21": {
-        "delay_min": 600.3,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "JFK-2024-07-06-16": {
-        "delay_min": 1122.4,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.2 min"
-      },
-      "LAS-2024-07-17-17": {
-        "delay_min": 638.8,
-        "fuel_kg": 144.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "LAS-2024-07-27-19": {
-        "delay_min": 330.0,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
-      },
-      "LAX-2024-06-14-00": {
-        "delay_min": 540.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "LAX-2024-06-15-11": {
-        "delay_min": 757.3,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "LGA-2024-06-27-19": {
-        "delay_min": 637.7,
-        "fuel_kg": 24.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "LGA-2024-08-07-22": {
-        "delay_min": 401.6,
-        "fuel_kg": 180.0,
-        "cause": "hold 0.4 min (0 lap(s)), vector 0.3 min, taxi wait 25.6 min"
-      },
-      "MCO-2024-07-23-16": {
-        "delay_min": 1086.0,
-        "fuel_kg": 3000.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MDW-2024-06-06-00": {
-        "delay_min": 427.3,
-        "fuel_kg": 188.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "MDW-2024-08-25-19": {
-        "delay_min": 288.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.3 min"
-      },
-      "MIA-2024-06-28-21": {
-        "delay_min": 1573.0,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MIA-2024-07-08-21": {
-        "delay_min": 1112.5,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MSP-2024-08-19-20": {
-        "delay_min": 540.4,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 5.5 min"
-      },
-      "ORD-2024-06-23-14": {
-        "delay_min": 392.1,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "ORD-2024-06-30-23": {
-        "delay_min": 632.1,
-        "fuel_kg": 52.0,
-        "cause": "hold 1.3 min (0 lap(s)), vector 1.3 min, taxi wait 0.9 min"
-      },
-      "PHL-2024-06-11-19": {
-        "delay_min": 317.4,
-        "fuel_kg": 416.0,
-        "cause": "hold 0.5 min (0 lap(s)), vector 0.4 min, taxi wait 0.8 min"
-      },
-      "PHL-2024-07-29-19": {
-        "delay_min": 626.0,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "PHX-2024-08-05-19": {
-        "delay_min": 836.6,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "SAN-2024-07-09-22": {
-        "delay_min": 319.6,
-        "fuel_kg": 1496.0,
-        "cause": "hold 18.4 min (4 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "SAN-2024-07-24-19": {
-        "delay_min": 439.8,
-        "fuel_kg": 296.0,
-        "cause": "hold 5.8 min (1 lap(s)), vector 1.2 min, taxi wait 0.0 min"
-      },
-      "SEA-2024-06-03-20": {
-        "delay_min": 256.3,
-        "fuel_kg": 60.0,
-        "cause": "hold 1.4 min (0 lap(s)), vector 1.4 min, taxi wait 0.2 min"
-      },
-      "SEA-2024-06-27-16": {
-        "delay_min": 463.8,
-        "fuel_kg": 12.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 9.0 min"
-      },
-      "SFO-2024-07-19-15": {
-        "delay_min": 855.3,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.7 min"
-      },
-      "SFO-2024-08-19-23": {
-        "delay_min": 668.5,
-        "fuel_kg": 1080.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "SLC-2024-07-19-15": {
-        "delay_min": 1196.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "TPA-2024-08-03-20": {
-        "delay_min": 534.8,
-        "fuel_kg": 64.0,
-        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 1.1 min"
       }
     },
     "formula": {
-      "ATL-2024-06-15-18": {
-        "delay_min": 321.0,
-        "fuel_kg": 256.0,
-        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 7.0 min"
-      },
-      "ATL-2024-07-24-19": {
-        "delay_min": 644.0,
-        "fuel_kg": 0.0,
+      "ATL-2024-06-17-21": {
+        "delay_min": 696.0,
+        "fuel_kg": 4000.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "AUS-2024-06-09-18": {
-        "delay_min": 222.5,
-        "fuel_kg": 52.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 1.1 min"
+      "ATL-2024-07-22-02": {
+        "delay_min": 1744.3,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
       },
-      "AUS-2024-07-28-20": {
-        "delay_min": 277.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 0.1 min"
+      "AUS-2024-07-26-17": {
+        "delay_min": 323.2,
+        "fuel_kg": 76.0,
+        "cause": "hold 1.5 min (0 lap(s)), vector 1.4 min, taxi wait 1.8 min"
       },
-      "BNA-2024-07-07-21": {
-        "delay_min": 302.0,
-        "fuel_kg": 288.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      "BNA-2024-06-27-16": {
+        "delay_min": 141.2,
+        "fuel_kg": 24.0,
+        "cause": "hold 0.6 min (0 lap(s)), vector 0.6 min, taxi wait 1.7 min"
       },
-      "BNA-2024-07-15-18": {
-        "delay_min": 264.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      "BNA-2024-07-07-22": {
+        "delay_min": 473.5,
+        "fuel_kg": 116.0,
+        "cause": "hold 2.9 min (0 lap(s)), vector 2.9 min, taxi wait 4.1 min"
       },
-      "BOS-2024-07-12-20": {
-        "delay_min": 389.0,
-        "fuel_kg": 36.0,
-        "cause": "hold 0.6 min (0 lap(s)), vector 0.6 min, taxi wait 0.6 min"
+      "BOS-2024-06-29-17": {
+        "delay_min": 160.1,
+        "fuel_kg": 64.0,
+        "cause": "hold 1.3 min (0 lap(s)), vector 1.4 min, taxi wait 1.2 min"
       },
-      "BWI-2024-07-12-19": {
-        "delay_min": 282.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 3.3 min"
+      "BOS-2024-08-19-19": {
+        "delay_min": 309.7,
+        "fuel_kg": 208.0,
+        "cause": "hold 5.2 min (0 lap(s)), vector 5.2 min, taxi wait 2.3 min"
       },
-      "BWI-2024-07-19-12": {
-        "delay_min": 442.2,
-        "fuel_kg": 248.0,
+      "BWI-2024-08-19-16": {
+        "delay_min": 331.0,
+        "fuel_kg": 124.0,
         "cause": "hold 3.1 min (0 lap(s)), vector 3.1 min, taxi wait 0.0 min"
       },
-      "CLT-2024-07-07-17": {
-        "delay_min": 1051.8,
+      "CLT-2024-06-12-23": {
+        "delay_min": 448.5,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+      },
+      "CLT-2024-07-25-18": {
+        "delay_min": 668.2,
+        "fuel_kg": 108.0,
+        "cause": "hold 2.1 min (0 lap(s)), vector 2.1 min, taxi wait 0.0 min"
+      },
+      "DCA-2024-07-20-19": {
+        "delay_min": 196.2,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.4 min (0 lap(s)), vector 0.4 min, taxi wait 0.0 min"
+      },
+      "DCA-2024-08-08-15": {
+        "delay_min": 202.3,
+        "fuel_kg": 244.0,
+        "cause": "hold 0.8 min (0 lap(s)), vector 0.8 min, taxi wait 0.4 min"
+      },
+      "DEN-2024-06-09-13": {
+        "delay_min": 217.7,
+        "fuel_kg": 560.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 3.9 min"
+      },
+      "DEN-2024-08-16-22": {
+        "delay_min": 192.7,
+        "fuel_kg": 224.0,
+        "cause": "hold 1.6 min (0 lap(s)), vector 1.7 min, taxi wait 0.7 min"
+      },
+      "DFW-2024-07-29-01": {
+        "delay_min": 632.1,
         "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.3 min"
+      },
+      "DFW-2024-08-21-23": {
+        "delay_min": 745.4,
+        "fuel_kg": 348.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 1.5 min"
+      },
+      "DTW-2024-06-03-10": {
+        "delay_min": 296.1,
+        "fuel_kg": 168.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 2.3 min"
+      },
+      "DTW-2024-07-18-19": {
+        "delay_min": 215.8,
+        "fuel_kg": 128.0,
+        "cause": "hold 1.9 min (0 lap(s)), vector 2.0 min, taxi wait 10.8 min"
+      },
+      "EWR-2024-08-31-00": {
+        "delay_min": 410.5,
+        "fuel_kg": 492.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 2.8 min"
+      },
+      "FLL-2024-06-26-21": {
+        "delay_min": 118.2,
+        "fuel_kg": 12.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+      },
+      "IAD-2024-07-18-22": {
+        "delay_min": 409.6,
+        "fuel_kg": 656.0,
         "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
       },
-      "CLT-2024-08-14-15": {
-        "delay_min": 653.7,
-        "fuel_kg": 288.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "DCA-2024-06-11-21": {
-        "delay_min": 306.6,
-        "fuel_kg": 72.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "DCA-2024-06-22-16": {
-        "delay_min": 417.6,
-        "fuel_kg": 228.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 1.1 min"
-      },
-      "DEN-2024-07-03-19": {
-        "delay_min": 436.1,
-        "fuel_kg": 384.0,
-        "cause": "hold 8.3 min (1 lap(s)), vector 3.0 min, taxi wait 21.7 min"
-      },
-      "DFW-2024-08-12-18": {
-        "delay_min": 835.7,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "DTW-2024-07-19-15": {
-        "delay_min": 466.1,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "DTW-2024-07-22-23": {
-        "delay_min": 336.4,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "EWR-2024-06-20-23": {
-        "delay_min": 926.1,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "EWR-2024-07-15-18": {
-        "delay_min": 464.4,
+      "IAH-2024-06-12-00": {
+        "delay_min": 330.4,
         "fuel_kg": 0.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
       },
-      "FLL-2024-07-10-20": {
-        "delay_min": 458.3,
-        "fuel_kg": 44.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 3.6 min"
-      },
-      "FLL-2024-07-17-22": {
-        "delay_min": 348.5,
+      "JFK-2024-07-08-20": {
+        "delay_min": 952.8,
         "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.6 min"
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 2.8 min"
       },
-      "IAD-2024-07-10-21": {
-        "delay_min": 391.7,
-        "fuel_kg": 200.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      "JFK-2024-08-30-08": {
+        "delay_min": 219.9,
+        "fuel_kg": 368.0,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 31.6 min"
       },
-      "IAH-2024-06-28-20": {
-        "delay_min": 258.6,
-        "fuel_kg": 284.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
+      "LAS-2024-08-03-22": {
+        "delay_min": 267.1,
+        "fuel_kg": 72.0,
+        "cause": "hold 1.8 min (0 lap(s)), vector 1.8 min, taxi wait 34.5 min"
       },
-      "JFK-2024-06-29-21": {
-        "delay_min": 600.3,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
-      },
-      "JFK-2024-07-06-16": {
-        "delay_min": 1122.4,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.2 min"
-      },
-      "LAS-2024-07-17-17": {
-        "delay_min": 638.8,
-        "fuel_kg": 144.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "LAS-2024-07-27-19": {
-        "delay_min": 330.0,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 0.7 min"
-      },
-      "LAX-2024-06-14-00": {
-        "delay_min": 546.5,
+      "LAX-2024-06-26-00": {
+        "delay_min": 865.3,
         "fuel_kg": 0.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "LAX-2024-06-15-11": {
-        "delay_min": 757.3,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "LGA-2024-06-27-19": {
-        "delay_min": 637.7,
-        "fuel_kg": 24.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "LGA-2024-08-07-22": {
-        "delay_min": 378.0,
-        "fuel_kg": 260.0,
-        "cause": "hold 2.1 min (0 lap(s)), vector 1.9 min, taxi wait 0.0 min"
-      },
-      "MCO-2024-07-23-16": {
-        "delay_min": 1086.0,
-        "fuel_kg": 3000.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MDW-2024-06-06-00": {
-        "delay_min": 430.9,
-        "fuel_kg": 320.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "MDW-2024-08-25-19": {
-        "delay_min": 292.0,
+      "LGA-2024-06-14-22": {
+        "delay_min": 953.1,
         "fuel_kg": 132.0,
+        "cause": "hold 0.7 min (0 lap(s)), vector 0.7 min, taxi wait 1.9 min"
+      },
+      "LGA-2024-07-13-00": {
+        "delay_min": 563.7,
+        "fuel_kg": 0.0,
         "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
       },
-      "MIA-2024-06-28-21": {
-        "delay_min": 1573.0,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MIA-2024-07-08-21": {
-        "delay_min": 1112.5,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
-      },
-      "MSP-2024-08-19-20": {
-        "delay_min": 540.4,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 5.5 min"
-      },
-      "ORD-2024-06-23-14": {
-        "delay_min": 389.9,
-        "fuel_kg": 0.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
-      },
-      "ORD-2024-06-30-23": {
-        "delay_min": 632.1,
+      "MCO-2024-07-18-16": {
+        "delay_min": 286.5,
         "fuel_kg": 52.0,
-        "cause": "hold 1.3 min (0 lap(s)), vector 1.3 min, taxi wait 0.9 min"
+        "cause": "hold 1.5 min (0 lap(s)), vector 1.5 min, taxi wait 0.0 min"
       },
-      "PHL-2024-06-11-19": {
-        "delay_min": 317.9,
-        "fuel_kg": 464.0,
-        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 0.8 min"
-      },
-      "PHL-2024-07-29-19": {
-        "delay_min": 626.0,
+      "MCO-2024-08-05-01": {
+        "delay_min": 579.5,
         "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
       },
-      "PHX-2024-08-05-19": {
-        "delay_min": 836.6,
+      "MDW-2024-06-25-21": {
+        "delay_min": 680.6,
+        "fuel_kg": 276.0,
+        "cause": "hold 6.9 min (0 lap(s)), vector 6.9 min, taxi wait 0.0 min"
+      },
+      "MDW-2024-06-28-00": {
+        "delay_min": 135.1,
         "fuel_kg": 0.0,
         "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
       },
-      "SAN-2024-07-09-22": {
-        "delay_min": 319.6,
-        "fuel_kg": 1496.0,
-        "cause": "hold 18.4 min (4 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      "MIA-2024-06-17-22": {
+        "delay_min": 226.9,
+        "fuel_kg": 148.0,
+        "cause": "hold 3.7 min (0 lap(s)), vector 3.7 min, taxi wait 0.8 min"
       },
-      "SAN-2024-07-24-19": {
-        "delay_min": 437.8,
-        "fuel_kg": 216.0,
-        "cause": "hold 3.8 min (0 lap(s)), vector 3.8 min, taxi wait 0.0 min"
+      "MIA-2024-08-30-01": {
+        "delay_min": 844.8,
+        "fuel_kg": 36.0,
+        "cause": "hold 0.9 min (0 lap(s)), vector 0.9 min, taxi wait 0.0 min"
       },
-      "SEA-2024-06-03-20": {
-        "delay_min": 256.3,
-        "fuel_kg": 60.0,
-        "cause": "hold 1.4 min (0 lap(s)), vector 1.4 min, taxi wait 0.2 min"
+      "MSP-2024-07-23-20": {
+        "delay_min": 225.8,
+        "fuel_kg": 428.0,
+        "cause": "hold 1.7 min (0 lap(s)), vector 1.7 min, taxi wait 30.2 min"
       },
-      "SEA-2024-06-27-16": {
-        "delay_min": 463.8,
-        "fuel_kg": 12.0,
-        "cause": "hold 0.2 min (0 lap(s)), vector 0.2 min, taxi wait 9.0 min"
+      "ORD-2024-06-04-15": {
+        "delay_min": 1150.6,
+        "fuel_kg": 44.0,
+        "cause": "hold 1.1 min (0 lap(s)), vector 1.1 min, taxi wait 0.5 min"
       },
-      "SFO-2024-07-19-15": {
-        "delay_min": 855.3,
+      "ORD-2024-06-07-20": {
+        "delay_min": 336.8,
+        "fuel_kg": 312.0,
+        "cause": "hold 7.8 min (0 lap(s)), vector 7.8 min, taxi wait 9.0 min"
+      },
+      "PHL-2024-07-20-22": {
+        "delay_min": 251.5,
         "fuel_kg": 0.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.7 min"
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.9 min"
       },
-      "SFO-2024-08-19-23": {
-        "delay_min": 668.5,
-        "fuel_kg": 1080.0,
-        "cause": "hold 0.0 min (0 lap(s)), vector 0.1 min, taxi wait 0.0 min"
+      "PHL-2024-08-20-18": {
+        "delay_min": 235.9,
+        "fuel_kg": 576.0,
+        "cause": "hold 0.5 min (0 lap(s)), vector 0.5 min, taxi wait 0.9 min"
       },
-      "SLC-2024-07-19-15": {
-        "delay_min": 1196.7,
+      "PHX-2024-06-23-22": {
+        "delay_min": 301.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.6 min (0 lap(s)), vector 0.6 min, taxi wait 0.0 min"
+      },
+      "PHX-2024-06-28-21": {
+        "delay_min": 791.0,
+        "fuel_kg": 4600.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "SAN-2024-07-21-20": {
+        "delay_min": 262.1,
+        "fuel_kg": 836.0,
+        "cause": "hold 1.3 min (0 lap(s)), vector 1.3 min, taxi wait 1.0 min"
+      },
+      "SAN-2024-08-11-20": {
+        "delay_min": 808.0,
+        "fuel_kg": 3800.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
+      },
+      "SEA-2024-06-14-23": {
+        "delay_min": 952.7,
+        "fuel_kg": 72.0,
+        "cause": "hold 0.1 min (0 lap(s)), vector 0.1 min, taxi wait 13.5 min"
+      },
+      "SEA-2024-06-16-01": {
+        "delay_min": 407.5,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 4.7 min"
+      },
+      "SFO-2024-07-28-23": {
+        "delay_min": 195.1,
+        "fuel_kg": 1674.3,
+        "cause": "hold 0.2 min (0 lap(s)), vector 0.1 min, taxi wait 2.6 min"
+      },
+      "SLC-2024-08-09-23": {
+        "delay_min": 421.2,
         "fuel_kg": 0.0,
         "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 0.0 min"
       },
-      "TPA-2024-08-03-20": {
-        "delay_min": 534.8,
-        "fuel_kg": 64.0,
-        "cause": "hold 0.3 min (0 lap(s)), vector 0.3 min, taxi wait 0.0 min"
+      "SLC-2024-08-23-20": {
+        "delay_min": 170.9,
+        "fuel_kg": 344.0,
+        "cause": "hold 2.2 min (0 lap(s)), vector 2.2 min, taxi wait 0.6 min"
+      },
+      "TPA-2024-07-21-21": {
+        "delay_min": 243.0,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.0 min (0 lap(s)), vector 0.0 min, taxi wait 1.0 min"
+      },
+      "TPA-2024-08-05-19": {
+        "delay_min": 300.7,
+        "fuel_kg": 0.0,
+        "cause": "hold 0.3 min (0 lap(s)), vector 0.2 min, taxi wait 0.0 min"
       }
     },
     "baseline": {
-      "ATL-2024-06-15-18": {
-        "delay_min": 325.1,
-        "fuel_kg": 92.0
+      "ATL-2024-06-17-21": {
+        "delay_min": 263.1,
+        "fuel_kg": 1376.0
       },
-      "ATL-2024-07-24-19": {
-        "delay_min": 645.7,
-        "fuel_kg": 0.0
-      },
-      "AUS-2024-06-09-18": {
-        "delay_min": 233.0,
-        "fuel_kg": 92.0
-      },
-      "AUS-2024-07-28-20": {
-        "delay_min": 281.7,
-        "fuel_kg": 0.0
-      },
-      "BNA-2024-07-07-21": {
-        "delay_min": 299.4,
-        "fuel_kg": 52.0
-      },
-      "BNA-2024-07-15-18": {
-        "delay_min": 263.9,
-        "fuel_kg": 0.0
-      },
-      "BOS-2024-07-12-20": {
-        "delay_min": 400.6,
+      "ATL-2024-07-22-02": {
+        "delay_min": 1744.3,
         "fuel_kg": 12.0
       },
-      "BWI-2024-07-12-19": {
-        "delay_min": 318.0,
-        "fuel_kg": 0.0
-      },
-      "BWI-2024-07-19-12": {
-        "delay_min": 431.3,
-        "fuel_kg": 0.0
-      },
-      "CLT-2024-07-07-17": {
-        "delay_min": 1064.6,
-        "fuel_kg": 0.0
-      },
-      "CLT-2024-08-14-15": {
-        "delay_min": 654.2,
-        "fuel_kg": 0.0
-      },
-      "DCA-2024-06-11-21": {
-        "delay_min": 306.5,
-        "fuel_kg": 0.0
-      },
-      "DCA-2024-06-22-16": {
-        "delay_min": 417.8,
-        "fuel_kg": 92.0
-      },
-      "DEN-2024-07-03-19": {
-        "delay_min": 657.0,
-        "fuel_kg": 0.0
-      },
-      "DFW-2024-08-12-18": {
-        "delay_min": 835.7,
-        "fuel_kg": 0.0
-      },
-      "DTW-2024-07-19-15": {
-        "delay_min": 466.1,
-        "fuel_kg": 0.0
-      },
-      "DTW-2024-07-22-23": {
-        "delay_min": 336.4,
-        "fuel_kg": 0.0
-      },
-      "EWR-2024-06-20-23": {
-        "delay_min": 926.1,
-        "fuel_kg": 0.0
-      },
-      "EWR-2024-07-15-18": {
-        "delay_min": 483.4,
+      "AUS-2024-07-26-17": {
+        "delay_min": 321.7,
         "fuel_kg": 52.0
       },
-      "FLL-2024-07-10-20": {
-        "delay_min": 465.6,
-        "fuel_kg": 0.0
-      },
-      "FLL-2024-07-17-22": {
-        "delay_min": 350.6,
-        "fuel_kg": 0.0
-      },
-      "IAD-2024-07-10-21": {
-        "delay_min": 382.7,
-        "fuel_kg": 12.0
-      },
-      "IAH-2024-06-28-20": {
-        "delay_min": 289.4,
-        "fuel_kg": 0.0
-      },
-      "JFK-2024-06-29-21": {
-        "delay_min": 615.5,
-        "fuel_kg": 0.0
-      },
-      "JFK-2024-07-06-16": {
-        "delay_min": 1137.9,
-        "fuel_kg": 0.0
-      },
-      "LAS-2024-07-17-17": {
-        "delay_min": 638.0,
-        "fuel_kg": 0.0
-      },
-      "LAS-2024-07-27-19": {
-        "delay_min": 350.9,
-        "fuel_kg": 0.0
-      },
-      "LAX-2024-06-14-00": {
-        "delay_min": 546.5,
-        "fuel_kg": 0.0
-      },
-      "LAX-2024-06-15-11": {
-        "delay_min": 757.3,
-        "fuel_kg": 0.0
-      },
-      "LGA-2024-06-27-19": {
-        "delay_min": 634.7,
-        "fuel_kg": 0.0
-      },
-      "LGA-2024-08-07-22": {
-        "delay_min": 490.1,
-        "fuel_kg": 0.0
-      },
-      "MCO-2024-07-23-16": {
-        "delay_min": 557.5,
-        "fuel_kg": 0.0
-      },
-      "MDW-2024-06-06-00": {
-        "delay_min": 425.3,
-        "fuel_kg": 0.0
-      },
-      "MDW-2024-08-25-19": {
-        "delay_min": 292.5,
-        "fuel_kg": 0.0
-      },
-      "MIA-2024-06-28-21": {
-        "delay_min": 1573.0,
-        "fuel_kg": 0.0
-      },
-      "MIA-2024-07-08-21": {
-        "delay_min": 1112.5,
-        "fuel_kg": 0.0
-      },
-      "MSP-2024-08-19-20": {
-        "delay_min": 540.4,
-        "fuel_kg": 0.0
-      },
-      "ORD-2024-06-23-14": {
-        "delay_min": 397.8,
-        "fuel_kg": 0.0
-      },
-      "ORD-2024-06-30-23": {
-        "delay_min": 632.1,
-        "fuel_kg": 52.0
-      },
-      "PHL-2024-06-11-19": {
-        "delay_min": 313.4,
+      "BNA-2024-06-27-16": {
+        "delay_min": 141.2,
         "fuel_kg": 24.0
       },
-      "PHL-2024-07-29-19": {
-        "delay_min": 626.0,
+      "BNA-2024-07-07-22": {
+        "delay_min": 473.5,
+        "fuel_kg": 116.0
+      },
+      "BOS-2024-06-29-17": {
+        "delay_min": 185.5,
+        "fuel_kg": 404.0
+      },
+      "BOS-2024-08-19-19": {
+        "delay_min": 309.7,
+        "fuel_kg": 208.0
+      },
+      "BWI-2024-08-19-16": {
+        "delay_min": 331.0,
+        "fuel_kg": 124.0
+      },
+      "CLT-2024-06-12-23": {
+        "delay_min": 448.5,
+        "fuel_kg": 12.0
+      },
+      "CLT-2024-07-25-18": {
+        "delay_min": 666.2,
+        "fuel_kg": 12.0
+      },
+      "DCA-2024-07-20-19": {
+        "delay_min": 197.6,
+        "fuel_kg": 64.0
+      },
+      "DCA-2024-08-08-15": {
+        "delay_min": 201.9,
+        "fuel_kg": 192.0
+      },
+      "DEN-2024-06-09-13": {
+        "delay_min": 214.5,
+        "fuel_kg": 420.0
+      },
+      "DEN-2024-08-16-22": {
+        "delay_min": 189.2,
+        "fuel_kg": 128.0
+      },
+      "DFW-2024-07-29-01": {
+        "delay_min": 632.1,
         "fuel_kg": 0.0
       },
-      "PHX-2024-08-05-19": {
-        "delay_min": 847.4,
-        "fuel_kg": 0.0
+      "DFW-2024-08-21-23": {
+        "delay_min": 758.1,
+        "fuel_kg": 88.0
       },
-      "SAN-2024-07-09-22": {
-        "delay_min": 221.8,
+      "DTW-2024-06-03-10": {
+        "delay_min": 298.0,
+        "fuel_kg": 112.0
+      },
+      "DTW-2024-07-18-19": {
+        "delay_min": 232.2,
+        "fuel_kg": 320.0
+      },
+      "EWR-2024-08-31-00": {
+        "delay_min": 410.2,
+        "fuel_kg": 236.0
+      },
+      "FLL-2024-06-26-21": {
+        "delay_min": 118.2,
+        "fuel_kg": 12.0
+      },
+      "IAD-2024-07-18-22": {
+        "delay_min": 390.6,
         "fuel_kg": 52.0
       },
-      "SAN-2024-07-24-19": {
-        "delay_min": 437.4,
+      "IAH-2024-06-12-00": {
+        "delay_min": 348.3,
+        "fuel_kg": 276.0
+      },
+      "JFK-2024-07-08-20": {
+        "delay_min": 973.8,
+        "fuel_kg": 68.0
+      },
+      "JFK-2024-08-30-08": {
+        "delay_min": 228.7,
+        "fuel_kg": 24.0
+      },
+      "LAS-2024-08-03-22": {
+        "delay_min": 267.1,
+        "fuel_kg": 72.0
+      },
+      "LAX-2024-06-26-00": {
+        "delay_min": 865.3,
         "fuel_kg": 0.0
       },
-      "SEA-2024-06-03-20": {
-        "delay_min": 282.8,
+      "LGA-2024-06-14-22": {
+        "delay_min": 953.2,
+        "fuel_kg": 436.0
+      },
+      "LGA-2024-07-13-00": {
+        "delay_min": 572.0,
         "fuel_kg": 52.0
       },
-      "SEA-2024-06-27-16": {
-        "delay_min": 492.3,
+      "MCO-2024-07-18-16": {
+        "delay_min": 283.9,
+        "fuel_kg": 224.0
+      },
+      "MCO-2024-08-05-01": {
+        "delay_min": 581.1,
+        "fuel_kg": 12.0
+      },
+      "MDW-2024-06-25-21": {
+        "delay_min": 680.6,
+        "fuel_kg": 276.0
+      },
+      "MDW-2024-06-28-00": {
+        "delay_min": 140.6,
         "fuel_kg": 0.0
       },
-      "SFO-2024-07-19-15": {
-        "delay_min": 855.3,
+      "MIA-2024-06-17-22": {
+        "delay_min": 226.9,
+        "fuel_kg": 148.0
+      },
+      "MIA-2024-08-30-01": {
+        "delay_min": 844.8,
+        "fuel_kg": 36.0
+      },
+      "MSP-2024-07-23-20": {
+        "delay_min": 268.9,
+        "fuel_kg": 104.0
+      },
+      "ORD-2024-06-04-15": {
+        "delay_min": 1150.6,
+        "fuel_kg": 44.0
+      },
+      "ORD-2024-06-07-20": {
+        "delay_min": 336.8,
+        "fuel_kg": 312.0
+      },
+      "PHL-2024-07-20-22": {
+        "delay_min": 256.3,
         "fuel_kg": 0.0
       },
-      "SFO-2024-08-19-23": {
-        "delay_min": 645.4,
+      "PHL-2024-08-20-18": {
+        "delay_min": 229.3,
+        "fuel_kg": 12.0
+      },
+      "PHX-2024-06-23-22": {
+        "delay_min": 314.7,
+        "fuel_kg": 12.0
+      },
+      "PHX-2024-06-28-21": {
+        "delay_min": 218.4,
+        "fuel_kg": 52.0
+      },
+      "SAN-2024-07-21-20": {
+        "delay_min": 192.4,
+        "fuel_kg": 144.0
+      },
+      "SAN-2024-08-11-20": {
+        "delay_min": 346.0,
+        "fuel_kg": 52.0
+      },
+      "SEA-2024-06-14-23": {
+        "delay_min": 1012.8,
+        "fuel_kg": 12.0
+      },
+      "SEA-2024-06-16-01": {
+        "delay_min": 407.5,
         "fuel_kg": 0.0
       },
-      "SLC-2024-07-19-15": {
-        "delay_min": 1196.7,
+      "SFO-2024-07-28-23": {
+        "delay_min": 173.8,
+        "fuel_kg": 381.2
+      },
+      "SLC-2024-08-09-23": {
+        "delay_min": 421.2,
         "fuel_kg": 0.0
       },
-      "TPA-2024-08-03-20": {
-        "delay_min": 547.2,
+      "SLC-2024-08-23-20": {
+        "delay_min": 244.8,
+        "fuel_kg": 112.0
+      },
+      "TPA-2024-07-21-21": {
+        "delay_min": 243.0,
+        "fuel_kg": 0.0
+      },
+      "TPA-2024-08-05-19": {
+        "delay_min": 313.5,
         "fuel_kg": 0.0
       }
     }
@@ -1359,26 +1357,26 @@
     {
       "engine_version": "v4-airlines",
       "arm": "baseline",
-      "delay_min": 560.05,
-      "fuel_kg": 11.68,
-      "lap_share_pct": 0.0,
-      "taxi_wait_min": 12.671,
-      "pax_protected_pct": 19.528,
-      "overtime_min": 3.442,
+      "delay_min": 432.472,
+      "fuel_kg": 136.504,
+      "lap_share_pct": 6.0,
+      "taxi_wait_min": 13.261,
+      "pax_protected_pct": 47.326,
+      "overtime_min": 0.882,
       "consensus_rate_pct": null,
       "rule_violations_in_agreed_plans": null,
       "worse_than_status_quo_pct": null,
-      "n_feasible": 18
+      "n_feasible": 24
     },
     {
       "engine_version": "v4-airlines",
       "arm": "liquid/d1-ultra",
-      "delay_min": 571.462,
-      "fuel_kg": 244.88,
-      "lap_share_pct": 2.17,
-      "taxi_wait_min": 1.439,
-      "pax_protected_pct": 19.172,
-      "overtime_min": 0.176,
+      "delay_min": 457.488,
+      "fuel_kg": 406.526,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 3.272,
+      "pax_protected_pct": 46.434,
+      "overtime_min": 0.068,
       "consensus_rate_pct": 92.0,
       "rule_violations_in_agreed_plans": 0,
       "worse_than_status_quo_pct": 0.0,
@@ -1387,12 +1385,12 @@
     {
       "engine_version": "v4-airlines",
       "arm": "formula",
-      "delay_min": 561.57,
-      "fuel_kg": 194.08,
-      "lap_share_pct": 2.13,
-      "taxi_wait_min": 1.143,
-      "pax_protected_pct": 19.606,
-      "overtime_min": 0.864,
+      "delay_min": 457.846,
+      "fuel_kg": 427.166,
+      "lap_share_pct": 0.0,
+      "taxi_wait_min": 3.403,
+      "pax_protected_pct": 46.326,
+      "overtime_min": 0.068,
       "consensus_rate_pct": 94.0,
       "rule_violations_in_agreed_plans": 0,
       "worse_than_status_quo_pct": 0.0,
@@ -1404,29 +1402,29 @@
     "to": "v4-airlines",
     "prev_has_per_wave": true,
     "physics_delta": {
-      "delay_min": 233.36,
-      "fuel_kg": 10.32,
-      "lap_share_pct": 0.0,
-      "taxi_wait_min": 11.588,
-      "pax_protected_pct": -17.392,
-      "overtime_min": 1.694
+      "delay_min": 105.782,
+      "fuel_kg": 135.144,
+      "lap_share_pct": 6.0,
+      "taxi_wait_min": 12.178,
+      "pax_protected_pct": 10.406,
+      "overtime_min": -0.866
     },
     "negotiation_delta": {
       "liquid/d1-ultra": {
-        "delay_min": 11.412,
-        "fuel_kg": 233.2,
-        "lap_share_pct": 2.17,
-        "taxi_wait_min": -11.232,
-        "pax_protected_pct": -0.356,
-        "overtime_min": -3.266
+        "delay_min": 25.016,
+        "fuel_kg": 270.022,
+        "lap_share_pct": -6.0,
+        "taxi_wait_min": -9.989,
+        "pax_protected_pct": -0.892,
+        "overtime_min": -0.814
       },
       "formula": {
-        "delay_min": 1.52,
-        "fuel_kg": 182.4,
-        "lap_share_pct": 2.13,
-        "taxi_wait_min": -11.528,
-        "pax_protected_pct": 0.078,
-        "overtime_min": -2.578
+        "delay_min": 25.374,
+        "fuel_kg": 290.662,
+        "lap_share_pct": -6.0,
+        "taxi_wait_min": -9.858,
+        "pax_protected_pct": -1.0,
+        "overtime_min": -0.814
       }
     },
     "notes": [

@@ -1,5 +1,5 @@
 # Benchmark (50 waves, seed 7, source bts)
-Generated 2026-11-04T19:20:05+00:00
+Generated 2026-11-05T11:59:21+00:00
 
 Outcome means (delay, fuel, pax, overtime, rounds, agreement) are over waves that succeeded in every arm (50 of 50).
 
@@ -7,68 +7,66 @@ Outcome means (delay, fuel, pax, overtime, rounds, agreement) are over waves tha
 
 | arm | ok waves | consensus % | rounds | fallback % | violations | delay min | fuel kg | pax prot % | overtime min | agree w/ formula % | Brier | p50 ms | p95 ms | error % |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| status quo | - | - | - | - | - | 560.05 | 11.68 | 19.528 | 3.442 | - | - | - | - | - |
-| Optimiser (centralised beam search, no negotiation) | - | - | - | - | 0 | 577.548 | 229.84 | 19.432 | - | - | - | - | - | - |
-| liquid/d1-ultra | 50/50 | 92.0 | 1.56 | 8.0 | 0 | 571.462 | 244.88 | 19.172 | 0.176 | 62.0 | 0.0011 | 578.0 | 1194.0 | 0.0 |
-| formula | 50/50 | 94.0 | 1.56 | 6.0 | 0 | 561.57 | 194.08 | 19.606 | 0.864 | 100.0 | n/a | n/a | n/a | 0.0 |
+| status quo | - | - | - | - | - | 432.472 | 136.504 | 47.326 | 0.882 | - | - | - | - | - |
+| Optimiser (centralised beam search, no negotiation) | - | - | - | - | 0 | 500.956 | 630.984 | 43.192 | - | - | - | - | - | - |
+| liquid/d1-ultra | 50/50 | 92.0 | 1.76 | 8.0 | 0 | 457.488 | 406.526 | 46.434 | 0.068 | 58.0 | 0.0012 | 595.0 | 1098.7 | 0.0 |
+| formula | 50/50 | 94.0 | 1.86 | 6.0 | 0 | 457.846 | 427.166 | 46.326 | 0.068 | 100.0 | n/a | n/a | n/a | 0.0 |
 
-Status quo infeasible on 32 waves: ATL-2024-06-15-18, ATL-2024-07-24-19, AUS-2024-06-09-18, AUS-2024-07-28-20, BNA-2024-07-07-21, BNA-2024-07-15-18, BOS-2024-07-12-20, BWI-2024-07-12-19, BWI-2024-07-19-12, CLT-2024-08-14-15, DCA-2024-06-11-21, DCA-2024-06-22-16, DEN-2024-07-03-19, FLL-2024-07-10-20, FLL-2024-07-17-22, IAD-2024-07-10-21, IAH-2024-06-28-20, JFK-2024-07-06-16, LAS-2024-07-17-17, LAS-2024-07-27-19, LGA-2024-06-27-19, LGA-2024-08-07-22, MCO-2024-07-23-16, MDW-2024-06-06-00, MDW-2024-08-25-19, PHL-2024-06-11-19, SAN-2024-07-09-22, SAN-2024-07-24-19, SEA-2024-06-03-20, SEA-2024-06-27-16, SFO-2024-08-19-23, TPA-2024-08-03-20.
+Status quo infeasible on 26 waves: ATL-2024-06-17-21, AUS-2024-07-26-17, BOS-2024-06-29-17, CLT-2024-07-25-18, DCA-2024-08-08-15, DEN-2024-06-09-13, DEN-2024-08-16-22, DFW-2024-08-21-23, DTW-2024-06-03-10, EWR-2024-08-31-00, IAD-2024-07-18-22, JFK-2024-07-08-20, JFK-2024-08-30-08, LGA-2024-06-14-22, MCO-2024-07-18-16, MCO-2024-08-05-01, MSP-2024-07-23-20, PHL-2024-07-20-22, PHL-2024-08-20-18, PHX-2024-06-28-21, SAN-2024-07-21-20, SAN-2024-08-11-20, SEA-2024-06-14-23, SFO-2024-07-28-23, SLC-2024-08-23-20, TPA-2024-08-05-19.
 
-- liquid/d1-ultra vs status quo on 18 feasible-status-quo waves: delay 763.828 min vs 767.378 min
-- formula vs status quo on 18 feasible-status-quo waves: delay 763.728 min vs 767.378 min
+- liquid/d1-ultra vs status quo on 24 feasible-status-quo waves: delay 473.871 min vs 476.987 min
+- formula vs status quo on 24 feasible-status-quo waves: delay 474.375 min vs 476.987 min
 
-Optimiser reference (n=50, 50 feasible): mean delay 577.548 min, 95% CI [494.207, 660.889]; no models, no negotiation.
-- liquid/d1-ultra: delay 95% CI [488.108, 654.816]; gap to optimiser -6.086 min; share of optimiser gain over status quo 48.23% (n=14 waves with feasible status quo beaten by the optimiser).
-- formula: delay 95% CI [479.084, 644.056]; gap to optimiser -15.978 min; share of optimiser gain over status quo 49.58% (n=14 waves with feasible status quo beaten by the optimiser).
+Optimiser reference (n=50, 50 feasible): mean delay 500.956 min, 95% CI [404.677, 597.235]; no models, no negotiation.
+- liquid/d1-ultra: delay 95% CI [367.363, 547.613]; gap to optimiser -43.468 min; share of optimiser gain over status quo 41.9% (n=21 waves with feasible status quo beaten by the optimiser).
+- formula: delay 95% CI [367.843, 547.849]; gap to optimiser -43.11 min; share of optimiser gain over status quo 35.13% (n=21 waves with feasible status quo beaten by the optimiser).
 
 Status-quo diversions (mean): 0.0
 
 ## Selection
 
-**Winner:** formula (n = 50 waves: indicative, not statistically significant)
+**Winner:** liquid/d1-ultra (n = 50 waves: indicative, not statistically significant)
 
 Rule: best outcome among arms with error < 2%, p95 < 1 s and consensus >= 90%; tie -> lower Brier
 
-- Formula selected: the best model arm, liquid/d1-ultra, is worse than formula on delay (571.462 > 561.57 min) and not better on pax protected.
-- No arm met error < 2%, p95 < 1000 ms and consensus >= 90%: liquid/d1-ultra p95 1194.0 ms / error 0.0% / consensus 92.0%. Picked best outcome among eligible model arms: liquid/d1-ultra.
+- No arm met error < 2%, p95 < 1000 ms and consensus >= 90%: liquid/d1-ultra p95 1098.7 ms / error 0.0% / consensus 92.0%. Picked best outcome among eligible model arms: liquid/d1-ultra.
 - Brier is measured against the formula verdict (y = 1 if utility >= reservation), not ground truth.
 - cost_usd_per_wave = 0.0: output tokens free; input cost not measured.
 - fallback_rate_pct = % of waves ending in the deterministic solver; error_rate_pct = % of decisions answered after this arm failed (a failed wave counts as one error decision).
-- liquid/d1-ultra p95 all decisions incl. fallbacks: 1194.0 ms
-- liquid/d1-ultra missed p95 < 1000 ms: 1194.0 ms
+- liquid/d1-ultra p95 all decisions incl. fallbacks: 1098.7 ms
+- liquid/d1-ultra missed p95 < 1000 ms: 1098.7 ms
 - liquid/d1-ultra outcomes partly from solver fallback on 4/50 waves
-- Mean delay: liquid/d1-ultra 571.462 min vs formula 561.57 min vs status quo 560.05 min.
-- Outage test ran with the best eligible model arm liquid/d1-ultra (overall winner is formula).
+- Mean delay: liquid/d1-ultra 457.488 min vs formula 457.846 min vs status quo 432.472 min.
 
 ## Outage test
 
-Primary `invalid/model-does-not-exist` disabled on 20 wave(s): 20 resolved. Fallbacks used: {"liquid/d1-ultra-20261015": 202}
+Primary `invalid/model-does-not-exist` disabled on 20 wave(s): 20 resolved. Fallbacks used: {"liquid/d1-ultra-20261015": 234, "formula": 1}
 
 ## Ablation: safety engine off
 
-54.0% of formula-arm final plans are infeasible under the real rules when the engine is disabled.
+48.0% of formula-arm final plans are infeasible under the real rules when the engine is disabled.
 
 ## Failures
 
-- `SAN-2024-07-09-22` (liquid/d1-ultra): no consensus: deterministic solver fallback
-- `DEN-2024-07-03-19` (liquid/d1-ultra): no consensus: deterministic solver fallback
-- `ATL-2024-07-24-19` (liquid/d1-ultra): no consensus: deterministic solver fallback
-- `BNA-2024-07-15-18` (liquid/d1-ultra): no consensus: deterministic solver fallback
-- `SAN-2024-07-09-22` (formula): no consensus: deterministic solver fallback
-- `ATL-2024-07-24-19` (formula): no consensus: deterministic solver fallback
-- `BNA-2024-07-15-18` (formula): no consensus: deterministic solver fallback
+- `SAN-2024-07-21-20` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `ATL-2024-06-17-21` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `PHX-2024-06-28-21` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `SAN-2024-08-11-20` (liquid/d1-ultra): no consensus: deterministic solver fallback
+- `SAN-2024-07-21-20` (formula): no consensus: deterministic solver fallback
+- `SAN-2024-08-11-20` (formula): no consensus: deterministic solver fallback
+- `ATL-2024-06-17-21` (formula): no consensus: deterministic solver fallback
 
 ## Prompt budget (largest prompt of any kind)
 
 Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state + instructions + options) per arm, against the 32,000-char (8k-token) budget:
 
-- liquid/d1-ultra: 9,234 chars (within budget)
+- liquid/d1-ultra: 8,931 chars (within budget)
 - formula: 0 chars (within budget)
 
 ## Engine veto counts
 
-- liquid/d1-ultra: none
-- formula: none
+- liquid/d1-ultra: ATC-TAXI-CONFLICT 1, GND-GATE-FREE 1
+- formula: GND-GATE-FREE 1
 
 ## Engine history
 
@@ -99,23 +97,23 @@ Largest prompt sent by any Decider call (choice, score, noul, noul_batch: state 
 | v3-traffic | liquid/d1-ultra | 334.036 | 218.08 | 4.17 | 0.44 | 34.56 | 1.558 | 96.0 | 0 | 50 |
 | v3-traffic | baseten/elephant-1 | 334.386 | 238.4 | 4.17 | 0.414 | 34.24 | 1.8 | 96.0 | 0 | 50 |
 | v3-traffic | formula | 333.378 | 233.36 | 2.04 | 0.432 | 34.278 | 1.886 | 98.0 | 0 | 50 |
-| v4-airlines | baseline | 560.05 | 11.68 | 0.0 | 12.671 | 19.528 | 3.442 | n/a | n/a | 18 |
-| v4-airlines | liquid/d1-ultra | 571.462 | 244.88 | 2.17 | 1.439 | 19.172 | 0.176 | 92.0 | 0 | 50 |
-| v4-airlines | formula | 561.57 | 194.08 | 2.13 | 1.143 | 19.606 | 0.864 | 94.0 | 0 | 50 |
+| v4-airlines | baseline | 432.472 | 136.504 | 6.0 | 13.261 | 47.326 | 0.882 | n/a | n/a | 24 |
+| v4-airlines | liquid/d1-ultra | 457.488 | 406.526 | 0.0 | 3.272 | 46.434 | 0.068 | 92.0 | 0 | 50 |
+| v4-airlines | formula | 457.846 | 427.166 | 0.0 | 3.403 | 46.326 | 0.068 | 94.0 | 0 | 50 |
 
 ## Attribution
 
 Engine v3-traffic to v4-airlines. Better is: delay_min lower, fuel_kg lower, lap_share_pct lower, taxi_wait_min lower, pax_protected_pct higher, overtime_min lower.
 
 Note: wave sets differ (0 shared of 50 previous / 50 current): the physics delta mixes waves.
-Physics (status quo under the new engine minus under the old): delay_min +233.36, fuel_kg +10.32, lap_share_pct +0, taxi_wait_min +11.588, pax_protected_pct -17.392, overtime_min +1.694. The status quo is never renegotiated, so this only re-scores the unchanged status-quo plans; engine effects on negotiated plans (e.g. routed touchdown times) land in the Negotiation deltas below.
+Physics (status quo under the new engine minus under the old): delay_min +105.782, fuel_kg +135.144, lap_share_pct +6, taxi_wait_min +12.178, pax_protected_pct +10.406, overtime_min -0.866. The status quo is never renegotiated, so this only re-scores the unchanged status-quo plans; engine effects on negotiated plans (e.g. routed touchdown times) land in the Negotiation deltas below.
 
 Negotiation (arm minus status quo, same engine); headline claims come from these deltas:
 
-- liquid/d1-ultra: delay_min +11.412, fuel_kg +233.2, lap_share_pct +2.17, taxi_wait_min -11.232, pax_protected_pct -0.356, overtime_min -3.266
-- formula: delay_min +1.52, fuel_kg +182.4, lap_share_pct +2.13, taxi_wait_min -11.528, pax_protected_pct +0.078, overtime_min -2.578
+- liquid/d1-ultra: delay_min +25.016, fuel_kg +270.022, lap_share_pct -6, taxi_wait_min -9.989, pax_protected_pct -0.892, overtime_min -0.814
+- formula: delay_min +25.374, fuel_kg +290.662, lap_share_pct -6, taxi_wait_min -9.858, pax_protected_pct -1, overtime_min -0.814
 
-Headline: under engine v4-airlines, negotiation (formula) adds 1.52 min of mean delay against the status quo.
+Headline: under engine v4-airlines, negotiation (liquid/d1-ultra) adds 25.016 min of mean delay against the status quo.
 
 Regressions (0):
 
