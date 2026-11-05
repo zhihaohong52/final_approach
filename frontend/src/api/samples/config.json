@@ -24,18 +24,10 @@
       "benchmark_rank": 1
     },
     {
-      "id": "typesafe/jev-1.14",
-      "provider": "openrouter",
-      "label": "Typesafe jev-1.14",
-      "available": true,
-      "benchmark_rank": 2
-    },
-    {
       "id": "baseten/elephant-1",
       "provider": "openrouter",
       "label": "Baseten elephant-1",
-      "available": true,
-      "benchmark_rank": 3
+      "available": true
     },
     {
       "id": "typesafe/jev",
@@ -54,6 +46,7 @@
   "llm_available": true,
   "tracing": false,
   "replay_available": true,
+  "default_wave": "ATL-2024-06-07-20",
   "rule_ids": [
     "ATC-RWY-OPEN",
     "ATC-WAKE-SEP",
