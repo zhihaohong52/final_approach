@@ -17,11 +17,18 @@
   "default_mode": "decision",
   "models": [
     {
+      "id": "typesafe/jev-1.14",
+      "provider": "openrouter",
+      "label": "Typesafe jev-1.14",
+      "available": true,
+      "benchmark_rank": 1
+    },
+    {
       "id": "liquid/d1-ultra",
       "provider": "openrouter",
       "label": "Liquid d1-ultra",
       "available": true,
-      "benchmark_rank": 1
+      "benchmark_rank": 2
     },
     {
       "id": "baseten/elephant-1",
@@ -42,7 +49,7 @@
       "available": true
     }
   ],
-  "default_model": "liquid/d1-ultra",
+  "default_model": "typesafe/jev-1.14",
   "llm_available": true,
   "tracing": false,
   "replay_available": true,
