@@ -254,6 +254,12 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
     const lane = kind === "land" ? a.runway ?? "" : a.gate ?? "";
     setDrag({ cs: a.callsign, kind, x0: px, y0: py, slot0: a.slot_min ?? 0, lane0: lane, slot: a.slot_min ?? 0, lane, moved: false });
   };
+  // the scrubber, drawn in the axis of the drawing and again in the pinned axis that covers it once the rows scroll
+  const scrubber = (
+    <rect x={LABEL} y={0} width={W - LABEL - GUTTER} height={AXIS - 8} fill="transparent"
+      style={{ cursor: onTime ? "ew-resize" : undefined, pointerEvents: onTime ? "auto" : "none" }}
+      onPointerDown={(e) => { if (!onTime) return; e.stopPropagation(); capture(e.target as Element, e.pointerId); setScrub(true); const [px] = local(e); onTime(Math.round(START + (px - LABEL) / pxPerMin)); }} />
+  );
   const onMove = (e: React.PointerEvent) => {
     if (scrub && onTime) { const [px] = local(e); onTime(Math.round(START + (px - LABEL) / pxPerMin)); return; }
     if (!drag) return;
@@ -401,8 +407,7 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
         </defs>
 
         {/* axis: also the time scrubber */}
-        <rect x={LABEL} y={0} width={W - LABEL - GUTTER} height={AXIS - 8} fill="transparent" style={{ cursor: onTime ? "ew-resize" : undefined }}
-          onPointerDown={(e) => { if (!onTime) return; e.stopPropagation(); capture(e.target as Element, e.pointerId); setScrub(true); const [px] = local(e); onTime(Math.round(START + (px - LABEL) / pxPerMin)); }} />
+        {scrubber}
         {ticks.map((m) => (
           <g key={m} pointerEvents="none">
             <line x1={x(m)} x2={x(m)} y1={AXIS - 6} y2={H} stroke={m === 0 || m === 60 ? "var(--control)" : "var(--gridline)"} />
@@ -588,8 +593,9 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
           </g>
         )}
       </svg>
-      {/* the time axis stays on screen when the rows scroll under it; the real axis (and its scrubber) is the one in the drawing */}
-      <svg className="gantt gantt-axis" viewBox={`0 0 ${W} ${AXIS}`} width={cw} height={AXIS * k} aria-hidden="true">
+      {/* the time axis stays on screen when the rows scroll under it, with its own scrubber (the drawing's is under it) */}
+      <svg className="gantt gantt-axis" viewBox={`0 0 ${W} ${AXIS}`} width={cw} height={AXIS * k} aria-hidden="true"
+        onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setScrub(false)}>
         <rect width={W} height={AXIS} fill="var(--surface)" />
         <text className="group" x={0} y={AXIS - 6}>Runways</text>
         {ticks.map((m) => (
@@ -601,6 +607,7 @@ export function Gantt({ wave, plan, baseline, agreed, view, turn, rejection, ton
           </g>
         ))}
         {t != null && t >= START && t <= END && <path d={`M${x(t) - 5} ${AXIS - 12} h10 l-5 6z`} fill="var(--text)" />}
+        {scrubber}
       </svg>
     </div>
   );
