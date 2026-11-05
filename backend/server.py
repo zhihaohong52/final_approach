@@ -427,6 +427,11 @@ def _default_chain(live: bool = False) -> list[str]:
 
 
 def _client_ip(request: Request) -> str:
+    # onrender.com sits behind Cloudflare, which sets CF-Connecting-IP to the visitor (overwriting any sent);
+    # there the rightmost X-Forwarded-For is a Cloudflare edge address, a different one from request to request
+    for h in ("cf-connecting-ip", "true-client-ip"):
+        if (v := (request.headers.get(h) or "").strip()):
+            return v
     xff = request.headers.get("x-forwarded-for")  # rightmost = appended by our trusted proxy, not spoofable
     if xff and xff.split(",")[-1].strip():
         return xff.split(",")[-1].strip()

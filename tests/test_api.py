@@ -295,3 +295,12 @@ def test_config_names_the_first_recorded_2024_hour(monkeypatch):
     assert server._default_wave({"F2015-7", "LGA-2024-06-14-22", "ATL-2024-06-05-12"}) == "ATL-2024-06-05-12"
     assert server._default_wave({"F2015-9", "F2015-7"}) == "F2015-7"
     assert server._default_wave(set()) is None
+
+
+def test_cloudflare_visitor_header_wins_over_changing_edge_addresses(client):
+    body = {"wave_id": WID, "mode": "formulas", "stream": False}
+    for i in range(10):  # behind Cloudflare the rightmost X-Forwarded-For is a different edge each time
+        h = {"cf-connecting-ip": "5.5.5.5", "x-forwarded-for": f"5.5.5.5, 104.16.0.{i}"}
+        assert client.post("/api/negotiate-wave", json=body, headers=h).status_code == 200
+    h = {"cf-connecting-ip": "5.5.5.5", "x-forwarded-for": "5.5.5.5, 104.16.0.99"}
+    assert client.post("/api/negotiate-wave", json=body, headers=h).status_code == 429
