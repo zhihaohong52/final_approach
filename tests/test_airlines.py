@@ -27,9 +27,9 @@ def test_year_outside_single_range_falls_through():
 
 
 def test_groups_stress_waves():
-    w = build.build_wave("CLT-2024-07-29-19")
+    w = build.build_wave("CLT-2024-06-03-20")
     assert list(groups(w)) == ["AA"] and len(groups(w)["AA"]) == 5
-    assert list(groups(build.build_wave("ATL-2024-07-18-21"))) == ["DL"]
+    assert list(groups(build.build_wave("ATL-2024-07-05-21"))) == ["DL"]
 
 
 def test_wave_dict_has_airlines():

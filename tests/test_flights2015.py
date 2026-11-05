@@ -68,15 +68,22 @@ def test_taxi_in_ref_is_the_real_taxi_in_of_the_row():
 
 
 def test_queue_lands_at_real_wheels_on():
+    """Queue arrivals land at their real wheels-on (clock time, so compared modulo a day: a queue row may come from
+    the day before or after the window, and the split's wheels_on of a very late flight reads a day early).
+    F2015-7053 (ORD, 15 queued); F2015-270287's landing window has no queue left."""
+    from datetime import date
     from backend.datastore import files as _files
     from backend.wave import build
-    w = build.build_wave("F2015-270287")
+    w = build.build_wave("F2015-7053")
+    assert w.queue
     df = _files._dest_frame("ORD")
-    df = df[df["arr_date"] == w.window_start[:10]]
+    d0 = date.fromisoformat(w.window_start[:10])
     t0 = int(w.window_start[11:13]) * 60
     for q in w.queue:
-        r = df[(df["carrier"] + df["flight_no"].astype(str)) == q.callsign].iloc[0]
-        assert q.slot_min == pytest.approx(float(r["wheels_on"]) - t0, abs=0.01)
+        rows = df[(df["carrier"] + df["flight_no"].astype(str)) == q.callsign]
+        rows = rows[rows["arr_date"].map(lambda d: abs((date.fromisoformat(d) - d0).days) <= 1)]
+        gaps = [abs((q.slot_min - (float(r["wheels_on"]) - t0) + 720) % 1440 - 720) for _, r in rows.iterrows()]
+        assert gaps and min(gaps) == pytest.approx(0.0, abs=0.01), q.callsign
 
 
 def test_crew_floor_uses_routed_taxi():
@@ -112,11 +119,18 @@ def test_revision_delay_vs_schedule_is_in_block_delay():
 
 def test_queue_slot_survives_wheels_on_day_wrap():
     """split_flights2015 wraps wheels_on only when it is < sched - 720, so an arrival ~12 h late reads a day
-    early (UA1121 on F2015-37071 had slot T-696). The slot is sched + arr_delay - taxi_in (exact by BTS definition)."""
+    early (UA1121 on F2015-37071 had slot T-696). The slot is sched + arr_delay - taxi_in (exact by BTS definition).
+    AA165 (ORD, 20 May 20:36 sched, 1244 min late, TAXI_IN 11) lands 21 May 17:09: the split's wheels_on reads 1029
+    (17:09 on 20 May, a day early); on F2015-148025 (21 May 16:00) it is a queue arrival at T+69."""
+    from backend.datastore import files as _files
     from backend.wave import build
-    w = build.build_wave("F2015-37071")
-    q = next(x for x in w.queue if x.callsign == "UA1121")
-    assert q.slot_min == pytest.approx(744.0, abs=1.0)
+    w = build.build_wave("F2015-148025")
+    assert w.window_start == "2015-05-21T16:00:00"
+    q = next(x for x in w.queue if x.callsign == "AA165")
+    assert q.slot_min == pytest.approx(69.0, abs=1.0)
+    df = _files._dest_frame("ORD")
+    r = df[(df["arr_date"] == "2015-05-20") & (df["carrier"] == "AA") & (df["flight_no"] == 165)].iloc[0]
+    assert float(r["wheels_on"]) == pytest.approx(1029.0)       # the split's day-early reading the slot must not use
 
 
 def test_pilot_view_keeps_fuel_and_connections_with_time_base_labels():

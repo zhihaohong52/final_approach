@@ -1,5 +1,8 @@
-"""Airline agents on the two stress waves (formulas mode, both fairness variants): every airline flight ends at its
-status quo, or the airline objected in the log and the fallback reason names the flight (spec §5)."""
+"""Airline agents on two stress waves (formulas mode, both fairness variants): every airline flight ends at its
+status quo, or the airline objected in the log and the fallback reason names the flight (spec §5). Spec §5 named
+CLT-2024-07-29-19 and ATL-2024-07-18-21; since waves are the hour flights really land those hours are no longer
+single-airline, so the pins are the top single-airline CLT (AA) and ATL (DL) rows of index.csv with a feasible
+status quo on which both variants hold."""
 import pytest
 
 from backend.wave import build, fairness, rules
@@ -8,7 +11,7 @@ from backend.wave.fairness import VARIANTS
 from backend.wave.graph import negotiate_wave
 from backend.wave.utility import agent_utility
 
-WAVES = ("CLT-2024-07-29-19", "ATL-2024-07-18-21")
+WAVES = ("CLT-2024-06-03-20", "ATL-2024-07-05-21")
 
 
 @pytest.mark.parametrize("v", VARIANTS)
@@ -35,7 +38,10 @@ def test_stress_wave_airline_flights_not_worse(wid, v):
 # Status quo infeasible: the floor is the best feasible plan the airline has seen (preflight F8). The engine does not
 # return it, so the test rebuilds it from the plans in the log, with the engine's own helpers (agent_utility,
 # rules.feasible, fairness.breaches), then compares the final plan with it.
-BEST_SEEN_WAVES = ("F2015-77162", "F2015-292602")
+# ORD 18 Apr 2015 17:00 (AA, F9, UA) and LAX 2 Apr 2015 14:00 (AA, NK, OO, UA, WN): status quo infeasible, the floor
+# bites under both variants. Were F2015-77162 / F2015-292602: since waves centre on the real landing hour, 292602's
+# status quo is feasible and 77162's firm run has no objection.
+BEST_SEEN_WAVES = ("F2015-117373", "F2015-102378")
 
 
 def _objections(r):
@@ -98,32 +104,39 @@ def test_best_seen_floor_waves(wid, v):
     assert checked > 0
 
 
-def test_77162_firm_final_plan_is_the_escape_clause_plan():
-    """Known case: WN130 ends +0.5 min over its best-seen floor. Spec §3.4 allows that only when no CHECK-passed plan
-    meeting WN's floor is on the table when WN votes; WN rejected the plan on the floor in turn 2 and accepted it in
+# Known escape-clause case (was F2015-77162 / WN130 before waves centred on the real landing hour)
+ESCAPE_WAVE, ESCAPE_AIRLINE, ESCAPE_FLIGHT = "F2015-190078", "AA", "AA1693"
+
+
+def test_firm_final_plan_is_the_escape_clause_plan():
+    """Known case (ORD 20 Jun 2015 22:00, four airlines): AA1693 ends +6.7 min over its best-seen delay floor (and
+    +284 kg fuel). Spec §3.4 allows that only when no CHECK-passed plan
+    meeting AA's floor is on the table when AA votes; AA rejected the plan on the floor in turn 2 and accepted it in
     turn 3, when it was the only plan on the table."""
-    w = build.build_wave("F2015-77162")
+    ag = f"AIRLINE:{ESCAPE_AIRLINE}"
+    w = build.build_wave(ESCAPE_WAVE)
     r = negotiate_wave(w, "formulas", fairness="firm")
     fid = r["final_plan"]["id"]
     assert r["outcome"] == "consensus" and r["turns"] == 3
-    wn = [(m["round"], o) for m, o in _objections(r) if m["sender"] == "AIRLINE:WN"]
-    assert any(rnd == 2 and o["callsign"] == "WN130" and o["metric"] == "delay_min" and o["plan_id"] == fid
-               for rnd, o in wn)
-    t2 = [v for m in r["log"] if m["round"] == 2 and m["sender"] == "AIRLINE:WN" for v in m["body"]["votes"]
+    own = [(m["round"], o) for m, o in _objections(r) if m["sender"] == ag]
+    assert any(rnd == 2 and o["callsign"] == ESCAPE_FLIGHT and o["metric"] == "delay_min" and o["plan_id"] == fid
+               for rnd, o in own)
+    t2 = [v for m in r["log"] if m["round"] == 2 and m["sender"] == ag for v in m["body"]["votes"]
           if v["plan_id"] == fid]
     assert t2 and t2[0]["vote"] == "REJECT" and t2[0]["decided_by"] == "floor"
     t3 = [v for m in r["log"] if m["round"] == 3 and m["type"] == "AGENT_TURN" for v in m["body"]["votes"]]
     assert {v["plan_id"] for v in t3} == {fid}                   # nothing else on the table in turn 3
-    wn3 = [v for m in r["log"] if m["round"] == 3 and m["sender"] == "AIRLINE:WN" for v in m["body"]["votes"]]
-    assert wn3 and wn3[0]["vote"] == "ACCEPT" and wn3[0]["decided_by"] == "escape"   # on utility (escape), not floor
-    assert wn3[0]["floor"] and wn3[0]["floor"][0]["callsign"] == "WN130"
-    why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 3 and m["sender"] == "AIRLINE:WN"
+    own3 = [v for m in r["log"] if m["round"] == 3 and m["sender"] == ag for v in m["body"]["votes"]]
+    assert own3 and own3[0]["vote"] == "ACCEPT" and own3[0]["decided_by"] == "escape"   # on utility (escape), not floor
+    assert own3[0]["floor"] and own3[0]["floor"][0]["callsign"] == ESCAPE_FLIGHT
+    why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 3 and m["sender"] == ag
                and m["type"] == "AGENT_TURN")
     assert "rejects" not in why and "accepts it: no plan on the table meets its floor (escape clause)" in why, why
-    t2why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 2 and m["sender"] == "AIRLINE:WN"
+    t2why = next(m["body"]["rationale"] for m in r["log"] if m["round"] == 2 and m["sender"] == ag
                  and m["type"] == "AGENT_TURN")
     assert t2why.endswith("rejects the plan"), t2why                  # turn 2: a real floor REJECT
     plans = _plans(w, r)
     others = [p for pid, p in plans.items() if pid != fid and pid in {v["plan_id"] for v in t3}]
-    assert not any(not fairness.breaches(w, p, "WN", _floors(w, r, plans)["WN"], "firm", 3, source="best_seen")
+    assert not any(not fairness.breaches(w, p, ESCAPE_AIRLINE, _floors(w, r, plans)[ESCAPE_AIRLINE], "firm", 3,
+                                         source="best_seen")
                    for p in others)                              # no floor-meeting plan was on the table in turn 3

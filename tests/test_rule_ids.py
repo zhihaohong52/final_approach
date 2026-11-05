@@ -31,10 +31,11 @@ def test_config_serves_the_rule_ids():
 
 
 def test_f2015_summary_window_end_is_one_hour_after_start():
-    """Final review Minor 1: WaveSummary.window_end was the window start for flights.csv waves."""
+    """Final review Minor 1: WaveSummary.window_end was the window start for flights.csv waves. F2015-7053 opens at
+    19:00, the hour MQ3269 (12:35 sched, 419 min late) really lands."""
     w = build.build_wave("F2015-7053").to_dict()
     s = server._f2015_summary(w)
-    assert s["window_start"] == "2015-01-04T12:00:00" and s["window_end"] == "2015-01-04T13:00:00"
+    assert s["window_start"] == "2015-01-04T19:00:00" and s["window_end"] == "2015-01-04T20:00:00"
 
 
 def test_frontend_other_flight_keys_match_the_engine():

@@ -275,6 +275,6 @@ def test_benchmark_dataset_serves_the_labelled_report(client, tmp_path):
 
 def test_config_names_the_first_recorded_2024_hour(monkeypatch):
     from backend import server
-    assert server._default_wave({"F2015-7", "JFK-2024-08-30-12", "ATL-2024-07-18-21"}) == "ATL-2024-07-18-21"
+    assert server._default_wave({"F2015-7", "LGA-2024-06-14-22", "ATL-2024-06-05-12"}) == "ATL-2024-06-05-12"
     assert server._default_wave({"F2015-9", "F2015-7"}) == "F2015-7"
     assert server._default_wave(set()) is None

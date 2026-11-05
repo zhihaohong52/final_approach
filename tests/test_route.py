@@ -135,7 +135,7 @@ def test_wave_key_memoised_and_content_based():
 
 
 def test_queue_arrivals_carry_origin():
-    w = build.build_wave(ORD)
+    w = build.build_wave("F2015-7053")   # ORD, 15 queue arrivals (F2015-270287's landing window has none left)
     assert w.queue and all(q.origin for q in w.queue)
 
 
@@ -179,7 +179,7 @@ def test_clt_2015_routes_land_on_their_own_threshold():
 
 def test_star_ending_on_the_final_joins_there():
     # KMIA FROGZ5 runway 12 transition ends at PIANA, a step-down fix between IF GLRIA and FAF VEPCO
-    w = build.build_wave("F2015-58926")
+    w = build.build_wave("F2015-58424")   # MQ2910's own row (13:00 wave); F2015-58926 no longer holds it
     r = route.build_route(w, "MQ2910", "12")
     assert r.star == "FROGZ5" and not any(p.kind == "vector" for p in r.points)
     assert [p.fix for p in r.points].count("PIANA") == 1

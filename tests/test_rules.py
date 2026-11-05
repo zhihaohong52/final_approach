@@ -456,25 +456,28 @@ def test_earliest_eta_cites_route_for_far_runway():
     assert {"entry_fix", "t_entry"} <= set(c.evidence)
 
 
-def test_earliest_eta_regression_ord_mq3327_far_runway():
-    """Recorded ORD agreed plan: MQ3327 on 09L at its nominal (22R) slot T+301. Its 09L route is ~5.6 min
-    longer, so it lands before its 09L earliest. Before T14 the rule used ETA+SR+GD and passed it."""
-    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
-    # §6.1 (v3-time): the nominal slot is now the real wheels-on T+287 (301 - 14 min TAXI_IN), not T+301
-    nominal = w.flight("MQ3327").eta_earliest_min
-    assert nominal == pytest.approx(287.0)
-    q = p.with_assignment(replace(a, runway="09L", slot_min=nominal))
-    e = trajectory.earliest(w, "MQ3327", "09L")
+def test_earliest_eta_regression_ord_far_runway():
+    """Regression (recorded ORD agreed plan, MQ3327 on 09L at its nominal 22R slot): a flight on a far runway at its
+    nominal slot lands before that runway's earliest. Before T14 the rule used ETA+SR+GD and passed it. Since waves
+    centre on the real landing hour MQ3327 is no longer on this wave (08:00); OO5570 (DFW, nominal 22R) on 32R, ~6.2
+    min longer, has the same shape."""
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("OO5570")
+    assert a.runway == "22R"
+    # §6.1 (v3-time): the nominal slot is the real wheels-on T+97 (08:26 sched + 80 ARR_DELAY - 9 min TAXI_IN)
+    nominal = w.flight("OO5570").eta_earliest_min
+    assert nominal == pytest.approx(97.0)
+    q = p.with_assignment(replace(a, runway="32R", slot_min=nominal))
+    e = trajectory.earliest(w, "OO5570", "32R")
     assert e - nominal > 5.0
-    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "MQ3327")
-    assert not c.passed and "09L" in c.detail
+    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "OO5570")
+    assert not c.passed and "32R" in c.detail
     assert c.evidence["earliest_min"] == pytest.approx(e, abs=0.01)
     # metrics agree: no hold is drawn for a slot before the earliest landing
     from backend.wave.utility import metrics_map
-    assert metrics_map(w, q)["MQ3327"].hold_min == 0.0
-    # at its 09L earliest it passes
-    ok = p.with_assignment(replace(a, runway="09L", slot_min=e))
-    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "MQ3327").passed
+    assert metrics_map(w, q)["OO5570"].hold_min == 0.0
+    # at its 32R earliest it passes
+    ok = p.with_assignment(replace(a, runway="32R", slot_min=e))
+    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "OO5570").passed
 
 
 def test_fuel_reserve_counts_route_extra():
@@ -530,28 +533,30 @@ def test_fourteen_rules_on_ord():
 
 
 def test_earliest_eta_shorter_route_runway_passes_below_eta():
-    """Coordinator repro (T13 review): ORD MQ3327 22R -> 22L. The 22L route is shorter, so its earliest
-    landing is before the ETA; a slot there passes (the old ETA+SR+GD rule vetoed it)."""
-    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
-    e = trajectory.earliest(w, "MQ3327", "22L")
-    assert e < w.flight("MQ3327").eta_earliest_min - 1.0
+    """Coordinator repro (T13 review, then ORD MQ3327; OO5570 since waves centre on the real landing hour): 22R ->
+    22L. The 22L route is shorter, so its earliest landing is before the ETA; a slot there passes (the old ETA+SR+GD
+    rule vetoed it)."""
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("OO5570")
+    assert a.runway == "22R"
+    e = trajectory.earliest(w, "OO5570", "22L")
+    assert e < w.flight("OO5570").eta_earliest_min - 1.0
     q = p.with_assignment(replace(a, runway="22L", slot_min=e))
-    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "MQ3327")
+    c = _by(rules.check(w, q), "PLT-EARLIEST-ETA", "OO5570")
     assert c.passed and c.evidence["route_extra_min"] < 0
     late = p.with_assignment(replace(a, runway="22L", slot_min=e - 0.1))
-    assert not _by(rules.check(w, late), "PLT-EARLIEST-ETA", "MQ3327").passed
+    assert not _by(rules.check(w, late), "PLT-EARLIEST-ETA", "OO5570").passed
 
 
 def test_earliest_eta_float_tolerance():
     """A slot rounded by moves._r can sit ~5e-8 min below trajectory.earliest: within EPS_MIN it passes;
     1e-3 min early still fails."""
-    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("MQ3327")
-    e = trajectory.earliest(w, "MQ3327", "09L")
-    ok = p.with_assignment(replace(a, runway="09L", slot_min=e - 5e-8))
-    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "MQ3327").passed
-    assert _by(rules.check(w, ok), "PLT-FUEL-RESERVE", "MQ3327").passed
-    bad = p.with_assignment(replace(a, runway="09L", slot_min=e - 1e-3))
-    assert not _by(rules.check(w, bad), "PLT-EARLIEST-ETA", "MQ3327").passed
+    w = build.build_wave(ORD); p = fcfs_plan(w); a = p.get("OO5570")   # far runway 32R (was MQ3327 on 09L)
+    e = trajectory.earliest(w, "OO5570", "32R")
+    ok = p.with_assignment(replace(a, runway="32R", slot_min=e - 5e-8))
+    assert _by(rules.check(w, ok), "PLT-EARLIEST-ETA", "OO5570").passed
+    assert _by(rules.check(w, ok), "PLT-FUEL-RESERVE", "OO5570").passed
+    bad = p.with_assignment(replace(a, runway="32R", slot_min=e - 1e-3))
+    assert not _by(rules.check(w, bad), "PLT-EARLIEST-ETA", "OO5570").passed
 
 
 def test_fuel_reserve_float_tolerance():
@@ -773,7 +778,7 @@ def test_stack_labels_come_from_the_trajectory_set():
     """Parked T14: ATC-HOLD-STACK labels and TrajectorySet.stack_violations use one key set."""
     from backend.wave import route
     w = build.build_wave(ORD); p = fcfs_plan(w)
-    for a in [x for x in p.assignments if x.action == "land"][:4]:      # 15 min late: two laps each, several stacks
+    for a in [x for x in p.assignments if x.action == "land"]:      # 15 min late: two laps each, several stacks
         p = p.with_assignment(replace(a, slot_min=a.slot_min + 15))
     ts = trajectory.build(w, p)
     rs = route.routes_for_wave(w)

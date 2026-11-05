@@ -349,7 +349,7 @@ def test_shorter_route_with_no_hold_burns_no_fuel():
     from backend.wave.utility import metrics_map
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
-    a = p.get("MQ3327")
+    a = p.get("OO5570")   # was MQ3327, no longer on this wave since waves centre on the real landing hour
     assert a.runway == "22R"
     p2 = _reslot(p, a, runway="22L", slot_min=trajectory.earliest(w, a.callsign, "22L"))
     m = metrics_map(w, p2)[a.callsign]
@@ -362,9 +362,9 @@ def test_change_runway_to_a_nearer_runway_floors_on_the_new_runway():
     from backend.wave.model import Move
     w = build.build_wave(ORD)
     p = fcfs_plan(w)
-    a = p.get("MQ3327")
-    far = trajectory.earliest(w, a.callsign, "09L")
-    p_far = _reslot(p, a, runway="09L", slot_min=far)
+    a = p.get("OO5570")   # far runway 32R (was MQ3327 on 09L, no longer on this wave)
+    far = trajectory.earliest(w, a.callsign, "32R")
+    p_far = _reslot(p, a, runway="32R", slot_min=far)
     new = moves.apply(w, p_far, Move("x", "ATC", "change_runway", [a.callsign], {"runway": "22L"}, "x"))
     slot = new.get(a.callsign).slot_min
     assert trajectory.earliest(w, a.callsign, "22L") - 1e-9 <= slot < far

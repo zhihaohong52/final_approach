@@ -12,7 +12,9 @@ from backend.wave.graph import negotiate_wave
 from tests.fixtures import make_wave
 from tests.test_graph import _assert_valid, _check_order, _hard_wave
 
-CLT, ATL = "CLT-2024-07-29-19", "ATL-2024-07-18-21"
+# single-airline 2024 hours with a feasible status quo: the top CLT (AA only) and ATL (DL only) rows of index.csv
+# whose stress checks hold (tests/test_stress_airlines.py WAVES)
+CLT, ATL = "CLT-2024-06-03-20", "ATL-2024-07-05-21"
 
 
 @pytest.fixture(autouse=True)
@@ -195,7 +197,7 @@ def test_objections_list_other_agents_plans(clt_firm):
 
 
 def test_floor_plan_stays_incumbent(clt_firm):
-    """CLT under firm: AA floor-rejects ATC's plan (two AA flights +17 min) and ATC rejects the status quo in turn 1,
+    """CLT under firm: AA floor-rejects ATC's plan (AA2843 +3.8 min) and ATC rejects the status quo in turn 1,
     so the status quo, which meets AA's floor, must stay the incumbent for turn 2 (not ATC's higher max-min plan)."""
     w, r = clt_firm
     sq = baseline.status_quo(w)
