@@ -262,8 +262,8 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     airborne = dep_min < -30
 
     cands = [g for g in gates if not g.remote and g.size == size] or [g for g in gates if not g.remote]
-    pref = [g for g in cands if g.id not in used and B._gate_free(g, sched_min)] \
-        or [g for g in cands if B._gate_free(g, sched_min)] or cands
+    pref = [g for g in cands if g.id not in used and B._gate_free(g, eta_earliest + taxi_ref, eta_earliest + taxi_ref + lim.min_turnaround_min)] \
+        or [g for g in cands if B._gate_free(g, eta_earliest + taxi_ref, eta_earliest + taxi_ref + lim.min_turnaround_min)] or cands
     gate = pref[rng.randrange(len(pref))].id
     used.add(gate)
 

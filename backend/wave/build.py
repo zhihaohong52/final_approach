@@ -450,8 +450,10 @@ def taxi_in_ref_row(iata: str, r: dict) -> tuple[float, float | None, str]:
 TIME_BASE_NOTE = "scheduled times are gate times (BTS); landing = wheels-on"
 
 
-def _gate_free(g: Gate, t: float) -> bool:
-    return all(not (b["from_min"] <= t <= b["to_min"]) for b in g.busy)
+def _gate_free(g: Gate, t: float, until: float | None = None) -> bool:
+    """No simulated occupation of `g` overlaps [t, until] (the instant t when `until` is None)."""
+    u = t if until is None else until
+    return all(not (b["from_min"] <= u and t <= b["to_min"]) for b in g.busy)
 
 
 # ---------------------------------------------------------------- flights
@@ -494,7 +496,7 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
 
     # gate: seeded pick of a size-compatible, preferably free and unused gate
     cands = [g for g in gates if not g.remote and g.size == size] or [g for g in gates if not g.remote]
-    pref = [g for g in cands if g.id not in used and _gate_free(g, sched_min)] \
+    pref = [g for g in cands if g.id not in used and _gate_free(g, eta_earliest + taxi_ref, eta_earliest + taxi_ref + TURNAROUND_MIN)] \
         or [g for g in cands if g.id not in used] or cands
     gate = pref[rng.randrange(len(pref))].id
     used.add(gate)
@@ -538,7 +540,11 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> l
     if not open_rw:
         return []
     hw = {x.runway: x.headwind_kt - x.crosswind_kt for x in rwinds}
-    best = sorted(open_rw, key=lambda r: -hw.get(r.id, 0))[:2]
+    ranked = sorted(open_rw, key=lambda r: (-hw.get(r.id, 0), r.id))
+    # a busy hub lands on the parallels of its best-wind end (never a crossing or opposite end) and keeps one
+    # parallel free for departures (`ground_traffic.departure_mode`), within its active runway count
+    par = [r for r in ranked if abs((r.heading_true - ranked[0].heading_true + 180) % 360 - 180) <= 10]
+    best = par[:max(1, min(len(par) - 1, constraints.airport(iata).active_runways - 1))]
     out = []
     for i, r in enumerate(w.to_dict("records")):
         ac = _aircraft_table().get(r["tail"]) if isinstance(r.get("tail"), str) else None
