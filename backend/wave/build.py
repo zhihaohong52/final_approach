@@ -208,42 +208,72 @@ def _nearest_alternate(iata: str) -> tuple[str, float]:
 
 # ---------------------------------------------------------------- window selection
 
+REDEYE_MIN = 360   # a scheduled arrival clock this far before the departure clock is the next day (not a time zone)
+
+
+def landing_times(df: pd.DataFrame, iata: str) -> pd.DataFrame:
+    """Adds `sched_abs`, `dep_abs` and `land_abs`: minutes from midnight of the row's BTS date (its departure date).
+    The scheduled arrival moves to the next day for a red-eye; landing = scheduled gate arrival + ARR_DELAY - taxi-in,
+    with the row's TAXI_IN, else the airport's reference (`taxi_in_ref_row`). NaN landing: no ARR_DELAY (diverted).
+    Waves are grouped by `land_abs`, when the aircraft really arrive, not by schedule."""
+    sarr = df["sched_arr"].map(_hhmm_min).astype(float)
+    sdep = pd.to_numeric(df["sched_dep"], errors="coerce").map(lambda v: float(_hhmm_min(v)) if v == v else float("nan"))
+    sched = sarr + 1440.0 * ((sdep - sarr) > REDEYE_MIN)
+    if "taxi_in" in df.columns:
+        taxi = pd.to_numeric(df["taxi_in"], errors="coerce")
+    else:
+        taxi = pd.Series(float("nan"), index=df.index)
+    taxi = taxi.fillna(taxi_in_ref_row(iata, {})[0])
+    return df.assign(sched_abs=sched, dep_abs=sdep,
+                     land_abs=sched + pd.to_numeric(df["arr_delay"], errors="coerce").astype(float) - taxi)
+
+
 def _window_rows(iata: str, date: str, hour: int) -> pd.DataFrame:
-    """Non-cancelled arrivals at `iata` scheduled inside [hour:00, hour+1:00) local,
-    one row per callsign, with `callsign`, `sched_min` (minutes vs T0) columns."""
-    day = get_store().arrivals_day(iata, date)
-    if day is None:
-        return pd.DataFrame(columns=_ARR_COLS + ["callsign", "sched_min"])
-    w = day[~day["cancelled"]]
-    mins = w["sched_arr"].map(_hhmm_min)
-    w = w[(mins >= hour * 60) & (mins < hour * 60 + 60)].copy()
+    """Non-cancelled arrivals at `iata` that land inside [hour:00, hour+1:00) local on `date` (from the BTS rows of
+    `date` and the day before: late and red-eye flights land a day after they depart), one row per callsign, with
+    `callsign`, `sched_min`, `dep_min` and `land_min` (minutes vs T0; a late flight's schedule is hours before T0)."""
+    d0 = datetime.strptime(date, "%Y-%m-%d")
+    parts = []
+    for k in (-1, 0):
+        day = get_store().arrivals_day(iata, (d0 + timedelta(days=k)).strftime("%Y-%m-%d"))
+        if day is not None:
+            parts.append(day[~day["cancelled"]].assign(_off=1440.0 * k))
+    if not parts:
+        return pd.DataFrame(columns=_ARR_COLS + ["callsign", "sched_min", "dep_min", "land_min"])
+    w = landing_times(pd.concat(parts), iata)
+    t0 = hour * 60.0
+    land = w["land_abs"] + w["_off"]
+    w = w[(land >= t0) & (land < t0 + 60)].copy()
     for c in ("carrier", "origin", "tail", "date"):  # small slice: plain str, not category
         w[c] = w[c].astype(object)
     for c in ("weather_delay", "nas_delay", "late_aircraft_delay", "carrier_delay", "arr_delay", "sched_dep"):
         w[c] = w[c].astype("float64")
-    w["sched_min"] = (mins[w.index] - hour * 60).astype(float)
+    w["sched_min"] = w["sched_abs"] + w["_off"] - t0
+    w["dep_min"] = w["dep_abs"] + w["_off"] - t0
+    w["land_min"] = w["land_abs"] + w["_off"] - t0
     w["callsign"] = w["carrier"] + w["flight_no"].astype(int).astype(str)
-    return w.sort_values("sched_min").drop_duplicates("callsign")
+    return w.drop(columns=["_off", "sched_abs", "dep_abs", "land_abs"]).sort_values("land_min") \
+            .drop_duplicates("callsign")
+
+
+NEGOTIATED = 5   # spec asks 3-5 negotiated flights; all five land within minutes of each other
 
 
 def _select(w: pd.DataFrame, disrupted_cs: set[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split window rows into (negotiated, queue). Disrupted flights first (max 5, largest
-    weather+late delay); pad with the nearest-by-sched_arr non-disrupted flights to 4
-    (spec asks 3-5; 4 gives the negotiation something to trade) when available."""
+    """Split window rows into (negotiated, queue): the most delayed disrupted flight (the focus) and the flights
+    landing nearest to it, disrupted or not, NEGOTIATED in all, so the negotiation sequences aircraft that really
+    meet on final. Without a disrupted flight, the flights nearest the middle of the hour."""
     if w.empty:
         return w, w
-    dis = w[w["callsign"].isin(disrupted_cs)].copy()
-    if len(dis) > 5:
-        dis = dis.assign(_s=dis["weather_delay"] + dis["late_aircraft_delay"]) \
-                 .sort_values("_s", ascending=False, kind="stable").head(5).drop(columns="_s")
-    chosen = list(dis["callsign"])
-    others = w[~w["callsign"].isin(chosen)]
-    centre = dis["sched_min"].median() if len(dis) else 30.0
-    target = max(len(chosen), min(4, len(w)))
-    pad = others.assign(_d=(others["sched_min"] - centre).abs()).sort_values("_d", kind="stable")
-    chosen += list(pad["callsign"].head(max(0, target - len(chosen))))
-    neg = w[w["callsign"].isin(chosen)]
-    return neg, w[~w["callsign"].isin(chosen)]
+    key = "land_min" if "land_min" in w.columns else "sched_min"
+    dis = w[w["callsign"].isin(disrupted_cs)]
+    if len(dis):
+        centre = float(dis.sort_values("arr_delay", ascending=False, kind="stable")[key].iloc[0])
+    else:
+        centre = 30.0
+    near = w.assign(_d=(w[key] - centre).abs()).sort_values(["_d", "callsign"], kind="stable")
+    chosen = set(near["callsign"].head(NEGOTIATED))
+    return w[w["callsign"].isin(chosen)], w[~w["callsign"].isin(chosen)]
 
 
 # ---------------------------------------------------------------- weather
@@ -451,16 +481,14 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
     # Earliest feasible landing: the BTS-attributed delay (late inbound aircraft, carrier,
     # weather, NAS) is already baked into when the aircraft can arrive. The negotiation absorbs
     # the remaining airport-side congestion (holding, sequencing, diversion). §6.1: BTS scheduled
-    # arrival is a gate (in-block) time, so touchdown is taxi-in earlier.
-    eta_earliest = sched_min + late + carr + wx + nas - taxi_ref
+    # arrival is a gate (in-block) time, so touchdown is taxi-in earlier. An early flight (negative ARR_DELAY, no
+    # attributed delay) could land as early as it really did.
+    eta_earliest = sched_min + min(late + carr + wx + nas, float(r["arr_delay"])) - taxi_ref
 
-    arr_abs = _hhmm_min(r["sched_arr"])
-    dep_hhmm = _num(r.get("sched_dep"))
+    dep_min = _num(r.get("dep_min"))   # T0-relative scheduled departure (`_window_rows`)
     airborne = False
     duty_end = None   # flight crew duty end (13 h from sched dep - 60 min); None when sched_dep is unknown
-    if dep_hhmm is not None:
-        dep_abs = _hhmm_min(dep_hhmm)
-        dep_min = dep_abs - hour * 60 - (1440 if dep_abs > arr_abs else 0)
+    if dep_min is not None:
         airborne = dep_min < -30
         duty_end = dep_min - 60 + constraints.RULES["crew_duty_h"] * 60
 
@@ -493,7 +521,7 @@ def _build_flight(wave_id: str, iata: str, date: str, hour: int, r: dict, disrup
     return WaveFlight(
         callsign=cs, carrier=r["carrier"], airline=_airlines().get(r["carrier"], r["carrier"]),
         flight_no=int(r["flight_no"]), tail=tail, aircraft_type=atype, wake=wake, gate_size=size,
-        origin=str(r["origin"]), sched_arr=f"{date}T{hour:02d}:{int(sched_min):02d}:00",
+        origin=str(r["origin"]), sched_arr=t0_iso(date, hour, sched_min),
         sched_min=sched_min, eta_earliest_min=eta_earliest, airborne=airborne, disrupted=disrupted,
         delays={"weather": float(r["weather_delay"]), "late_aircraft": late, "nas": float(r["nas_delay"]),
                 "carrier": carr, "arr_delay": float(r["arr_delay"])},
@@ -522,11 +550,19 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> l
     return out
 
 
+def t0_iso(date: str, hour: int, minutes: float) -> str:
+    """Local ISO time `minutes` after T0 = `date` `hour`:00 (negative: before T0, possibly an earlier day)."""
+    t = datetime.strptime(date, "%Y-%m-%d") + timedelta(hours=hour, minutes=round(minutes))
+    return t.strftime("%Y-%m-%dT%H:%M:00")
+
+
 def _queue_slot(iata: str, r: dict) -> float:
     """T0-relative landing of a fixed-traffic arrival. BTS: ARRIVAL_TIME = scheduled + ARRIVAL_DELAY and
     WHEELS_ON = ARRIVAL_TIME - TAXI_IN, so `sched_min + arr_delay - taxi_in` is the real wheels-on with no clock
-    ambiguity (the split's `wheels_on` reads a day early for arrivals ~12 h late). Then `wheels_min`, then
-    `sched_min - taxi_in_ref`."""
+    ambiguity (the split's `wheels_on` reads a day early for arrivals ~12 h late). Then `land_min` (the same with
+    the airport's taxi-in reference, `_window_rows`), then `wheels_min`, then `sched_min - taxi_in_ref`."""
+    if _num(r.get("land_min")) is not None and _num(r.get("taxi_in")) is None:
+        return float(r["land_min"])
     delay, taxi = _num(r.get("arr_delay")), _num(r.get("taxi_in"))
     if delay is not None and taxi is not None:
         return float(r["sched_min"]) + delay - taxi

@@ -3,6 +3,9 @@
 Usage: python3 scripts/fetch_bts.py
 Writes data/waves/arrivals.csv.gz and data/waves/index.csv.
 
+       python3 scripts/fetch_bts.py --index
+Rebuilds data/waves/index.csv from the arrivals already in data/waves/arrivals.csv.gz (no download).
+
        python3 scripts/fetch_bts.py --movements2015
 Reads the 12 PREZIP months of 2015 (cached in .cache/bts/2015_M/) and writes one file per airport,
 data/ref/movements2015/{IATA}.csv.gz, with every arrival and departure there (columns MOVE_COLS), for the
@@ -62,10 +65,21 @@ def load_month(zpath: Path) -> pd.DataFrame:
 
 
 def build_index(df: pd.DataFrame) -> pd.DataFrame:
-    d = df[df["cancelled"] == 0].copy()
-    d["hour"] = (d["sched_arr"] // 100) % 24
+    """One wave per (airport, local date, hour) in which at least 3 arrivals really land (scheduled gate arrival +
+    ARR_DELAY - taxi-in, `build.landing_times`) and at least one of them is disrupted. A late flight is in the
+    hour it lands, not the hour it was scheduled, so a wave is the traffic it actually meets. Landings more than a
+    day after the BTS date are left out (the wave builder reads that date and the day before)."""
+    from backend.wave.build import landing_times
+    d = df[df["cancelled"] == 0]
+    d = pd.concat([landing_times(g, ap) for ap, g in d.groupby("dest")]).dropna(subset=["land_abs"])
+    off = (d["land_abs"] // 1440).astype(int)
+    d = d[off.isin([0, 1])].copy()
+    off = off[d.index]
+    d["date"] = (pd.to_datetime(d["date"]) + pd.to_timedelta(off, unit="D")).dt.strftime("%Y-%m-%d")
+    d["hour"] = ((d["land_abs"] - 1440 * off) // 60).astype(int)
     d["disrupted"] = (d["weather_delay"] > 15) | (d["late_aircraft_delay"] > 20)
-    d["fid"] = d["carrier"].astype(str) + d["flight_no"].astype(str)
+    d["fid"] = d["carrier"].astype(str) + d["flight_no"].astype("Int64").astype(str)
+    d = d[d["date"].str[:7].isin(MONTHS)]
     rows = []
     for (ap, date, hour), g in d.groupby(["dest", "date", "hour"]):
         n = len(g)
@@ -197,6 +211,12 @@ def main() -> None:
     ap.add_argument("--movements2024", action="store_true", help="write data/ref/movements2024/{IATA}.csv.gz")
     if ap.parse_known_args()[0].movements2024:
         movements2024()
+        return
+    ap.add_argument("--index", action="store_true", help="rebuild data/waves/index.csv from arrivals.csv.gz")
+    if ap.parse_known_args()[0].index:
+        idx = build_index(pd.read_csv(OUT / "arrivals.csv.gz", low_memory=False))
+        idx.to_csv(OUT / "index.csv", index=False)
+        print(f"waves={len(idx)}")
         return
     ap.add_argument("--months", nargs="+", default=MONTHS,
                     help="YYYY-MM months to include (default: hubs.MONTHS)")

@@ -258,9 +258,7 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     # as build.py; §6.1: the scheduled arrival is a gate time, so for a real row this is the real wheels-on
     eta_earliest = sched_min + late + carr + float(r["weather_delay"]) + float(r["nas_delay"]) - taxi_ref
 
-    arr_abs = B._hhmm_min(r["sched_arr"])
-    dep_abs = B._hhmm_min(r["sched_dep"])
-    dep_min = dep_abs - hour * 60 - (1440 if dep_abs > arr_abs else 0)
+    dep_min = float(r["dep_min"])   # T0-relative scheduled departure (`_build_from_row`)
     airborne = dep_min < -30
 
     cands = [g for g in gates if not g.remote and g.size == size] or [g for g in gates if not g.remote]
@@ -294,7 +292,7 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
     return WaveFlight(
         callsign=cs, carrier=r["carrier"], airline=B._airlines().get(r["carrier"], r["carrier"]),
         flight_no=int(r["flight_no"]), tail=tail, aircraft_type=atype, wake=wake, gate_size=size,
-        origin=str(r["origin"]), sched_arr=_sched_iso(date, B._hhmm_min(r["sched_arr"])),
+        origin=str(r["origin"]), sched_arr=_sched_iso(r["arr_date"], B._hhmm_min(r["sched_arr"])),
         sched_min=sched_min, eta_earliest_min=eta_earliest, airborne=airborne, disrupted=disrupted,
         delays={"weather": float(r["weather_delay"]), "late_aircraft": late, "nas": float(r["nas_delay"]),
                 "carrier": carr, "arr_delay": float(r["arr_delay"])},
@@ -304,6 +302,16 @@ def _flight(row_id: int, iata: str, date: str, hour: int, r: dict, disrupted: bo
 
 
 # ---------------------------------------------------------------- public API
+
+def _focus_taxi(row: dict, iata: str, date: str) -> float:
+    """The row's real TAXI_IN from the per-airport split (the index has none), else the airport reference."""
+    df = get_store().flights2015_day(iata, date)
+    if df is not None:
+        hit = df.loc[df["row_id"] == int(row["row_id"]), "taxi_in"]
+        if len(hit) and pd.notna(hit.iloc[0]):
+            return float(hit.iloc[0])
+    return B.taxi_in_ref_row(iata, {})[0]
+
 
 def _sched_iso(date: str, minutes_abs: int) -> str:
     return f"{date}T{minutes_abs // 60:02d}:{minutes_abs % 60:02d}:00"
@@ -326,30 +334,45 @@ def _build_from_row(row_id: int) -> Wave:
     iata, date = row["dest"], row["arr_date"]
     if not _supported(iata):
         raise KeyError("unsupported airport")
-    df = get_store().flights2015_day(iata, date)
-    if df is None:
+    # The wave is the hour the row's flight really lands in (scheduled gate arrival + ARR_DELAY - TAXI_IN, minutes
+    # from midnight of its arrival date), with the flights.csv rows landing nearest to it, from that day and the
+    # days either side (a late flight lands after midnight; an early one before).
+    focus_land = B._hhmm_min(row["sched_arr"]) + float(row["arr_delay"]) - _focus_taxi(row, iata, date)
+    t0_day = datetime.strptime(date, "%Y-%m-%d") + timedelta(days=int(focus_land // 1440))
+    hour = int(focus_land % 1440) // 60
+    t0 = (t0_day - datetime.strptime(date, "%Y-%m-%d")).days * 1440.0 + hour * 60   # T0, minutes from `date`
+    parts = []
+    for k in (-1, 0, 1):
+        d = get_store().flights2015_day(iata, (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=k)).strftime("%Y-%m-%d"))
+        if d is not None:
+            parts.append(d[d["cancelled"] == 0].assign(_off=1440.0 * k))
+    if not parts:
         raise KeyError(iata)
-    df = df[df["cancelled"] == 0]
-    focus_abs = B._hhmm_min(row["sched_arr"])
-    hour = focus_abs // 60
-    mins = df["sched_arr"].map(B._hhmm_min)
-    pool = df[(mins >= hour * 60) & (mins < hour * 60 + 60)]
-    for span in (60, 120, 240):   # sparse hour (flights.csv is filtered to delayed flights): widen around focus
+    df = pd.concat(parts)
+    sarr = df["sched_arr"].map(B._hhmm_min).astype(float)
+    sdep = df["sched_dep"].map(B._hhmm_min).astype(float)
+    df = df.assign(sched_min=sarr + df["_off"] - t0,
+                   dep_min=sdep - 1440.0 * (sdep > sarr) + df["_off"] - t0,
+                   land_min=sarr + df["arr_delay"].astype(float)
+                   - df["taxi_in"].astype(float).fillna(B.taxi_in_ref_row(iata, {})[0]) + df["_off"] - t0)
+    focus_min = focus_land - t0
+    df = df[(df["diverted"] == 0) | (df["row_id"] == int(row_id))]
+    pool = df[(df["land_min"] - focus_min).abs() <= 30]
+    for span in (60, 120, 240):   # sparse (flights.csv is filtered to delayed flights): widen around the focus
         if (pool["row_id"] != int(row_id)).sum() >= 3:
             break
-        pool = df[(mins - focus_abs).abs() <= span]
-    pool = pool[(pool["diverted"] == 0) | (pool["row_id"] == int(row_id))].copy()
-    for c in ("carrier", "origin", "tail", "date"):
+        pool = df[(df["land_min"] - focus_min).abs() <= span]
+    pool = pool.copy()
+    for c in ("carrier", "origin", "tail", "date", "arr_date"):
         pool[c] = pool[c].astype(object)
-    pool["sched_min"] = (pool["sched_arr"].map(B._hhmm_min) - hour * 60).astype(float)
-    pool["wheels_min"] = pool["wheels_on"].astype(float) - hour * 60   # §6.1: queue lands at the real wheels-on
+    pool["wheels_min"] = pool["land_min"]   # §6.1: queue lands at the real wheels-on
     pool["callsign"] = pool["carrier"] + pool["flight_no"].astype(int).astype(str)
     pool["_focus"] = (pool["row_id"] == int(row_id))
-    focus_min = float(focus_abs - hour * 60)
-    pool["_d"] = (pool["sched_min"] - focus_min).abs()
+    pool["_d"] = (pool["land_min"] - focus_min).abs()
     pool = pool.sort_values(["_focus", "_d", "row_id"], ascending=[False, True, True], kind="stable") \
                .drop_duplicates("callsign")
-    neg, rest = pool.head(4), pool.iloc[4:].sort_values("sched_min").head(15)
+    neg, rest = pool.head(B.NEGOTIATED), pool.iloc[B.NEGOTIATED:].head(15)
+    date = t0_day.strftime("%Y-%m-%d")
     focus_cs = _callsign(row["carrier"], row["flight_no"])
 
     lim = constraints.airport(iata)
@@ -367,7 +390,7 @@ def _build_from_row(row_id: int) -> Wave:
     airport = Airport(iata=iata, icao=_icao(iata), name=str(ap.get("AIRPORT", iata)),
                       lat=coords[0], lon=coords[1], runways=runways)
     surf, floor = B._surface_inputs(wid, airport, f"{date}T{hour:02d}:00:00", metar, rwinds, gates)
-    neg = neg.sort_values("sched_min", kind="stable")
+    neg = neg.sort_values("land_min", kind="stable")
     flights = [_flight(int(row_id), iata, date, hour, r, r["callsign"] == focus_cs, gates, used, lim, taxi_floor=floor)
                for r in neg.to_dict("records")]
     limits = (f"{lim.size_class}: {lim.active_runways} runways, {lim.gates} gates (wave uses "
