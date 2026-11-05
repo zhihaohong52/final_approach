@@ -67,6 +67,23 @@ def test_rate_limit_429(client):
     assert r.json()["error"]["code"] == "rate_limited" and r.json()["retry_after_s"] > 0
 
 
+def test_daily_cap_is_shared_by_all_visitors(client, monkeypatch):
+    monkeypatch.setattr(server, "DAILY_LIVE_MAX", 3)
+    body = {"wave_id": WID, "mode": "formulas", "stream": False}
+    for i in range(3):
+        assert client.post("/api/negotiate-wave", json=body, headers={"x-forwarded-for": f"3.3.3.{i}"}).status_code == 200
+    r = client.post("/api/negotiate-wave", json=body, headers={"x-forwarded-for": "3.3.3.9"})
+    assert r.status_code == 429 and r.json()["error"]["code"] == "rate_limited"
+    assert 0 < r.json()["retry_after_s"] <= 86400
+
+
+def test_v1_negotiate_shares_the_live_limits(client, monkeypatch):
+    monkeypatch.setattr(server, "DAILY_LIVE_MAX", 0)
+    monkeypatch.setattr(server.scenario, "build", lambda fid: pytest.fail("built a scenario past the limit"))
+    r = client.post("/api/negotiate", json={"flight_id": 1, "policy": "llm"})
+    assert r.status_code == 429 and int(r.headers["retry-after"]) > 0 and "detail" in r.json()
+
+
 def test_unknown_wave_404(client):
     assert client.get("/api/wave/NOPE").status_code == 404
     assert client.get("/api/wave/NOPE").json()["error"]["code"]

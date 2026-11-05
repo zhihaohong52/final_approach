@@ -165,7 +165,14 @@ class NegotiateReq(BaseModel):
 
 
 @app.post("/api/negotiate")
-def negotiate(req: NegotiateReq):
+def negotiate(req: NegotiateReq, request: Request):
+    # v1 (no UI uses it): policy=llm makes a Claude call per agent per phase, so it shares the live-run limits
+    retry = _rate_limited(_client_ip(request))
+    if retry is None:
+        retry = _daily_limited()
+    if retry is not None:
+        raise HTTPException(429, f"limit of live negotiations reached; try again in {retry} s",
+                            headers={"Retry-After": str(retry)})
     sc = scenario.build(req.flight_id)
     res = negotiation.negotiate(sc, req.policy)
     return {"scenario": sc.to_dict(), "result": res, "baseline": baseline.run(sc)}
@@ -249,6 +256,8 @@ REPLAY_SPACING_S = 0.15
 _RATE: dict[str, list[float]] = {}
 _RATE_LOCK = threading.Lock()
 RATE_MAX_KEYS = 10000
+DAILY_LIVE_MAX = int(os.environ.get("ATM_DAILY_LIVE_MAX", "500"))   # live runs a UTC day, all visitors (~$0.001 each)
+_DAILY = {"day": "", "n": 0}
 RUNS_MAX = 200
 RUNS: OrderedDict[str, dict] = OrderedDict()  # LRU; older runs are served from disk
 
@@ -440,6 +449,20 @@ def _rate_limited(ip: str) -> int | None:
             if len(_RATE) > RATE_MAX_KEYS:
                 for k in sorted(_RATE, key=lambda k: _RATE[k][-1])[: len(_RATE) // 2]:
                     del _RATE[k]
+    return None
+
+
+def _daily_limited() -> int | None:
+    """Record a live run against the cap shared by all visitors; return seconds to the next UTC day if over it.
+    Kept in memory, so a restart resets it (one instance on Render)."""
+    now = datetime.now(timezone.utc)
+    day = now.date().isoformat()
+    with _RATE_LOCK:
+        if _DAILY["day"] != day:
+            _DAILY.update(day=day, n=0)
+        if _DAILY["n"] >= DAILY_LIVE_MAX:
+            return max(1, 86400 - (now.hour * 3600 + now.minute * 60 + now.second))
+        _DAILY["n"] += 1
     return None
 
 
@@ -799,6 +822,10 @@ async def negotiate_wave(request: Request, body: dict = Body(...)):
     if retry is not None:
         return _err(429, "rate_limited", f"limit of {RATE_LIMIT} live negotiations per {RATE_WINDOW_S // 60} min reached",
                     retry_after_s=retry)
+    retry = _daily_limited()
+    if retry is not None:
+        return _err(429, "rate_limited", f"the demo's daily limit of {DAILY_LIVE_MAX} live negotiations is reached; "
+                    "recorded runs still play", retry_after_s=retry)
     chain = await asyncio.to_thread(_model_chain, mode, model)   # reads the benchmark from the store
     meta = {"run_id": run_id, "wave_id": wave_id, "mode": mode, "model_chain": [_model_id(e) for e in chain],
             "started_at": started_at}

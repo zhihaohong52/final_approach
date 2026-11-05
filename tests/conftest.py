@@ -50,6 +50,6 @@ def api_client(tmp_path, monkeypatch):
                                             replay_dir=tmp_path / "replay", benchmark_path=tmp_path / "benchmark.json")))
     monkeypatch.setattr(stub, "_REPLAY_DIR", tmp_path / "replay")
     monkeypatch.setattr(server, "REPLAY_SPACING_S", 0)
-    server._RATE.clear(); server.RUNS.clear()
+    server._RATE.clear(); server.RUNS.clear(); server._DAILY.update(day="", n=0)
     yield TestClient(server.app)
     datastore.set_store(None)
