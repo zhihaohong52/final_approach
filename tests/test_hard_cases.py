@@ -14,7 +14,7 @@ CASES = {i: f"{t}; {w}" for i, t, w in re.findall(r'\{ id: "(F2015-\d+)", title:
 
 
 def test_every_case_is_checked_here():
-    assert set(CASES) == {"F2015-6291", "F2015-70412", "F2015-102056", "F2015-252123", "F2015-247837"}
+    assert set(CASES) == {"F2015-5374", "F2015-69618", "F2015-102059", "F2015-252123", "F2015-248828"}
 
 
 @pytest.mark.parametrize("wid", sorted(CASES))
