@@ -64,6 +64,9 @@ def load_month(zpath: Path) -> pd.DataFrame:
     return df[df["dest"].isin(HUBS)]
 
 
+RANK_CAP = 8   # disrupted landings in one hour above which a wave is ranked last
+
+
 def build_index(df: pd.DataFrame) -> pd.DataFrame:
     """One wave per (airport, local date, hour) in which at least 3 arrivals really land (scheduled gate arrival +
     ARR_DELAY - taxi-in, `build.landing_times`) and at least one of them is disrupted. A late flight is in the
@@ -92,8 +95,11 @@ def build_index(df: pd.DataFrame) -> pd.DataFrame:
             "disrupted_flights": ";".join(dis["fid"]),
         })
     idx = pd.DataFrame(rows)
-    return idx.sort_values(["n_disrupted", "wave_id"],
-                           ascending=[False, True]).reset_index(drop=True)
+    # busiest first, but hours with more than RANK_CAP disrupted landings (storm backlogs of up to ~60) go last:
+    # the app's list and the benchmark sample read the index in this order
+    over = idx["n_disrupted"] > RANK_CAP
+    return idx.assign(_over=over).sort_values(["_over", "n_disrupted", "wave_id"], ascending=[True, False, True]) \
+              .drop(columns="_over").reset_index(drop=True)
 
 
 MOVE_COLS = ["date", "kind", "carrier", "flight_no", "tail", "other", "sched", "wheels", "taxi", "cancelled"]
