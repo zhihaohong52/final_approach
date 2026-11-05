@@ -28,7 +28,7 @@ response per endpoint in `frontend/src/api/samples/*.json`. Until then, build ag
   `pilots`/`airlines`: read `agents` from the run, never assume a roster. Non-agent senders: `"ENGINE"` (safety
   rules / protocol) and `"DECIDER"` (wave triage).
 - Errors: non-2xx status with `{ "error": { "code": string, "message": string } }`.
-  `429` adds `retry_after_s`. Rate limit: 10 live negotiations per 10 min per IP.
+  `429` adds `retry_after_s`. Rate limits: 10 live negotiations per 10 min per IP, and 500 a UTC day across all visitors (`ATM_DAILY_LIVE_MAX`); both answer `429 rate_limited`, the daily one with `retry_after_s` to the next UTC day. Recorded replays count against neither. The v1 `POST /api/negotiate` shares both limits (`429` with a `detail` and a `Retry-After` header).
 - Every real-world fact carries a `Provenance` so the UI can badge real vs simulated.
 - Time base (engine `v3-time`): BTS scheduled arrival times are gate (in-block) times (STA). `sched_min` is
   the scheduled in-block; `eta_earliest_min` is the earliest touchdown, `sched_min` + attributed BTS
