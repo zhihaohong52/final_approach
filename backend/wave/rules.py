@@ -5,6 +5,7 @@ data, and every RuleCheck cites its rule, source and the input values used.
 """
 from __future__ import annotations
 
+import functools
 import math
 import re
 from collections import Counter
@@ -38,6 +39,7 @@ WEATHER_FACTOR_BAD = 1.25
 _RWY_RE = re.compile(r"^(\d{1,2})([LRC]?)$")
 
 
+@functools.lru_cache(maxsize=4096)   # pure, called ~400k times a negotiation
 def wake_gap_min(leader: str, follower: str) -> float:
     """Minimum time (min) between a leader and a follower landing on the same runway (dry), from the
     workbook wake_separation nm column converted at 140 kt (constraints.wake_s_arrival); B757 is
@@ -269,6 +271,7 @@ def weather_factor(wave: Wave) -> float:
     return 1.0
 
 
+@functools.lru_cache(maxsize=4096)   # pure, called ~400k times a negotiation
 def reciprocal(runway_id: str) -> str | None:
     """Opposite end of a runway designator: 08L -> 26R, 09C -> 27C, 36 -> 18. None if unparsable."""
     m = _RWY_RE.match(runway_id or "")
@@ -279,6 +282,7 @@ def reciprocal(runway_id: str) -> str | None:
     return f"{num:02d}{side}"
 
 
+@functools.lru_cache(maxsize=4096)   # pure, called ~400k times a negotiation
 def strip_of(runway_id: str) -> tuple[str, ...]:
     """Physical runway (strip) key: sorted tuple of both ends, e.g. ('08L', '26R')."""
     rec = reciprocal(runway_id)

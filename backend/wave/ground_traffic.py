@@ -430,6 +430,10 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
     return out, mode, mv is not None, stats
 
 
+_MISS = object()
+_dict_get = dict.get
+
+
 class _CowTable(dict):
     """Copy-on-write view of a reservation table for trial scheduling: reads fall through to `base`, and the first
     write to a key copies its list into the view, so `base` and its lists are never mutated."""
@@ -438,22 +442,27 @@ class _CowTable(dict):
         super().__init__()
         self.base = base
 
+    # the scheduler calls get and setdefault ~1M times a negotiation: one C-level lookup each, no helper call
     def _own(self, k) -> bool:
         return dict.__contains__(self, k)
 
     def __contains__(self, k) -> bool:
-        return self._own(k) or k in self.base
+        return dict.__contains__(self, k) or k in self.base
 
     def __getitem__(self, k):
-        return dict.__getitem__(self, k) if self._own(k) else self.base[k]
+        v = _dict_get(self, k, _MISS)
+        return self.base[k] if v is _MISS else v
 
     def get(self, k, d=None):
-        return dict.__getitem__(self, k) if self._own(k) else self.base.get(k, d)
+        v = _dict_get(self, k, _MISS)
+        return self.base.get(k, d) if v is _MISS else v
 
     def setdefault(self, k, d=None):
-        if not self._own(k):
-            dict.__setitem__(self, k, list(self.base.get(k, ())))
-        return dict.__getitem__(self, k)
+        v = _dict_get(self, k, _MISS)
+        if v is _MISS:
+            v = list(self.base.get(k, ()))
+            dict.__setitem__(self, k, v)
+        return v
 
 
 def _takeoff_time(events, spans, t: float) -> float:

@@ -69,6 +69,7 @@ PLAN_CACHE_PER_WORKER = 256
 WAVE_CACHE_MAX = 64            # per-wave caches (_NOMINAL, _HOLDS; small): more than the benchmark's 50 waves
 LAPS_CACHE_MAX = 512           # racetrack lap polylines, one per physical hold (a few per wave)
 SCRATCH_MAX = 4                # trial plans of one edit suggestion search, kept only while that search runs
+PATH_CACHE_MAX = 2000           # built paths of one flight, shared by every plan that flies it the same way (~12 KB each)
 MIN_VECTOR_DRAW_MIN = 1e-6     # below this the stretch is kept in vector_min but not drawn
 INTERP_FLOOR_AGL_FT = 4000.0   # lowest shared base at a fix whose bases are interpolated route altitudes
 MAX_HOLD_LAPS = 12             # defence in depth: ~50 min of laps, past the 30-min horizon; the rest is stretch
@@ -258,9 +259,14 @@ def entry_time(wave: Wave, callsign: str) -> float | None:
 
 
 def _route_extra(wave: Wave, callsign: str, runway: str | None) -> float:
-    tn = _t_route(wave, callsign, _nominal(wave).get(callsign))
-    tr = _t_route(wave, callsign, runway)
-    return 0.0 if tn is None or tr is None else tr - tn
+    # memoised on the wave object like its key and routes (route.wave_key): ~100k calls a negotiation
+    memo = wave.__dict__.setdefault("_route_extra", {})
+    hit = memo.get((callsign, runway))
+    if hit is None:
+        tn = _t_route(wave, callsign, _nominal(wave).get(callsign))
+        tr = _t_route(wave, callsign, runway)
+        hit = memo[(callsign, runway)] = 0.0 if tn is None or tr is None else tr - tn
+    return hit
 
 
 def earliest(wave: Wave, callsign: str, runway: str, sr: float = 0.0, gd: float = 0.0) -> float:
@@ -457,6 +463,24 @@ def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
     return wave_holds(wave)[stack_key(r.hold)]
 
 
+_PATHS: dict[tuple, tuple[float, list[dict], str | None]] = {}
+
+
+def _path(wave: Wave, cs: str, rwy: str, r: route.Route, slot: float, laps: int, lap, vec: float,
+          draw: holding.HoldSpec, level_ft: float) -> tuple[float, list[dict], str | None]:
+    """(time at the first unclipped point, points, clip note): `_assemble` + `_clip` of one flight, memoised on everything they read: the wave (its key fixes the route
+    and the shared hold), the flight and runway, the slot, laps, lap, stretch and stack level. Most candidate plans
+    move one flight, so the other flights' paths (and the wave's fixed traffic) are built once. The points are
+    shared: treat them as read-only."""
+    k = (route.wave_key(wave), cs, rwy, slot, laps, lap, vec, level_ft)
+    hit = _PATHS.get(k)
+    if hit is None:
+        pts = _assemble(wave, r, slot, laps, lap, vec, draw, level_ft)
+        hit = (pts[0]["t_min"], *_clip(wave, pts))
+        _put(_PATHS, k, hit, PATH_CACHE_MAX)
+    return hit
+
+
 def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
     routes = route.routes_for_wave(wave)
     rows = []   # (callsign, is_wave, runway, slot, route or None, laps, lap_min, vector, extra)
@@ -535,9 +559,8 @@ def _build(wave: Wave, plan: JointPlan) -> TrajectorySet:
             else:
                 hold = {"fix": draw.fix, "laps": laps, "level_ft": level, "entry_min": entry[cs],
                         "exit_min": entry[cs] + laps * lap, "lap_min": lap}
-        pts = _assemble(wave, r, slot, laps, lap, vec, draw, level if level is not None else draw.base_ft)
-        fix_min = pts[0]["t_min"]
-        pts, note = _clip(wave, pts)
+        fix_min, pts, note = _path(wave, cs, rwy, r, slot, laps, lap, vec, draw,
+                                   level if level is not None else draw.base_ft)
         if note:
             notes.append(note)
         a = wave.airport
@@ -767,6 +790,7 @@ def _clear() -> None:
     _NOMINAL.clear()
     _LAPS.clear()
     _HOLDS.clear()
+    _PATHS.clear()
     surface.taxi_info.cache_clear()   # the per-wave taxi table (recomputed from the pinned graph, no store read)
 
 
