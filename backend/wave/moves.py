@@ -13,6 +13,7 @@ Authority is enforced here, legality in rules.py:
 """
 from __future__ import annotations
 
+import heapq
 import math
 from dataclasses import replace
 
@@ -461,9 +462,14 @@ def legal_moves(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
     if agent_id == "ATC":   # a hold is kept only if it strictly reduces these: none to reduce, none kept
         own_now = _own_violations(rules.check(wave, plan, metrics_map(wave, plan)))
         holds = own_now > 0
+    worst: list[float] = []   # max-heap (negated) of the MAX_MOVES lowest violation counts kept so far
     for m in _candidates(wave, plan, agent_id, holds):
         p2 = apply(wave, plan, m)
         if m.kind != "accept" and p2.id == pid:
+            continue
+        # exact: once MAX_MOVES moves are kept, one whose slot-only violations already exceed the highest violation
+        # count among them ranks below all of them (the sort key starts with the count)
+        if m.kind != "accept" and len(worst) >= MAX_MOVES and rules.slot_violations(wave, p2) > -worst[0]:
             continue
         mm = metrics_map(wave, p2)
         chk = rules.check(wave, p2, mm)
@@ -474,6 +480,10 @@ def legal_moves(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 continue
         nv = sum(1 for c in chk if not c.passed)
         scored.append(((nv, -agent_utility(wave, p2, agent_id, mm), m.id), m))
+        if len(worst) < MAX_MOVES:
+            heapq.heappush(worst, -nv)
+        elif nv < -worst[0]:
+            heapq.heapreplace(worst, -nv)
     scored.sort(key=lambda x: x[0])
     out = [m for _, m in scored[:MAX_MOVES]]
     acc = next((m for _, m in scored if m.kind == "accept"), None)

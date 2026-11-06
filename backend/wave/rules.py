@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import functools
 import math
+import operator
 import re
+import threading
 from collections import Counter, OrderedDict
 
 from backend.wave import ground_traffic, holding, route, surface, trajectory, wind
@@ -826,6 +828,71 @@ def _eta_check(wave: Wave, a, f, rs: dict, cs: str) -> tuple:
     return out
 
 
+def _gate_checks(wave: Wave, a, f, g, cs: str) -> tuple:
+    """(GND-GATE-SIZE, GND-GATE-NOTICE or None) for one assignment: they read only the flight, its gate and its slot,
+    so memoised on the wave object on (flight, repr of gate and slot); the checks are shared, treat as read-only."""
+    memo = wave.__dict__.setdefault("_gate_checks", {})
+    k = (cs, repr((a.gate, a.slot_min)))
+    hit = memo.get(k)
+    if hit is not None and hit[0] is f and hit[1] is g:
+        return hit[2]
+    slot_ok = has_slot(a)
+    notice_c = None
+    if g is None:
+        size_c = (RuleCheck("GND-GATE-SIZE", "GROUND", False, f"{cs}: unknown gate {a.gate!r}", SRC_OPS,
+                             {"gate": str(a.gate)}, cs))
+    else:
+        ok = g.remote or g.size == "wide" or f.gate_size == "narrow"
+        size_c = (RuleCheck(
+            "GND-GATE-SIZE", "GROUND", ok,
+            f"{cs}: gate {g.id} ({'remote stand' if g.remote else g.size + '-body'}) "
+            f"{'fits' if ok else 'cannot take'} {f.aircraft_type or ''} ({f.gate_size}-body)",
+            SRC_OPS, {"gate": g.id, "gate_size": g.size, "aircraft_size": f.gate_size}, cs))
+    if g is not None:
+        changed = a.gate != f.scheduled_gate
+        arr = float(a.slot_min) if slot_ok else float("nan")
+        late = changed and not g.remote and not (slot_ok and arr >= GATE_NOTICE_MIN)
+        if not changed:
+            det = f"{cs}: keeps scheduled gate {a.gate}"
+        elif g.remote:
+            det = f"{cs}: moved {f.scheduled_gate} -> remote stand {g.id} (remote stand exempt from notice)"
+        else:
+            det = (f"{cs}: gate change {f.scheduled_gate} -> {g.id} decided at T+0, arrival T{arr:+g} "
+                   f"({'>=' if not late else '<'} {GATE_NOTICE_MIN:g} min notice)")
+        notice_c = (RuleCheck("GND-GATE-NOTICE", "GROUND", not late, det, SRC_NOTICE,
+                             {"scheduled_gate": f.scheduled_gate, "gate": g.id,
+                              "arrival_min": arr if slot_ok else "none", "notice_min": GATE_NOTICE_MIN,
+                              "remote": "yes" if g.remote else "no"}, cs))
+    out = (size_c, notice_c)
+    memo[k] = (f, g, out)
+    return out
+
+
+_SLOT = threading.local()
+
+
+def slot_checks(wave: Wave, plan: JointPlan) -> tuple[dict, dict]:
+    """(ATC-WAKE-SEP, ATC-RWY-CAPACITY) checks by callsign: they read only the plan's runways and slots (no
+    trajectories). Memoised per thread for the last plan seen (the same plan object holding the same assignment
+    objects, and the same wave), so `moves.legal_moves` can bound a candidate's violations before `check` and
+    `check` reuses them. Shared, read-only."""
+    objs = tuple(plan.assignments)
+    m = getattr(_SLOT, "m", None)
+    if (m is not None and m[0] is wave and m[1] is plan and len(m[2]) == len(objs)
+            and all(map(operator.is_, m[2], objs))):
+        return m[3]
+    out = (_wake_checks(wave, plan), _capacity_checks(wave, plan))
+    _SLOT.m = (wave, plan, objs, out)
+    return out
+
+
+def slot_violations(wave: Wave, plan: JointPlan) -> int:
+    """Failing wake and capacity checks of `plan`: a lower bound on its violations in `check` (both are part of it,
+    one per landing at most)."""
+    wake, cap = slot_checks(wave, plan)
+    return sum(1 for c in wake.values() if not c.passed) + sum(1 for c in cap.values() if not c.passed)
+
+
 def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = None) -> list[RuleCheck]:
     """All rules for all flights. Raises ValueError if the plan does not have exactly one
     assignment per wave flight. Memoised on (wave key, plan id) when scored on the plan's own metrics (the
@@ -850,10 +917,9 @@ def _check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics]) -> list[Ru
     rwys = {r.id: r for r in wave.airport.runways}
     gates = {g.id: g for g in wave.gates}
     flights = {f.callsign: f for f in wave.flights}
-    wake = _wake_checks(wave, plan)
+    wake, cap = slot_checks(wave, plan)
     gfree = _gate_free_checks(wave, plan, mm)
     opposite = direction_conflicts(wave, plan)
-    cap = _capacity_checks(wave, plan)
     stack = _stack_checks(wave, plan)
     ts = trajectory.build(wave, plan)
     rs = route.routes_for_wave(wave)
@@ -968,37 +1034,15 @@ def _check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics]) -> list[Ru
         if d:
             out.append(d)
 
-        # GND-GATE-SIZE
-        if g is None:
-            out.append(RuleCheck("GND-GATE-SIZE", "GROUND", False, f"{cs}: unknown gate {a.gate!r}", SRC_OPS,
-                                 {"gate": str(a.gate)}, cs))
-        else:
-            ok = g.remote or g.size == "wide" or f.gate_size == "narrow"
-            out.append(RuleCheck(
-                "GND-GATE-SIZE", "GROUND", ok,
-                f"{cs}: gate {g.id} ({'remote stand' if g.remote else g.size + '-body'}) "
-                f"{'fits' if ok else 'cannot take'} {f.aircraft_type or ''} ({f.gate_size}-body)",
-                SRC_OPS, {"gate": g.id, "gate_size": g.size, "aircraft_size": f.gate_size}, cs))
+        # GND-GATE-SIZE, GND-GATE-NOTICE: functions of the flight, its gate and its slot (`_gate_checks`)
+        size_c, notice_c = _gate_checks(wave, a, f, g, cs)
+        out.append(size_c)
 
         # GND-GATE-FREE
         out.append(gfree[cs])
 
-        # GND-GATE-NOTICE (workbook: gate change decided >= 20 min before arrival; decision time T0)
-        if g is not None:
-            changed = a.gate != f.scheduled_gate
-            arr = float(a.slot_min) if slot_ok else float("nan")
-            late = changed and not g.remote and not (slot_ok and arr >= GATE_NOTICE_MIN)
-            if not changed:
-                det = f"{cs}: keeps scheduled gate {a.gate}"
-            elif g.remote:
-                det = f"{cs}: moved {f.scheduled_gate} -> remote stand {g.id} (remote stand exempt from notice)"
-            else:
-                det = (f"{cs}: gate change {f.scheduled_gate} -> {g.id} decided at T+0, arrival T{arr:+g} "
-                       f"({'>=' if not late else '<'} {GATE_NOTICE_MIN:g} min notice)")
-            out.append(RuleCheck("GND-GATE-NOTICE", "GROUND", not late, det, SRC_NOTICE,
-                                 {"scheduled_gate": f.scheduled_gate, "gate": g.id,
-                                  "arrival_min": arr if slot_ok else "none", "notice_min": GATE_NOTICE_MIN,
-                                  "remote": "yes" if g.remote else "no"}, cs))
+        if notice_c is not None:
+            out.append(notice_c)
 
         # GND-CREW-DUTY (workbook: overtime after the 8 h shift is allowed and costs 1.5x)
         turn_end = (m.in_block_min or 0) + turn
