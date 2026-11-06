@@ -126,9 +126,13 @@ LIMITS = [
              "traffic and earlier wave flights by this headway and no edge is in use head-on. Fixed traffic (queue "
              "arrivals, real 2015 departures) is scheduled once per wave and never yields"},
     {"limit": "runway crossing gap", "value": "no landing on the crossed strip from 1.5 min before to 1 min after "
-     "the time in its zone; no takeoff within 1 min either side", "source": "assumption",
+     "the time in its zone; no takeoff from 1 min before the time in its zone to 15 s after it",
+     "source": "assumption",
      "note": "the whole time inside the strip's protected zone (from leaving the hold to past the zone) is checked "
-             "against the fixed traffic's landings and takeoffs and every landing of the plan, for the wave flights"},
+             "against the fixed traffic's landings and takeoffs and every landing of the plan, for the wave flights. "
+             "Takeoffs (6 Nov 2026, was 1 min either side): a crosser goes once the departure has rolled past the "
+             "crossing point (1 min after it started), and the next takeoff starts 15 s after the crossers have left "
+             "the protected zone, i.e. are clear of the runway"},
     {"limit": "fixed crossers vs plan landings", "value": "landing priority; fixed 2015 crossers are not re-timed per "
      "plan", "source": "assumption",
      "note": "the fixed traffic (queue arrivals, real 2015 departures) is scheduled once per wave, before any plan "

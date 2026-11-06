@@ -622,7 +622,9 @@ def _stop_holds(g: TaxiGraph, r: _Refined, hold0: list[int | None], zones: list,
 
 HEADWAY_S = 30.0              # node headway (assumption)
 HORIZON_MIN = 30.0            # search horizon (assumption)
-GAP_MIN = {"landing": (1.0, 1.5), "takeoff": (1.0, 1.0)}   # crossing blocked if the event is in [t - a, t + b] min
+# crossing blocked if the event is in [t_in - a, t_out + b] min. A takeoff: the departure has rolled past the crossing
+# point 1 min after it started; the next one starts 15 s after the crossers leave the zone (rules.LIMITS)
+GAP_MIN = {"landing": (1.0, 1.5), "takeoff": (1.0, 0.25)}
 HOLD_LOOKBACK = 3             # edges before a crossing within which an OSM holding position is used
 _TOL = 1e-9
 _EPS = 1e-6                   # release just after a closed crossing window
@@ -962,7 +964,8 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
     (3) with `runway_events` and `g` (both or neither): for every strip with events, each stretch of a track inside
         the strip's protected zone (closer than RUNWAY_HOLD_CLEARANCE_M to the centreline, OSM holding positions
         excepted) that crosses the strip, from leaving the node before it to reaching the node after it, misses every
-        other flight's landing window [ev - 1.5, ev + 1] and takeoff window [ev - 1, ev + 1]. A stretch crosses the
+        other flight's landing window [ev - 1.5, ev + 1] and takeoff window [ev - 0.25, ev + 1] (GAP_MIN). A stretch
+        crosses the
         strip if it holds a node on the pavement (RUNWAY_ON_PAVEMENT_M, between the ends), a node entered and left
         over taxi edges that both carry the strip, or an edge across the centreline; an edge across the centreline
         between two nodes outside the zone counts on its own. Stretches that only run parallel (none of these) are
@@ -1030,7 +1033,7 @@ def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,
                                    f"({s0:.2f}-{s1:.2f} vs {r0:.2f}-{r1:.2f} min)")
     if not runway_events:
         return out
-    window = {"landing": (1.5, 1.0), "takeoff": (1.0, 1.0)}     # (before, after) the event, minutes
+    window = {k: (b, a) for k, (a, b) in GAP_MIN.items()}      # (before, after) the event, minutes
     strips_g = set(runway_strips(g))     # strips with runway edges in the graph (cached on g)
 
     def tagged(u: int, v: int, strip: str) -> bool:

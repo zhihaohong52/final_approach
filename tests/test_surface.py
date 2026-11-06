@@ -175,19 +175,22 @@ def test_unimpeded_schedule_has_no_waits_and_reserves(mini):
     assert set(res.edge_dir) == set(zip(ref.nodes, ref.nodes[1:])) | set(zip(path.nodes, path.nodes[1:]))
 
 
-def test_takeoff_gap_is_one_minute_each_side(mini):
+def test_takeoff_gap_is_one_minute_before_and_15_s_after(mini):
     path = path_across_1836(mini)
     t_cross = 0.5 + sum(path.seg_s[:3]) / 60          # 10 -> 15 -> 16 -> 6
-    # the whole time in the 18/36 zone (hold 16 -> the first position past it: a stop line 120 m beyond the
-    # centreline, ~0.2 min after it) is checked
-    res = Reservations({}, {}, {"18/36": [(t_cross + 1.3, "takeoff", "DL5")]})
-    assert schedule(mini, path, 0.5, res, "AA1").waits == []                        # zone left > 1 min before it
-    res = Reservations({}, {}, {"18/36": [(t_cross + 1.1, "takeoff", "DL5")]})
-    assert schedule(mini, path, 0.5, res, "AA1").waits                              # still inside the zone
-    res = Reservations({}, {}, {"18/36": [(t_cross + 0.9, "takeoff", "DL5")]})
+    t_out = t_cross + path.seg_s[3] / 60 * 120 / 300   # past the zone at the stop line 120 m beyond the centreline
+    # the whole time in the 18/36 zone (hold 16 -> the first position past it) is checked; a takeoff may start 15 s
+    # after the crosser leaves the zone ...
+    res = Reservations({}, {}, {"18/36": [(t_out + 0.3, "takeoff", "DL5")]})
+    assert schedule(mini, path, 0.5, res, "AA1").waits == []
+    res = Reservations({}, {}, {"18/36": [(t_out + 0.2, "takeoff", "DL5")]})
+    assert schedule(mini, path, 0.5, res, "AA1").waits                              # less than 15 s after
+    # ... and the crosser goes 1 min after a takeoff has started
+    res = Reservations({}, {}, {"18/36": [(t_cross - 0.5, "takeoff", "DL5")]})
     s = schedule(mini, path, 0.5, res, "AA1")
     assert s.waits[0]["reason"] == "hold short 18/36 for takeoff DL5"
-    assert next(q["t_min"] for q in s.points if q["node"] == 6) > t_cross + 1.9
+    t_leave = s.waits[0]["to_min"]
+    assert t_leave == pytest.approx(t_cross - 0.5 + 1.0, abs=1e-3)
 
 
 def test_crossing_wait_is_at_the_osm_holding_position(mini):

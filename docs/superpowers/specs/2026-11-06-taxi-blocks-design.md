@@ -112,6 +112,12 @@ time in the zone), which makes every crossing cost ~2.5 min of departure runway.
 min after exit, waits drop about a third with no windows (verifier window not updated in that experiment, so its
 failure count is not valid). Changing it is the user's call: it is the rule engine's assumption too.
 
+Decided 6 Nov ("1 min before, 15 s after"): `GAP_MIN["takeoff"] = (1.0, 0.25)`: a crosser goes 1 min after a takeoff
+started (the departure has rolled past the crossing point), the next takeoff starts 15 s after the crossers leave the
+zone. The verifier's window is derived from `GAP_MIN`. Ten waves: fixed waits 2,944 -> 2,049 min, failures 3 -> 0,
+late takeoffs 130 -> 116, wave-flight FCFS waits ATL-2024-06-07-20 32 -> 17 min, ORD 137 -> 123, no new separation
+breach. Crossing windows on top of it still trade (waits 1,737, late takeoffs 215): they stay parked.
+
 ## Testing
 
 Each change: unit tests for its rule, the full suite, and a before/after row of the harness (waits, failures, late
