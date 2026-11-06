@@ -621,11 +621,15 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     for lst in events.values():
         lst.sort()
     ts.runway_events = events
-    nodes = ground_traffic._CowTable(res.node_busy)
-    edges = ground_traffic._CowTable(res.edge_dir)
+    nodes = surface.Overlay(res.node_busy)
+    edges = surface.Overlay(res.edge_dir)
     occ = fixed.occupancy
     dep_at = None                    # fixed departure label -> its holding-point point, built on first use
-    chain: tuple = (route.wave_key(wave),)
+    wkey = route.wave_key(wave)
+    # reservations of the landings scheduled so far: added to the plan's view only when a later landing has to be
+    # scheduled, and part of a landing's cache key only where its route can read them (`surface.reads`)
+    done: list[tuple] = []
+    pending: list[tuple] = []
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
         lc, fh = [], []
@@ -658,18 +662,23 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
             ts.outcomes[cs] = o
             continue
         p = tx.path
-        # the schedule reads the reservations of the landings scheduled before it (the chain) and the runway events
-        # on the strips its route crosses; the same inputs in another plan give the same result
+        # the schedule reads the fixed traffic, the reservations of the landings scheduled before it on its own
+        # route positions (`surface.reads`) and the runway events on the strips its route crosses; the same inputs
+        # in another plan give the same result
         zs = sorted({st for _, st in p.crossings})
-        chain = chain + ((t_exit, cs, rwy, tx.gate,
-                          tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs)),)
-        s = _SCHED.get(chain)
+        key = (wkey, t_exit, cs, rwy, tx.gate,
+               tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs),
+               tuple(surface.reads(g, p, t_exit, added) for added in done))
+        s = _SCHED.get(key)
         if s is None:
+            for added in pending:
+                surface.reserve(surface.Reservations(nodes, edges, {}), added)
+            pending.clear()
             view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
-            s = surface.schedule(g, p, t_exit, view, cs)
-            _put(_SCHED, chain, s, SCHED_CACHE_MAX)
-        else:
-            surface.reserve(surface.Reservations(nodes, edges, {}), s.reserved)
+            s = surface.schedule(g, p, t_exit, view, cs, commit=False)
+            _put(_SCHED, key, s, SCHED_CACHE_MAX)
+        done.append(s.reserved)
+        pending.append(s.reserved)
         names = [n for i, n in enumerate(p.names) if n and (i == 0 or p.names[i - 1] != n)]
         # = last point - exit - unimpeded; exactly 0 unimpeded
         wait = sum(w["to_min"] - w["from_min"] for w in s.waits)
