@@ -69,6 +69,7 @@ PLAN_CACHE_PER_WORKER = 256
 WAVE_CACHE_MAX = 64            # per-wave caches (_NOMINAL, _HOLDS; small): more than the benchmark's 50 waves
 LAPS_CACHE_MAX = 512           # racetrack lap polylines, one per physical hold (a few per wave)
 SCRATCH_MAX = 4                # trial plans of one edit suggestion search, kept only while that search runs
+SCHED_CACHE_MAX = 1000          # taxi schedules of one landing, keyed on what they read (see _ground; ~30 KB each)
 PATH_CACHE_MAX = 2000           # built paths of one flight, shared by every plan that flies it the same way (~12 KB each)
 MIN_VECTOR_DRAW_MIN = 1e-6     # below this the stretch is kept in vector_min but not drawn
 INTERP_FLOOR_AGL_FT = 4000.0   # lowest shared base at a fix whose bases are interpolated route altitudes
@@ -244,7 +245,10 @@ def _t_route(wave: Wave, callsign: str, runway: str | None) -> float | None:
 
 
 def _wave_flight(wave: Wave, callsign: str):
-    f = next((x for x in wave.flights if x.callsign == callsign), None)
+    try:
+        f = wave.flight(callsign)
+    except StopIteration:
+        f = None
     if f is None:
         raise ValueError(f"{callsign} is not a wave flight of {wave.id}")
     return f
@@ -464,6 +468,7 @@ def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
 
 
 _PATHS: dict[tuple, tuple[float, list[dict], str | None]] = {}
+_SCHED: dict[tuple, "surface.Scheduled"] = {}
 
 
 def _path(wave: Wave, cs: str, rwy: str, r: route.Route, slot: float, laps: int, lap, vec: float,
@@ -620,6 +625,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     edges = ground_traffic._CowTable(res.edge_dir)
     occ = fixed.occupancy
     dep_at = None                    # fixed departure label -> its holding-point point, built on first use
+    chain: tuple = (route.wave_key(wave),)
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
         lc, fh = [], []
@@ -652,8 +658,18 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
             ts.outcomes[cs] = o
             continue
         p = tx.path
-        view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
-        s = surface.schedule(g, p, t_exit, view, cs)
+        # the schedule reads the reservations of the landings scheduled before it (the chain) and the runway events
+        # on the strips its route crosses; the same inputs in another plan give the same result
+        zs = sorted({st for _, st in p.crossings})
+        chain = chain + ((t_exit, cs, rwy, tx.gate,
+                          tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs)),)
+        s = _SCHED.get(chain)
+        if s is None:
+            view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
+            s = surface.schedule(g, p, t_exit, view, cs)
+            _put(_SCHED, chain, s, SCHED_CACHE_MAX)
+        else:
+            surface.reserve(surface.Reservations(nodes, edges, {}), s.reserved)
         names = [n for i, n in enumerate(p.names) if n and (i == 0 or p.names[i - 1] != n)]
         # = last point - exit - unimpeded; exactly 0 unimpeded
         wait = sum(w["to_min"] - w["from_min"] for w in s.waits)
@@ -791,6 +807,7 @@ def _clear() -> None:
     _LAPS.clear()
     _HOLDS.clear()
     _PATHS.clear()
+    _SCHED.clear()
     surface.taxi_info.cache_clear()   # the per-wave taxi table (recomputed from the pinned graph, no store read)
 
 

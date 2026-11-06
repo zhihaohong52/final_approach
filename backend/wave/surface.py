@@ -481,6 +481,9 @@ class Scheduled:
     # arrivals: time the aircraft reaches the first node outside the protected zone of the runway it exits (it has
     # vacated); a route that starts off any runway (departures): time it leaves the first node
     exit_clear_min: float
+    # what this call added to `res`, in order: ("node", node, interval) / ("edge", (u, v), interval); lets a caller
+    # that reuses the result add the same reservations (`trajectory._ground`)
+    reserved: tuple = field(default=(), repr=False, compare=False)
 
 
 @dataclass
@@ -720,16 +723,22 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             points.append(pt(dep[i], nodes[i]))
             waits.append(wait(nodes[i], arr[i], dep[i], why[i]))
     points.append(pt(dep[-1], nodes[-1]))
+    added = []
     if converged:
         for i in range(n):
-            lst = res.node_busy.setdefault(nodes[i], [])
-            lst.append((arr[i], dep[i], callsign))
-            lst.sort()
+            added.append(("node", nodes[i], (arr[i], dep[i], callsign)))
             if i + 1 < n:
-                lst = res.edge_dir.setdefault((nodes[i], nodes[i + 1]), [])
-                lst.append((dep[i], arr[i + 1], callsign))
-                lst.sort()
-    return Scheduled(points, waits, ok, fail, arr[vacate] if vacate else (dep[0] if n > 1 else arr[0]))
+                added.append(("edge", (nodes[i], nodes[i + 1]), (dep[i], arr[i + 1], callsign)))
+        reserve(res, added)
+    return Scheduled(points, waits, ok, fail, arr[vacate] if vacate else (dep[0] if n > 1 else arr[0]), tuple(added))
+
+
+def reserve(res: Reservations, added) -> None:
+    """Add `schedule`'s reservations (its `Scheduled.reserved`) to `res`, each list kept sorted."""
+    for kind, k, iv in added:
+        lst = (res.node_busy if kind == "node" else res.edge_dir).setdefault(k, [])
+        lst.append(iv)
+        lst.sort()
 
 
 def verify_separation(tracks: list[GroundTrack], headway_s: float = HEADWAY_S,

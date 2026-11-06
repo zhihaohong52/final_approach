@@ -165,7 +165,15 @@ class Wave(_Dict):
         return d
 
     def flight(self, callsign: str) -> WaveFlight:
-        return next(f for f in self.flights if f.callsign == callsign)
+        # callsign -> first flight with it, rebuilt if `flights` is replaced (~400k calls a negotiation)
+        idx = self.__dict__.get("_flight_idx")
+        if idx is None or idx[0] is not self.flights or idx[1] != len(self.flights):
+            by: dict[str, WaveFlight] = {}
+            for f in self.flights:
+                by.setdefault(f.callsign, f)
+            idx = self.__dict__["_flight_idx"] = (self.flights, len(self.flights), by)
+        f = idx[2].get(callsign)
+        return f if f is not None else next(f for f in self.flights if f.callsign == callsign)
 
     def runway(self, rid: str) -> Runway:
         return next(r for r in self.airport.runways if r.id == rid)
