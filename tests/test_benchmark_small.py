@@ -443,7 +443,7 @@ def test_history_row_computes_worse_pct_from_archived_per_wave():
     assert rows[1]["worse_than_status_quo_pct"] == 50.0 and rows[0]["worse_than_status_quo_pct"] is None
     del rep["per_wave"]
     assert B._rows(rep, "v3-traffic")[1]["worse_than_status_quo_pct"] is None
-    assert "v4-airlines" in B.VERSION_ORDER
+    assert "v4-airlines" in B.VERSION_ORDER and B.VERSION_ORDER[-1] == "v5-taxi"
 
 
 def test_markdown_fairness_variants_section(tmp_path):

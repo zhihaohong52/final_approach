@@ -11,7 +11,9 @@ from backend.wave.fairness import VARIANTS
 from backend.wave.graph import negotiate_wave
 from backend.wave.utility import agent_utility
 
-WAVES = ("CLT-2024-06-03-20", "ATL-2024-07-05-21")
+# re-picked for engine v5-taxi (were CLT-2024-06-03-20, relaxing now leaves AA2778 worse with no objection, and
+# ATL-2024-07-05-21, status quo now infeasible); same criterion
+WAVES = ("CLT-2024-06-06-21", "ATL-2024-07-20-17")
 
 
 @pytest.mark.parametrize("v", VARIANTS)
@@ -104,13 +106,14 @@ def test_best_seen_floor_waves(wid, v):
     assert checked > 0
 
 
-# Known escape-clause case (was F2015-77162 / WN130 before waves centred on the real landing hour)
-ESCAPE_WAVE, ESCAPE_AIRLINE, ESCAPE_FLIGHT = "F2015-190078", "AA", "AA1693"
+# Known escape-clause case (was F2015-77162 / WN130 before waves centred on the real landing hour, then F2015-190078 /
+# AA1693 until engine v5-taxi, where AA agrees in turn 2)
+ESCAPE_WAVE, ESCAPE_AIRLINE, ESCAPE_FLIGHT = "F2015-2754", "AA", "AA1628"
 
 
 def test_firm_final_plan_is_the_escape_clause_plan():
-    """Known case (ORD 20 Jun 2015 22:00, four airlines): AA1693 ends +6.7 min over its best-seen delay floor (and
-    +284 kg fuel). Spec §3.4 allows that only when no CHECK-passed plan
+    """Known case (ORD 3 Jan 2015, AA, OO and UA): AA1628 ends +3.2 min over its best-seen delay floor. Spec §3.4
+    allows that only when no CHECK-passed plan
     meeting AA's floor is on the table when AA votes; AA rejected the plan on the floor in turn 2 and accepted it in
     turn 3, when it was the only plan on the table."""
     ag = f"AIRLINE:{ESCAPE_AIRLINE}"

@@ -660,7 +660,7 @@ def _rows(rep: dict, version: str) -> list[dict]:
     return rows
 
 
-VERSION_ORDER = ("v2", "v3-air", "v3-time", "v3-taxi", "v3-traffic", "v4-airlines")
+VERSION_ORDER = ("v2", "v3-air", "v3-time", "v3-taxi", "v3-traffic", "v4-airlines", "v5-taxi")
 
 
 def _version_rank(v: str) -> int:
