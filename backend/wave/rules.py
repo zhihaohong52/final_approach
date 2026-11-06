@@ -215,6 +215,14 @@ LIMITS = [
      "earliest landing is t_entry + SR + GD + T_route(runway) with t_entry = ETA - T_route(FCFS runway)"},
     {"limit": "procedures cycle", "value": "FAA CIFP 2611", "source": "real data",
      "note": "current procedures (CIFP 2611) flown over 2015 traffic; not for navigation"},
+    {"limit": "arrival runways", "value": "the outboard parallels of the best-wind end (farthest from the terminal), "
+     "up to the airport's active runways minus one; wave flights join them", "source": "assumption",
+     "note": "BTS has no runway: the queue arrivals land on the parallels of the best-wind end, ranked by distance "
+             "from the median of the airport's OSM stands (farthest first), so the inboard parallels nearest the "
+             "terminal stay free for departures, the segregated pattern of e.g. ATL west flow (land 26R/27L/28, depart "
+             "26L/27R), DTW, SEA and JFK; by headwind then id without stands or runway coordinates. Airports whose "
+             "terminal is not between its parallels (DEN) are not modelled well. A wave flight takes an end the queue "
+             "lands on before an unused end with the same wind (moves.fcfs_runways)."},
     {"limit": "departure runway", "value": "the flow's free parallel ends plus free non-crossing ends within 60 deg "
      "(segregated), else the arrival runway (mixed mode); earliest expected takeoff", "source": "assumption",
      "note": "fixed ground traffic (real BTS 2015 departures, wheels-off T-30..T+120): the departure candidates are "

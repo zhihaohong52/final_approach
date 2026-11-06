@@ -140,7 +140,9 @@ def _ends_in_use(wave: Wave, plan: JointPlan | None, exclude: str | None = None)
 
 def _wind_rank(wave: Wave, aircraft_type: str | None, in_use: dict[str, int] | None = None) -> list[str]:
     """Open runways, best first: within wind limits; not against the flow already in use on the
-    strip; (calm wind / no METAR) most used by the queue; least crosswind+tailwind; most headwind."""
+    strip; an end the queue lands on (the arrival runways in use: a wave flight joins the arrival flow rather than a
+    departure runway with the same wind); (calm wind / no METAR) most used by the queue; least crosswind+tailwind; most
+    headwind."""
     in_use = in_use or {}
     q_use: dict[str, int] = {}
     for q in wave.queue:
@@ -153,13 +155,14 @@ def _wind_rank(wave: Wave, aircraft_type: str | None, in_use: dict[str, int] | N
             continue
         against = 1 if in_use.get(reciprocal(r.id) or "", 0) > 0 else 0
         follow = -q_use.get(r.id, 0) if calm else 0
+        joins = 0 if q_use.get(r.id) or not q_use else 1
         if m is None:
-            rows.append(((0, against, follow, 0.0, 0.0, i), r.id))
+            rows.append(((0, against, joins, follow, 0.0, 0.0, i), r.id))
             continue
         hw, xw, tw = wind.components(m.wind_dir_deg, m.wind_kt, m.gust_kt, r.heading_true)
         lxw, ltw, _ = wind.limits(m.surface, aircraft_type)
         ok = wind.within_limits(xw, tw, lxw, ltw)
-        rows.append(((0 if ok else 1, against, follow, xw + tw, -hw, i), r.id))
+        rows.append(((0 if ok else 1, against, joins, follow, xw + tw, -hw, i), r.id))
     return [rid for _, rid in sorted(rows)]
 
 

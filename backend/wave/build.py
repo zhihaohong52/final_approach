@@ -544,6 +544,14 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> l
     # a busy hub lands on the parallels of its best-wind end (never a crossing or opposite end) and keeps one
     # parallel free for departures (`ground_traffic.departure_mode`), within its active runway count
     par = [r for r in ranked if abs((r.heading_true - ranked[0].heading_true + 180) % 360 - 180) <= 10]
+    # segregated parallels (assumption, rules.LIMITS "arrival runways"): arrivals use the outboard parallels, the ones
+    # farthest from the terminal (median of the OSM stands), and the inboard ones nearest it are left to departures,
+    # as at ATL (west flow: land 26R/27L/28, depart 26L/27R) and DFW; without stands or runway coordinates, by
+    # headwind then id as before
+    term = _terminal_ll(iata)
+    off = {r.id: _offset_m(r, term) for r in par} if term is not None else {}
+    if off and None not in off.values():
+        par = sorted(par, key=lambda r: (-round(off[r.id]), r.id))
     best = par[:max(1, min(len(par) - 1, constraints.airport(iata).active_runways - 1))]
     out = []
     for i, r in enumerate(w.to_dict("records")):
@@ -554,6 +562,35 @@ def _queue(w: pd.DataFrame, runways: list[Runway], rwinds: list, iata: str) -> l
             slot_min=_queue_slot(iata, r),
             origin=str(r["origin"]) if isinstance(r.get("origin"), str) and r["origin"] else None))
     return out
+
+
+def _terminal_ll(iata: str) -> tuple[float, float] | None:
+    """Median (lat, lon) of the airport's OSM stands: where its terminal is; None without a surface graph or stands."""
+    from backend.wave import surface      # lazy: surface imports this module's dependants
+    g = surface.load_graph(icao.icao_or_prefix(iata))
+    if g is None:
+        return None
+    pts = [g.nodes[s["node"]] for s in g.stands.values() if s.get("node") is not None and 0 <= s["node"] < len(g.nodes)]
+    if not pts:
+        return None
+    lat = sorted(p[0] for p in pts)[len(pts) // 2]
+    lon = sorted(p[1] for p in pts)[len(pts) // 2]
+    return lat, lon
+
+
+def _offset_m(r: Runway, ll: tuple[float, float]) -> float | None:
+    """Distance in metres from `ll` to the runway's extended centreline (flat earth); None without end coordinates."""
+    if None in (r.le_lat, r.le_lon, r.he_lat, r.he_lon):
+        return None
+    k = math.cos(math.radians(r.le_lat))
+    ax, ay = r.le_lon * k, r.le_lat
+    bx, by = r.he_lon * k, r.he_lat
+    px, py = ll[1] * k, ll[0]
+    dx, dy = bx - ax, by - ay
+    n = math.hypot(dx, dy)
+    if n == 0:
+        return None
+    return abs((px - ax) * dy - (py - ay) * dx) / n * 111_195.0
 
 
 def t0_iso(date: str, hour: int, minutes: float) -> str:

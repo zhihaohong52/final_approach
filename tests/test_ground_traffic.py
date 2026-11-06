@@ -374,3 +374,44 @@ def test_queue_retry_exhaustion_keeps_the_mover_and_reports_it(monkeypatch):
             assert any(b[2] == lab for b in ft.reservations.node_busy[hold])
     finally:
         GT._cache_clear()
+
+
+# ---------------------------------------------------------------- arrival / departure runways (outboard / inboard)
+
+def test_queue_lands_outboard_and_leaves_the_inboard_parallels_to_departures(monkeypatch):
+    """Four same-direction parallels around a terminal: arrivals on the active-1 farthest from the stands, the
+    parallel nearest the terminal is left free for departures."""
+    from backend.wave import build as B
+    import pandas as pd
+    lat0 = 33.64
+    # east-west parallels at 0.010, 0.004 (north of the terminal) and -0.006, -0.012 deg (south)
+    rw = [Runway(i, 270.0, 9000, le_lat=lat0 + d, le_lon=-84.40, he_lat=lat0 + d, he_lon=-84.44)
+          for i, d in (("26R", 0.010), ("26L", 0.004), ("27R", -0.006), ("27L", -0.012))]
+    monkeypatch.setattr(B, "_terminal_ll", lambda iata: (lat0, -84.42))
+    monkeypatch.setattr(B.constraints, "airport", lambda iata: type("C", (), {"active_runways": 4})())
+    monkeypatch.setattr(B, "_queue_slot", lambda iata, r: 0.0)
+    w = pd.DataFrame([{"callsign": f"DL{i}", "tail": None, "origin": "JFK"} for i in range(6)])
+    q = B._queue(w, rw, [], "ATL")
+    assert {a.runway for a in q} == {"27L", "26R", "27R"}          # outboard first; 26L (0.004 deg) stays free
+    monkeypatch.setattr(B, "_terminal_ll", lambda iata: None)      # no stands: by headwind then id, as before
+    assert {a.runway for a in B._queue(w, rw, [], "ATL")} == {"26L", "26R", "27L"}
+
+
+def test_runway_offset_is_the_distance_to_the_centreline():
+    from backend.wave.build import _offset_m
+    r = Runway("09", 90.0, 9000, le_lat=0.0, le_lon=0.0, he_lat=0.0, he_lon=0.03)
+    assert abs(_offset_m(r, (0.01, 0.5)) - 1111.95) < 0.5         # 0.01 deg north of an east-west line, past its end
+    assert _offset_m(Runway("09", 90.0, 9000), (0.0, 0.0)) is None
+
+
+def test_wave_flights_join_the_queue_arrival_runway_over_an_equal_wind_departure_runway():
+    w = _two_parallel_wave()                                        # 26R and 27L: same heading, same wind
+    w = replace(w, queue=[QueueArrival("WN1", "B737", "LARGE", "27L", 2)])
+    assert set(moves.fcfs_runways(w).values()) == {"27L"}           # by index 26R would win the tie
+
+
+def test_atlanta_west_flow_lands_outboard_and_departs_inboard():
+    w = build.build_wave("ATL-2024-06-07-20")
+    mixed, arr_rw, cands = departure_mode(w)
+    assert {q.runway for q in w.queue} == {"26R", "27L", "28"}
+    assert not mixed and arr_rw in {"26R", "27L", "28"} and set(cands) == {"26L", "27R"}
