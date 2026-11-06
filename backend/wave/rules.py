@@ -771,6 +771,61 @@ def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
                       "taxi": round(taxi, 2), "unavoidable_bust": "yes" if unavoidable else "no"}, cs)
 
 
+def _eta_check(wave: Wave, a, f, rs: dict, cs: str) -> tuple:
+    """(PLT-EARLIEST-ETA check, earliest landing, route extra) for one assignment: reads only the flight, its
+    assignment and the wave's routes, so memoised on the wave object on repr(a.key()) (repr keeps 1 vs 1.0 and
+    -0.0 apart, as the evidence does); the check is shared, treat it as read-only."""
+    memo = wave.__dict__.setdefault("_eta_check", {})
+    k = repr(a.key())
+    hit = memo.get(k)
+    if hit is not None and hit[0] is f and hit[1] is rs:
+        return hit[2]
+    slot_ok = has_slot(a)
+    slot = float(a.slot_min) if slot_ok else float("nan")
+    sr, gd = a.speed_reduction_min, a.ground_delay_min
+    earliest = trajectory.earliest(wave, cs, a.runway, sr, gd)
+    rex = trajectory.earliest(wave, cs, a.runway) - f.eta_earliest_min   # T_route(r) - T_route(nominal)
+    r = rs.get((cs, a.runway)) if a.runway else None
+    t_entry = trajectory.entry_time(wave, cs) if r is not None else None
+    if r is not None and t_entry is not None:
+        how = (f"entry T{t_entry:+.2f} at {r.entry_fix or 'route start'} + {r.t_route_min:.2f} min route "
+               f"to {a.runway}")
+    else:
+        how = f"ETA T{f.eta_earliest_min:+g}, no route geometry for {a.runway}"
+    how += f" + speed reduction {sr:g} + ground delay {gd:g}"
+    problems = []
+    if not slot_ok:
+        problems.append(f"no valid slot ({a.slot_min!r})")
+    elif slot < earliest - EPS_MIN:
+        problems.append(f"slot T{slot:+g} before earliest achievable T{earliest:+.2f} on {a.runway} ({how})")
+    if not (math.isfinite(sr) and 0 <= sr <= MAX_SPEED_REDUCTION_MIN):
+        problems.append(f"speed reduction {sr:g} min outside 0-{MAX_SPEED_REDUCTION_MIN:g}")
+    if not math.isfinite(gd):
+        problems.append(f"non-finite ground delay {gd!r}")
+    elif gd < 0:
+        problems.append(f"negative ground delay {gd:g}")
+    if math.isfinite(gd) and gd > 0 and f.airborne:
+        problems.append(f"ground delay {gd:g} min impossible: {cs} already airborne")
+    fin_e = math.isfinite(earliest)
+    chk = (RuleCheck(
+        "PLT-EARLIEST-ETA", "PILOT", not problems,
+        f"{cs}: " + ("; ".join(problems) if problems else
+                     f"slot T{slot:+g} >= earliest achievable T{earliest:+.2f} on {a.runway} ({how})"),
+        SRC_ETA, {"slot_min": slot if slot_ok else "none", "eta_earliest_min": f.eta_earliest_min,
+                  "earliest_min": round(earliest, 2) if fin_e else str(earliest),
+                  "runway": str(a.runway),
+                  "route_min": round(r.t_route_min, 2) if r is not None else "none",
+                  "route_extra_min": round(rex, 2),
+                  "entry_fix": (r.entry_fix or "none") if r is not None else "none",
+                  "t_entry": round(t_entry, 2) if t_entry is not None else "none",
+                  "speed_reduction_min": sr if math.isfinite(sr) else str(sr),
+                  "ground_delay_min": gd if math.isfinite(gd) else str(gd),
+                  "airborne": "yes" if f.airborne else "no"}, cs))
+    out = (chk, earliest, rex)
+    memo[k] = (f, rs, out)
+    return out
+
+
 def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = None) -> list[RuleCheck]:
     """All rules for all flights. Raises ValueError if the plan does not have exactly one
     assignment per wave flight. Memoised on (wave key, plan id) when scored on the plan's own metrics (the
@@ -875,48 +930,12 @@ def _check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics]) -> list[Ru
             out.append(RuleCheck("ATC-WIND-LIMITS", "ATC", False, f"{cs}: unknown runway {a.runway!r}",
                                  "FAA Order 8400.9 §6d", {"metar": metar.raw, "runway": str(a.runway)}, cs))
 
-        # PLT-EARLIEST-ETA (incl. absorption bounds): runway-dependent earliest landing (spec §6.2)
+        # PLT-EARLIEST-ETA (incl. absorption bounds): runway-dependent earliest landing (spec §6.2); a function of
+        # the flight's own assignment: memoised on the wave (`_eta_check`)
         slot_ok = has_slot(a)
         slot = float(a.slot_min) if slot_ok else float("nan")
-        sr, gd = a.speed_reduction_min, a.ground_delay_min
-        earliest = trajectory.earliest(wave, cs, a.runway, sr, gd)
-        rex = trajectory.earliest(wave, cs, a.runway) - f.eta_earliest_min   # T_route(r) - T_route(nominal)
-        r = rs.get((cs, a.runway)) if a.runway else None
-        t_entry = trajectory.entry_time(wave, cs) if r is not None else None
-        if r is not None and t_entry is not None:
-            how = (f"entry T{t_entry:+.2f} at {r.entry_fix or 'route start'} + {r.t_route_min:.2f} min route "
-                   f"to {a.runway}")
-        else:
-            how = f"ETA T{f.eta_earliest_min:+g}, no route geometry for {a.runway}"
-        how += f" + speed reduction {sr:g} + ground delay {gd:g}"
-        problems = []
-        if not slot_ok:
-            problems.append(f"no valid slot ({a.slot_min!r})")
-        elif slot < earliest - EPS_MIN:
-            problems.append(f"slot T{slot:+g} before earliest achievable T{earliest:+.2f} on {a.runway} ({how})")
-        if not (math.isfinite(sr) and 0 <= sr <= MAX_SPEED_REDUCTION_MIN):
-            problems.append(f"speed reduction {sr:g} min outside 0-{MAX_SPEED_REDUCTION_MIN:g}")
-        if not math.isfinite(gd):
-            problems.append(f"non-finite ground delay {gd!r}")
-        elif gd < 0:
-            problems.append(f"negative ground delay {gd:g}")
-        if math.isfinite(gd) and gd > 0 and f.airborne:
-            problems.append(f"ground delay {gd:g} min impossible: {cs} already airborne")
-        fin_e = math.isfinite(earliest)
-        out.append(RuleCheck(
-            "PLT-EARLIEST-ETA", "PILOT", not problems,
-            f"{cs}: " + ("; ".join(problems) if problems else
-                         f"slot T{slot:+g} >= earliest achievable T{earliest:+.2f} on {a.runway} ({how})"),
-            SRC_ETA, {"slot_min": slot if slot_ok else "none", "eta_earliest_min": f.eta_earliest_min,
-                      "earliest_min": round(earliest, 2) if fin_e else str(earliest),
-                      "runway": str(a.runway),
-                      "route_min": round(r.t_route_min, 2) if r is not None else "none",
-                      "route_extra_min": round(rex, 2),
-                      "entry_fix": (r.entry_fix or "none") if r is not None else "none",
-                      "t_entry": round(t_entry, 2) if t_entry is not None else "none",
-                      "speed_reduction_min": sr if math.isfinite(sr) else str(sr),
-                      "ground_delay_min": gd if math.isfinite(gd) else str(gd),
-                      "airborne": "yes" if f.airborne else "no"}, cs))
+        eta_c, earliest, rex = _eta_check(wave, a, f, rs, cs)
+        out.append(eta_c)
 
         # PLT-FUEL-RESERVE: unrounded hold (= laps x lap_min + vector) plus any longer route than nominal
         extra, alt, _, fin = fuel_info(f)
