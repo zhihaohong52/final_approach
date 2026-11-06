@@ -810,6 +810,8 @@ def _clear() -> None:
     _SCHED.clear()
     from backend.wave import utility
     utility._MM.clear()
+    from backend.wave import rules
+    rules._CHECKS.clear()
     surface.taxi_info.cache_clear()   # the per-wave taxi table (recomputed from the pinned graph, no store read)
 
 

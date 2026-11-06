@@ -739,9 +739,26 @@ def _duty_check(wave: Wave, f, a, mm, cs: str) -> RuleCheck | None:
 
 def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = None) -> list[RuleCheck]:
     """All rules for all flights. Raises ValueError if the plan does not have exactly one
-    assignment per wave flight."""
+    assignment per wave flight. Memoised on (wave key, plan id) when scored on the plan's own metrics (the
+    memoised `metrics_map`); each call gets its own list, the checks in it are shared (read-only)."""
     validate_structure(wave, plan)
-    mm = mm or metrics_map(wave, plan)
+    own = metrics_map(wave, plan)
+    if mm is not None and mm is not own:
+        return _check(wave, plan, mm)
+    k = (route.wave_key(wave), plan.id)
+    hit = _CHECKS.get(k)
+    if hit is None:
+        hit = _CHECKS[k] = _check(wave, plan, own)
+        while len(_CHECKS) > CHECK_CACHE_MAX:
+            _CHECKS.pop(next(iter(_CHECKS)), None)
+    return list(hit)
+
+
+CHECK_CACHE_MAX = 4096
+_CHECKS: dict[tuple, list[RuleCheck]] = {}
+
+
+def _check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics]) -> list[RuleCheck]:
     rwys = {r.id: r for r in wave.airport.runways}
     gates = {g.id: g for g in wave.gates}
     flights = {f.callsign: f for f in wave.flights}
