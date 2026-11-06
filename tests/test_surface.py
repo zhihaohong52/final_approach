@@ -7,7 +7,7 @@ from backend.geo.osm_surface import build_surface
 from backend.wave import build
 from backend.wave.model import Runway
 from backend.wave.surface import (RUNWAY_HOLD_CLEARANCE_M, RUNWAY_ON_PAVEMENT_M, GroundTrack, NoPath, Reservations,
-                              TaxiGraph, _from_doc, choose_exit, generic_taxi_min, load_graph, rot_s, schedule,
+                              TaxiGraph, _from_doc, choose_exit, generic_taxi_min, load_graph, refine, rot_s, schedule,
                               unimpeded, verify_separation)
 
 
@@ -166,20 +166,24 @@ def test_unimpeded_schedule_has_no_waits_and_reserves(mini):
     assert s.ok and s.reason is None and s.waits == []
     assert s.points[-1]["t_min"] == pytest.approx(0.5 + path.unimpeded_min)
     assert s.exit_clear_min == pytest.approx(0.5)
-    assert [q["node"] for q in s.points] == path.nodes + [path.nodes[-1]]          # arrival at each node, then parked
+    ref = refine(mini, path)                  # the route with its stop lines
+    assert [q["node"] for q in s.points] == ref.nodes + [ref.nodes[-1]]            # arrival at each position, then parked
+    assert [q["node"] for q in s.points if not q.get("line")] == path.nodes + [path.nodes[-1]]
     assert all(isinstance(q["node"], int) for q in s.points)
-    assert set(res.node_busy) == set(path.nodes) and all(v[0][2] == "AA1" for v in res.node_busy.values())
-    assert set(res.edge_dir) == set(zip(path.nodes, path.nodes[1:]))
+    assert set(res.node_busy) == set(ref.nodes) and all(v[0][2] == "AA1" for v in res.node_busy.values())
+    # every step, plus each whole edge that has stop lines (the head-on check)
+    assert set(res.edge_dir) == set(zip(ref.nodes, ref.nodes[1:])) | set(zip(path.nodes, path.nodes[1:]))
 
 
 def test_takeoff_gap_is_one_minute_each_side(mini):
     path = path_across_1836(mini)
     t_cross = 0.5 + sum(path.seg_s[:3]) / 60          # 10 -> 15 -> 16 -> 6
-    # the whole time in the 18/36 zone (hold 16 -> node 17, 300 m beyond, ~0.5 min after the centreline) is checked
-    res = Reservations({}, {}, {"18/36": [(t_cross + 1.6, "takeoff", "DL5")]})
+    # the whole time in the 18/36 zone (hold 16 -> the first position past it: a stop line 120 m beyond the
+    # centreline, ~0.2 min after it) is checked
+    res = Reservations({}, {}, {"18/36": [(t_cross + 1.3, "takeoff", "DL5")]})
     assert schedule(mini, path, 0.5, res, "AA1").waits == []                        # zone left > 1 min before it
-    res = Reservations({}, {}, {"18/36": [(t_cross + 1.2, "takeoff", "DL5")]})
-    assert schedule(mini, path, 0.5, res, "AA1").waits                              # still on 17's side of the zone
+    res = Reservations({}, {}, {"18/36": [(t_cross + 1.1, "takeoff", "DL5")]})
+    assert schedule(mini, path, 0.5, res, "AA1").waits                              # still inside the zone
     res = Reservations({}, {}, {"18/36": [(t_cross + 0.9, "takeoff", "DL5")]})
     s = schedule(mini, path, 0.5, res, "AA1")
     assert s.waits[0]["reason"] == "hold short 18/36 for takeoff DL5"
@@ -297,7 +301,8 @@ def test_no_osm_hold_within_lookback_waits_outside_clearance(mini):
     p = _line_path(g, at, xs)
     res = Reservations({}, {}, {"R": [(0.3, "landing", "UA9")]})
     s = schedule(g, p, 0.0, res, "AA1")
-    assert s.ok and [w["node"] for w in s.waits] == [at[-200]]                 # -60 m is inside the 90 m zone
+    # -60 m is inside the 90 m zone; the hold is the stop line one queue spacing (60 m) short of it, 120 m out
+    assert s.ok and len(s.waits) == 1 and s.waits[0]["lon"] * M_PER_DEG == pytest.approx(-120.0)
     _assert_no_wait_in_zone(g, s, ["R"])
     assert verify_separation([track(s, "AA1")], runway_events=res.runway_events, g=g) == []
     g2, at2 = _line_graph(xs, {"R": 0}, holds={-300: "R"})                     # 3 edges back: used
@@ -691,3 +696,108 @@ def test_surface_cache_clear():
     surface.cache_clear()
     assert not surface._GEO and not surface._TABLE and not surface._TREE_ORDER
     assert surface.taxi_info(w, "22R", w.flight(w.focus).scheduled_gate, "narrow").tier == "real"   # pin still valid
+
+
+# ---------------------------------------------------------------- stop lines (block signalling)
+
+def _tee_graph(xs_m):
+    """The `_line_graph` taxiway plus a stub north and south of the node at x=0 (two non-dead-end branches), so that
+    node is a junction."""
+    g, at = _line_graph(xs_m, {})
+    j = at[0]
+    for k, lat in enumerate((0.003, -0.003, 0.006, -0.006)):
+        g.nodes.append((lat, 0.0))
+    n = len(g.nodes)
+    for a, b in ((j, n - 4), (j, n - 3), (n - 4, n - 2), (n - 3, n - 1)):
+        length = abs(g.nodes[a][0] - g.nodes[b][0]) * M_PER_DEG
+        g.adj.setdefault(a, []).append((b, length, "taxiway", "B", None))
+        g.adj.setdefault(b, []).append((a, length, "taxiway", "B", None))
+    return g, at
+
+
+def test_stop_lines_stand_clear_of_junctions_and_space_a_queue():
+    from backend.wave.surface import JUNCTION_CLEAR_M, TAXI_AIRCRAFT_LEN_M, TAXI_QUEUE_GAP_M, junctions, stop_lines
+    g, at = _tee_graph([-800, -400, 0, 400, 800])
+    assert junctions(g) == {at[0]}
+    length, lines = stop_lines(g)[(at[-400], at[0])]
+    spacing = TAXI_AIRCRAFT_LEN_M + TAXI_QUEUE_GAP_M
+    xs = [x for _, x in lines]
+    assert length == pytest.approx(400.0) and xs[-1] == pytest.approx(400.0 - JUNCTION_CLEAR_M)   # nose 40 m short
+    assert all(b - a == pytest.approx(spacing) for a, b in zip(xs, xs[1:]))
+    assert xs[0] >= spacing - 1e-6                                       # room for an aircraft on the node behind
+    _, out = stop_lines(g)[(at[0], at[400])]                               # leaving the junction: tail clear of it
+    assert out[0][1] >= TAXI_AIRCRAFT_LEN_M + JUNCTION_CLEAR_M - 1e-6
+    assert len(g.nodes) == len(g.adj) and all(g.adj[n] == [] for n, _ in lines)
+
+
+def test_no_stop_line_inside_a_runway_protected_zone():
+    from backend.wave.surface import stop_lines, strip_distance_m
+    g, at = _line_graph([-500, -100, 300], {"R": 0})
+    for (u, v), (_, lines) in stop_lines(g).items():
+        assert all(strip_distance_m(g, n, "R") >= RUNWAY_HOLD_CLEARANCE_M for n, _ in lines)
+
+
+def test_queue_waits_nose_to_tail_at_stop_lines_never_in_the_junction():
+    from backend.wave.surface import TAXI_AIRCRAFT_LEN_M, TAXI_QUEUE_GAP_M, junctions
+    g, at = _tee_graph([-800, -600, 0, 400, 800])
+    assert junctions(g) == {at[0]}
+    p = unimpeded(g, at[-600], at[400])
+    res = Reservations({at[400]: [(0.0, 10.0, "PARKED")]}, {}, {})            # the end is taken for 10 min
+    a = schedule(g, p, 0.0, res, "A1")
+    b = schedule(g, p, 0.2, res, "B1")
+    assert a.ok and b.ok and a.waits and b.waits
+    for s in (a, b):
+        assert all(w["node"] not in junctions(g) for w in s.waits)
+    # while A waits at the stop line one spacing short of the taken end, B waits one aircraft length plus the gap
+    # behind it, past the junction, then moves up
+    wa = a.waits[-1]
+    xa = wa["lon"] * M_PER_DEG
+    assert xa == pytest.approx(400.0 - TAXI_AIRCRAFT_LEN_M - TAXI_QUEUE_GAP_M)
+    wb = next(w for w in b.waits if w["from_min"] < wa["to_min"] and wa["from_min"] < w["to_min"])
+    assert xa - wb["lon"] * M_PER_DEG == pytest.approx(TAXI_AIRCRAFT_LEN_M + TAXI_QUEUE_GAP_M)
+    assert verify_separation([track(a, "A1"), track(b, "B1")]) == []
+
+
+def test_scheduler_never_lets_an_aircraft_overtake_on_a_step():
+    g, at = _line_graph([0, 300, 600], {})
+    p = unimpeded(g, at[0], at[600])
+    ref = refine(g, p)
+    first = (ref.nodes[0], ref.nodes[1])
+    t_step = ref.seg[0]
+    # someone entered the first step just after A would, and leaves it just before: A must enter after it
+    res = Reservations({}, {first: [(0.01, t_step - 0.01, "SLOW")]}, {})
+    s = schedule(g, p, 0.0, res, "A1")
+    assert s.waits and s.waits[0]["reason"] == "give way to SLOW"
+    assert s.points[1]["t_min"] >= 0.01
+
+
+def test_verifier_flags_overtaking_and_head_on_across_stop_lines():
+    def tr(cs, pts):
+        return GroundTrack(cs, "departure", False, None, "", [], [
+            {"t_min": t, "lat": 0.0, "lon": 0.0, "node": n, **({"line": True} if n >= 100 else {})} for n, t in pts],
+            [], 0.0, 0.0, "osm")
+    a = tr("A1", [(1, 0.0), (100, 1.0), (2, 3.0)])                # 1 -> stop line 100 -> 2, slow
+    b = tr("B1", [(1, 0.6), (100, 0.8), (2, 1.0)])                # enters after A, reaches the line before it
+    msgs = verify_separation([a, b], headway_s=0.0)
+    assert any("overtake on 1-100" in m for m in msgs)
+    c = tr("C1", [(2, 1.5), (1, 2.5)])                            # 2 -> 1 while A is still on the edge (waits included)
+    assert any("on edge 1-2 in opposite directions" in m for m in verify_separation([a, c], headway_s=0.0))
+
+
+@pytest.mark.parametrize("wid", ["ATL-2024-06-07-20", "ORD-2024-06-04-21"])
+def test_fixed_traffic_never_waits_in_a_junction(wid):
+    from backend.wave import ground_traffic as GT
+    from backend.wave.surface import _crossing_zones, junctions
+    w = build.build_wave(wid)
+    ft = GT._get(w)
+    g = load_graph(w.airport.icao)
+    J = junctions(g)
+    for m in ft.movers:
+        s = ft.scheduled.get(m.label)
+        if s is None or m.path is None:
+            continue
+        r = refine(g, m.path)
+        _, zones, vacate = _crossing_zones(g, r.nodes, m.path.crossings, r.real)
+        ok = {r.nodes[0], r.nodes[vacate]} | {r.nodes[z[2]] for z in zones} | set(g.holds)
+        for x in s.waits:
+            assert x["node"] not in J or x["node"] in ok or x.get("strip"), (m.label, x)

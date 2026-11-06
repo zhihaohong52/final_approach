@@ -543,20 +543,20 @@ def _bay_free_at(bay, t_in: float, t_out: float) -> tuple[float, str] | None:
     return (max(b[1] for b in occ), max(occ, key=lambda b: b[1])[2])
 
 
-def _unreserve(res: Reservations, nodes: list[int], label: str) -> None:
-    """Drop every node and edge reservation of `label` along `nodes` (a schedule to be redone)."""
-    for n in set(nodes):
-        if n in res.node_busy:
-            res.node_busy[n] = [b for b in res.node_busy[n] if b[2] != label]
-    for u, v in zip(nodes, nodes[1:]):
-        if (u, v) in res.edge_dir:
-            res.edge_dir[(u, v)] = [b for b in res.edge_dir[(u, v)] if b[2] != label]
+def _unreserve(res: Reservations, s: Scheduled, label: str) -> None:
+    """Drop every node and edge reservation of `label` that the schedule `s` added (a schedule to be redone)."""
+    for kind, k, _ in s.reserved:
+        tab = res.node_busy if kind == "node" else res.edge_dir
+        if k in tab:
+            tab[k] = [b for b in tab[k] if b[2] != label]
 
 
 def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[str, float, float]]:
     """(strip, from leaving the hold, to reaching the first node past the zone) for each runway crossing of a
-    scheduled path, read back from its points (one arrival point per node, plus a departure point after a wait)."""
-    nodes, pts = path.nodes, s.points
+    scheduled path, read back from its points (one arrival point per position of the refined path, stop lines
+    included, plus a departure point after a wait)."""
+    ref = surface.refine(g, path)
+    nodes, pts = ref.nodes, s.points
     n = len(nodes)
     arr, dep = [0.0] * n, [0.0] * n
     k = 0
@@ -566,7 +566,7 @@ def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[st
             dep[i] = pts[k + 1]["t_min"]
             k += 1
         k += 1
-    _, zones, _ = surface._crossing_zones(g, nodes, path.crossings)
+    _, zones, _ = surface._crossing_zones(g, nodes, path.crossings, ref.real)
     return [(strip, dep[h], arr[ze], nodes[h]) for _, strip, h, ze, _ in zones]
 
 
@@ -662,7 +662,7 @@ def _compute(wave: Wave) -> FixedTraffic:
             if free is None:
                 fifo_ok = True
                 break
-            _unreserve(res, m.path.nodes, m.label)
+            _unreserve(res, s, m.label)
             blk = (at_hold, free[0], free[1])
             res.node_busy[last].append(blk)
             res.node_busy[last].sort()

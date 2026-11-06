@@ -64,24 +64,38 @@ the fix is there:
 
 ## 3. Block stop points
 
-- `surface.stop_points(g, path)`: the path indices where an aircraft may wait. Index 0 (stand, or the start of the
-  runway vacate), OSM holding positions, and runway hold points (`_crossing_zones` h) always; otherwise a node that is not
-  a junction, whose nose stays `JUNCTION_CLEAR_M` short of the next junction ahead on the path, whose tail
-  (`TAXI_AIRCRAFT_LEN_M` + `JUNCTION_CLEAR_M`) is clear of the previous junction, and that is at least
-  `TAXI_AIRCRAFT_LEN_M + TAXI_QUEUE_GAP_M` past the previous stop point. Never inside a runway protected zone or the
-  vacate stretch.
-- Junction: a node with three or more distinct non-runway neighbours, not counting dead-end stubs (stand leads). Whether
-  taxilane-only nodes count is settled by measurement (stop points per route at ATL and ORD) and recorded here.
-- `_crossing_zones`' `hold[i]` becomes the last stop point before `i` instead of `i - 1`. The scheduler already drives a
-  non-stop stretch (the runway zones use it), so the rest of `schedule` is unchanged. A queue now holds one aircraft per
-  stop point, i.e. per ~60 m of taxiway.
-- Direction locks (my call: not added). The per-edge opposite-direction reservation plus the node headway already
-  exclude two aircraft meeting head-on on a single-lane segment of a time-exact schedule (they would have to share an
-  edge or a node at the same time); measured head-on waits are 0–0.8%. A railway direction lock adds safety only when
-  trains run off their timetable, which this model does not simulate.
-- `surface.verify_stops(tracks, g)`: independent check that no track dwells at a junction node (OSM holding positions
-  and the first point excepted).
-- LIMITS: "taxi stop points" (assumption), with the three constants.
+Decided after measurement (6 Nov, "make it as realistic as possible to aircraft operations"): stop lines on the
+taxiway, not node-only stop points. 35-62% of route nodes are junctions (ATL 62%, ORD 35-40%), so "stop only on a
+node that is not a junction" leaves long stretches with nowhere to stop, and OSM node spacing (5-200 m) would still
+set queue capacity.
+
+- `surface.stop_lines(g)`: per directed taxi edge (u, v), fixed positions on the edge: the line nearest v is
+  `JUNCTION_CLEAR_M` (40 m) short of v when v is a junction, else one queue spacing (`TAXI_AIRCRAFT_LEN_M` 45 +
+  `TAXI_QUEUE_GAP_M` 15 = 60 m); the rest every 60 m back, keeping that spacing from u (85 m, the tail clear, when u
+  is a junction). None within `RUNWAY_HOLD_CLEARANCE_M` of a runway centreline. Built once per graph at load (before
+  it is shared between threads), deterministic ids appended to `g.nodes` (empty adjacency), so every geometry lookup
+  works on them and they pickle with the graph.
+- `surface.refine(g, path)`: the route with its edges' stop lines inserted; each edge's time split by distance.
+- `_stop_holds`: where to wait before entering each index. Inside a runway zone and the vacate stretch, unchanged.
+  Elsewhere the last stop point at least 40 m short of the index when it is a junction, else 60 m behind it. Stop
+  points: the first index, each zone's hold, the end of the vacate stretch, OSM holding positions, and every other
+  position that is not a junction, not in a zone, 40 m short of the next junction and 85 m past the last one. Past the
+  vacate stretch the hold never goes back onto the runway.
+- Scheduler checks: (a) node headway now applies to stop lines too (nose-to-tail queues); (b) head-on is checked on
+  the whole graph edge, stop-line waits included, and a wait on a stop line rescans from the edge's first node;
+  (d, new) no overtaking: on every step, entry and exit order match every other traversal in the same direction (it
+  also catches the turn-speed difference that let a fast aircraft pass a slow one on a long edge before).
+- `verify_separation`: (2) on whole graph edges, (5, new) overtaking on any step. No separate `verify_stops`: the
+  test `test_fixed_traffic_never_waits_in_a_junction` checks the stop rule on ATL and ORD.
+- Direction locks: not added, as planned (head-on is exact on whole edges).
+- LIMITS: "taxi stop lines" (assumption).
+
+Measured (10 reference waves, after gate holds): waits in junctions 35-58% of wait time -> 0 apart from OSM holding
+positions; fixed-traffic waits 2,731 -> 2,944 min; takeoffs after the real wheels-off 119 -> 130; no new separation
+breach or overtaking. Queues are now 60 m per aircraft, so the ~125 m between two parallel runways' protected zones
+holds about two crossers: at ATL east side and ORD 09R/27L, crossers of the departure runway back up onto the runway
+exit (ATL-2024-06-07-20 still-vacating flags 11 -> 20) and ORD wave flights wait 87 -> 137 min. That is the crossing
+bottleneck made visible; section 4 addresses it.
 
 ## 4. Runway crossing batching
 

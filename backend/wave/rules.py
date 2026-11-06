@@ -255,6 +255,17 @@ LIMITS = [
              "Known trade-off: uniform metering brings a bank to its holding point together, so a departure that "
              "must cross another departure runway (ATL-2024-07-05-21: three to 26L across 27R) can wait past the "
              "30 min horizon behind that runway's takeoffs."},
+    {"limit": "taxi stop lines", "value": "wait only at stop lines: nose 40 m short of a taxiway junction, tail 85 m "
+     "past one, queues 60 m nose to nose (45 m aircraft + 15 m gap)", "source": "assumption",
+     "note": "railway-style blocks on the taxi graph (surface.stop_lines): a waiting aircraft stands at a stop line on "
+             "the taxiway (fixed positions per direction of each edge) or a node that is not a junction, never inside "
+             "a junction; it drives non-stop to the next stop point, and never overtakes on a step (scheduler and "
+             "verifier check). Runway holding points, OSM holding positions and the end of a runway exit stay stop "
+             "points. Junction: 3+ non-runway neighbours, dead-end stand leads not counted. Replaces one aircraft per "
+             "OSM node (nodes 5-200 m apart; 35-62% of route nodes are junctions). On 10 reference waves: waits in "
+             "junctions 35-58% of wait time -> 0 (OSM holding positions only); fixed-traffic waits 2,731 -> 2,944 min; "
+             "queues between parallel runways now hold ~2 aircraft, so crossers back up (ORD wave-flight FCFS waits "
+             "87 -> 137 min)."},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
      "note": "a departure's recorded takeoff is the earliest time >= max(WHEELS_OFF, leaving the holding point) "
              "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "
