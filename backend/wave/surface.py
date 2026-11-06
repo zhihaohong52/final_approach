@@ -647,6 +647,26 @@ class Overlay:
         return self.own.setdefault(k, [] if d is None else d)
 
 
+_SPANS: dict[int, tuple] = {}   # id(list) -> (list, its length, its longest interval)
+_SPANS_MAX = 200_000
+_WIN = 1e-6                      # margin on a window bound (minutes; float error on these times is ~1e-13)
+_WIN_MIN = 4                     # lists this short are scanned whole
+
+
+def _span(lst: list) -> float:
+    """The longest interval (end - start) in a sorted reservation list, memoised on the list object (checked by
+    identity and length: a list is only ever appended to or replaced). The checks bisect each list to the intervals
+    starting within this of the times they test, so they skip the earlier ones without changing what they find."""
+    hit = _SPANS.get(id(lst))
+    if hit is not None and hit[0] is lst and hit[1] == len(lst):
+        return hit[2]
+    out = max((x[1] - x[0] for x in lst), default=0.0)
+    if len(_SPANS) >= _SPANS_MAX:
+        _SPANS.clear()
+    _SPANS[id(lst)] = (lst, len(lst), out)
+    return out
+
+
 @dataclass
 class Reservations:
     """Ground reservation table, times in minutes. `node_busy[n]` and `edge_dir[(u, v)]` hold `(from, to, callsign)`
@@ -932,8 +952,9 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         # (a) the node is clear of other reservations by the headway, over the whole dwell
         if restart is None and not only_b:
             lst = busy.get(node, ())                # sorted: only intervals starting before the dwell ends
-            hit = [(e + hw, cs) for s, e, cs in lst[:bisect_left(lst, (dep[i] + hw - _TOL,))]
-                   if arr[i] < e + hw - _TOL]
+            hi = bisect_left(lst, (dep[i] + hw - _TOL,))
+            lo = bisect_left(lst, (arr[i] - hw - _span(lst) - _WIN,), 0, hi) if hi > _WIN_MIN else 0
+            hit = [(e + hw, cs) for s, e, cs in lst[lo:hi] if arr[i] < e + hw - _TOL]
             if busy_own:
                 hit += [(e + hw, cs) for s, e, cs in busy_own.get(node, ())
                         if s < dep[i] + hw - _TOL and arr[i] < e + hw - _TOL]
@@ -945,8 +966,9 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         if restart is None and i + 1 < n and real[i]:
             j = nxt_real[i]
             lst = edir.get((nodes[j], node), ())
-            hit = [(e + seg[i], cs) for s, e, cs in lst[:bisect_left(lst, (arr[j] - _TOL,))]
-                   if dep[i] < e - _TOL]
+            hi = bisect_left(lst, (arr[j] - _TOL,))
+            lo = bisect_left(lst, (dep[i] - _span(lst) - _WIN,), 0, hi) if hi > _WIN_MIN else 0
+            hit = [(e + seg[i], cs) for s, e, cs in lst[lo:hi] if dep[i] < e - _TOL]
             if edir_own:
                 hit += [(e + seg[i], cs) for s, e, cs in edir_own.get((nodes[j], node), ())
                         if s < arr[j] - _TOL and dep[i] < e - _TOL]
@@ -959,6 +981,8 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
             step = (node, nodes[i + 1])
             first = None                                    # the smallest crossing traversal (first in sorted order)
             for lst in ((edir.get(step, ()), edir_own.get(step, ())) if edir_own else (edir.get(step, ()),)):
+                if len(lst) > _WIN_MIN:                     # a match starts after min(a, b - longest), before max(a, b)
+                    lst = lst[bisect_left(lst, (min(a, b - _span(lst)) - _WIN,)):bisect_left(lst, (max(a, b),))]
                 for x in lst:
                     if (x[0] > a + _TOL and x[1] < b - _TOL) or (x[0] < a - _TOL and x[1] > b + _TOL):
                         if first is None or x < first:
