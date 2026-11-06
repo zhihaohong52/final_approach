@@ -754,7 +754,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
     return list(hit)
 
 
-CHECK_CACHE_MAX = 4096
+CHECK_CACHE_MAX = 512   # ~35 KB a plan (~18 MB); a plan is re-checked soon after its first check
 _CHECKS: dict[tuple, list[RuleCheck]] = {}
 
 
