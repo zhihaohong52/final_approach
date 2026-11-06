@@ -633,15 +633,13 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     for lst in events.values():
         lst.sort()
     ts.runway_events = events
-    nodes = surface.Overlay(res.node_busy)
-    edges = surface.Overlay(res.edge_dir)
     occ = fixed.occupancy
     dep_at = None                    # fixed departure label -> its holding-point point, built on first use
     wkey = route.wave_key(wave)
-    # reservations of the landings scheduled so far: added to the plan's view only when a later landing has to be
-    # scheduled, and part of a landing's cache key only where its route can read them (`surface.reads`)
+    # the landings scheduled so far: their reservations that a later landing's route can read (`surface.reads`) are
+    # its cache key and, when it has to be scheduled, all of the plan's reservations its view holds (the schedule
+    # reads nothing else of them)
     done: list = []
-    pending: list[tuple] = []
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
         lc, fh = [], []
@@ -678,19 +676,25 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
         # route positions (`surface.reads`) and the runway events on the strips its route crosses; the same inputs
         # in another plan give the same result
         zs = sorted({st for _, st in p.crossings})
+        rd = tuple(prev.reads(g, p, t_exit) for prev in done)
         key = (wkey, t_exit, cs, rwy, tx.gate,
-               tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs),
-               tuple(prev.reads(g, p, t_exit) for prev in done))
+               tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs), rd)
         s = _SCHED.get(key)
         if s is None:
-            for added in pending:
-                surface.reserve(surface.Reservations(nodes, edges, {}), added)
-            pending.clear()
-            view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
+            own_n: dict = {}
+            own_e: dict = {}
+            for part in rd:
+                for kind, k, iv in part:
+                    (own_n if kind == "node" else own_e).setdefault(k, []).append(iv)
+            for lst in own_n.values():
+                lst.sort()
+            for lst in own_e.values():
+                lst.sort()
+            view = surface.Reservations(surface.Overlay(res.node_busy, own_n), surface.Overlay(res.edge_dir, own_e),
+                                        {k: [e for e in v if e[2] != cs] for k, v in events.items()})
             s = surface.schedule(g, p, t_exit, view, cs, commit=False)
             _put(_SCHED, key, s, SCHED_CACHE_MAX)
         done.append(s)
-        pending.append(s.reserved)
         names = [n for i, n in enumerate(p.names) if n and (i == 0 or p.names[i - 1] != n)]
         # = last point - exit - unimpeded; exactly 0 unimpeded
         wait = sum(w["to_min"] - w["from_min"] for w in s.waits)

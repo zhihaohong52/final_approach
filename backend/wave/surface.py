@@ -640,9 +640,9 @@ class Overlay:
     to `own`, so `reserve` never copies a base list). `schedule` reads both lists of a key."""
     __slots__ = ("base", "own")
 
-    def __init__(self, base: dict):
+    def __init__(self, base: dict, own: dict | None = None):
         self.base = base
-        self.own: dict = {}
+        self.own: dict = {} if own is None else own
 
     def setdefault(self, k, d=None):
         return self.own.setdefault(k, [] if d is None else d)
