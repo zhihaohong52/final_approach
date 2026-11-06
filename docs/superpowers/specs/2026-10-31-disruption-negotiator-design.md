@@ -12,7 +12,7 @@ deterministic safety rules, in 3 rounds or fewer, and hand it to the duty manage
 
 Pitch line: **"Decision models decide, Claude explains, rules guarantee safety, the human approves."**
 
-### Judging rubric this design is built against (docs/airbus_track.pdf)
+### Judging rubric this design is built against (docs/airbus_challenge2.pdf)
 Technical soundness 25% (right tool per job, LLM/non-LLM split, works beyond a scripted demo) ·
 Problem realism 20% · Honest evaluation 20% (baseline, metrics, a visible failure) · Trust and
 traceability 20% (every output traces to a rule/signal, uncertainty visible, human decides) ·
