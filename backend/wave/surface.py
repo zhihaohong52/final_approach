@@ -1051,36 +1051,48 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
     return Scheduled(points, waits, ok, fail, arr[vacate] if vacate else (dep[0] if n > 1 else arr[0]), tuple(added))
 
 
-def read_keys(g: TaxiGraph, path: TaxiPath) -> frozenset:
-    """Every reservation key `schedule` can read for `path`: ("node", n) per position of the refined path, and
-    ("edge", (u, v)) per step and per reversed whole graph edge (the head-on check). Memoised on the path."""
+def read_keys(g: TaxiGraph, path: TaxiPath) -> dict:
+    """Every reservation key `schedule` can read for `path`, with the free-flow taxi time (minutes from the start,
+    no waits) to the first position that reads it: ("node", n) per position of the refined path (the headway check
+    there), ("edge", (u, v)) per step (overtaking) and per reversed whole graph edge (head-on). A wait only makes a
+    position later, so a check at a position never meets an interval ending before the free-flow time to it less a
+    headway. Memoised on the path."""
     hit = path._keys
     if hit is not None and hit[0] is g:
         return hit[1]
     r = refine(g, path)
-    nodes, real, n = r.nodes, r.real, len(r.nodes)
-    keys = {("node", x) for x in nodes}
+    nodes, real, seg, n = r.nodes, r.real, r.seg, len(r.nodes)
+    keys: dict = {}
+    off = 0.0
     j = n - 1
+    nxt = [0] * n
     for i in range(n - 1, -1, -1):
-        if i + 1 < n:
-            keys.add(("edge", (nodes[i], nodes[i + 1])))
-            if real[i]:
-                keys.add(("edge", (nodes[j], nodes[i])))
+        nxt[i] = j
         if real[i]:
             j = i
-    out = frozenset(keys)
-    path._keys = (g, out)
-    return out
+    for i in range(n):
+        for k in (("node", nodes[i]),) + ((("edge", (nodes[i], nodes[i + 1])),) if i + 1 < n else ()) + \
+                ((("edge", (nodes[nxt[i]], nodes[i])),) if i + 1 < n and real[i] else ()):
+            if k not in keys:
+                keys[k] = off                   # positions are visited in order: the first is the earliest
+        if i + 1 < n:
+            off += seg[i]
+    path._keys = (g, keys)
+    return keys
 
 
 def reads(g: TaxiGraph, path: TaxiPath, t0_min: float, added, headway_s: float = HEADWAY_S) -> tuple:
     """The part of `added` (a `Scheduled.reserved`) that `schedule(g, path, t0_min, ...)` can read: entries on
-    `read_keys` that end late enough to touch a dwell starting at or after `t0_min` (node checks reach back one
-    headway, edge checks need the interval to end after the start). Two reservation tables that differ only
-    outside this give the same schedule."""
+    `read_keys` that end late enough to touch the first position reading them (free-flow from `t0_min`, less one
+    headway and a float margin). Two reservation tables that differ only outside this give the same schedule."""
     keys = read_keys(g, path)
     floor = t0_min - headway_s / 60.0 - 1e-6
-    return tuple(e for e in added if (e[0], e[1]) in keys and e[2][1] > floor)
+    out = []
+    for e in added:
+        o = keys.get((e[0], e[1]))
+        if o is not None and e[2][1] > floor + o:
+            out.append(e)
+    return tuple(out)
 
 
 def reserve(res: Reservations, added) -> None:
