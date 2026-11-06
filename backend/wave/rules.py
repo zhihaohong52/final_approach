@@ -257,8 +257,8 @@ LIMITS = [
              "either way. Buffer sweep on 10 reference waves (fixed-traffic taxi waits / takeoffs after the real "
              "wheels-off): 3 min 2,068 min / 137, 5 min 2,731 / 119, 8 min 3,984 / 94; without holds 18,949 / 271. "
              "Known trade-off: uniform metering brings a bank to its holding point together, so a departure that "
-             "must cross another departure runway (ATL-2024-07-05-21: three to 26L across 27R) can wait past the "
-             "30 min horizon behind that runway's takeoffs."},
+             "must cross another departure runway waits behind that runway's takeoffs (ATL-2024-07-05-21: three "
+             "past the 30 min horizon under the 1-min-either-side crossing gap, none since the 15 s gap)."},
     {"limit": "taxi stop lines", "value": "wait only at stop lines: nose 40 m short of a taxiway junction, tail 85 m "
      "past one, queues 60 m nose to nose (45 m aircraft + 15 m gap)", "source": "assumption",
      "note": "railway-style blocks on the taxi graph (surface.stop_lines): a waiting aircraft stands at a stop line on "

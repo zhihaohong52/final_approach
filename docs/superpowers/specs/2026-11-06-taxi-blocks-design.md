@@ -125,6 +125,32 @@ takeoffs, stops per departure, waits in junctions, fragility, `verify_separation
 the real BTS TAXI_IN). `verify_separation` must not gain breaches. Scenario pins that depend on engine results
 (`test_stress_airlines`) are re-picked at the end by their stated criteria.
 
+## Results (engine v5-taxi, 6 Nov 2026)
+
+Harness, 10 reference waves (fixed-traffic taxi waits excluding gate holds / failures / takeoffs after the real
+wheels-off / share of waits in junctions):
+
+| step | waits min | failures | late | in junctions |
+|---|---|---|---|---|
+| baseline (main f6ecdd3) | 19,305 | 204 | 344 / 1,035 | 63% |
+| + arrival runways outboard | 18,949 | 210 | 271 | |
+| + gate holds (5 min buffer) | 2,731 | 3 | 119 | 35-58% |
+| + stop lines | 2,944 | 3 | 130 | ~0 (OSM holds only) |
+| + crossing gap 1 min / 15 s | 2,049 | 0 | 116 | ~0 |
+
+Separation breaches: 1 throughout (ORD AA2881, pre-existing), no overtaking. Wave-flight FCFS waits: ORD-2024-06-04-21
+205 -> 123 min, ATL-2024-06-07-20 25 -> 17. Fragility (share of movements whose 30 s lateness touches another's
+reservation): 82% at baseline, 41-78% per wave now; a timetable property, not robustness.
+
+Formulas benchmark (BTS 2024, n 50, seed 7, firm, formula arm only; free): FCFS breaks a rule in 29 of 50 hours (26
+at v4-airlines); agreed plans 0 violations; formula arm delay 457.8 -> 454.6 min, fuel 427 -> 392 kg; FCFS delay on
+the hours where it is legal 477.0 -> 485.6 min (21 hours, was 24). The six newly illegal hours all fail
+ATC-TAXI-CONFLICT with a wave flight still on its runway: ORD-2024-06-07-20, SLC-2024-08-09-23, LAS-2024-08-03-22
+(fixed traffic never yields to wave flights; with 60 m queues it holds a wave arrival on its exit), BNA-2024-06-27-16,
+BNA-2024-07-07-22 (the wave flights now land on 02L, whose chosen OSM exit runs along the runway pavement at 2.8 deg),
+ATL-2024-07-22-02 (the wave flight now lands with the queue on 27L, landings 1 min apart, 0.28 min short of vacating).
+BOS-2024-06-29-17, JFK-2024-07-08-20, SEA-2024-06-14-23 became legal.
+
 ## After merge (not on this branch without the user)
 
 `ENGINE_VERSION` changes, so the recorded replays lose their path drawings until re-recorded, and the model-arm
