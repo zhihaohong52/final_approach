@@ -23,6 +23,7 @@ from backend.wave.rules import has_slot, reciprocal, strip_of, strip_sequence, w
 from backend.wave.utility import agent_utility, hold_burn, metrics_map, turnaround_min
 
 MAX_MOVES = 12
+SWAP_NEIGHBOURS = 3   # gate-swap partners per flight: the nearest by in-block time, within a turnaround
 SPEED_REDUCTIONS = (3.0, 5.0, 8.0)
 GROUND_DELAYS = (5.0, 10.0, 15.0)
 SHIFT_STEPS = (-2.0, 2.0)
@@ -400,22 +401,32 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str, holds: bool = True) 
                 mv.append(replace(m, label=f"Send {a.callsign} to remote stand {rs.id} (bussing, "
                                            f"taxi {_taxi(wave, a.callsign, a.runway, rs.id):.0f} min"
                                            f"{_wait_txt(wave, plan, m, a.callsign)})"))
-        for i, a in enumerate(landing):
-            for b in landing[i + 1:]:
-                ga, gb = gates.get(a.gate or ""), gates.get(b.gate or "")
-                if ga is None or gb is None or ga.id == gb.id:
-                    continue   # unknown gate: nothing to swap
-                fa, fb = _flight(wave, a.callsign), _flight(wave, b.callsign)
-                if (fa.gate_size == "wide" and gb.size != "wide" and not gb.remote) or \
-                   (fb.gate_size == "wide" and ga.size != "wide" and not ga.remote):
-                    continue
-                ta, tb = _taxi(wave, a.callsign, a.runway, b.gate), _taxi(wave, b.callsign, b.runway, a.gate)
-                m = _move("GROUND", "swap_gates", [a.callsign, b.callsign], {}, "")
-                wt = _wait_txt(wave, plan, m, [a.callsign, b.callsign], True)
-                lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min{wt})"
-                if len(lab) > LABEL_MAX:     # keep the menu line short: the waits stay in the move's evaluation
-                    lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min)"
-                mv.append(replace(m, label=lab))
+        # swaps only between flights contesting gates at the same time: in-block times under a turnaround apart, and
+        # at most SWAP_NEIGHBOURS nearest per flight (O(n) pairs, not every pair); farther apart, a free gate for either
+        # is a `reassign_gate`
+        by_ib = sorted(range(len(landing)), key=lambda k: (mm[landing[k].callsign].in_block_min or 0.0, k))
+        pairs = set()
+        for r, k in enumerate(by_ib):
+            ibk = mm[landing[k].callsign].in_block_min or 0.0
+            for k2 in by_ib[r + 1:r + 1 + SWAP_NEIGHBOURS]:
+                if (mm[landing[k2].callsign].in_block_min or 0.0) - ibk < turn:
+                    pairs.add((min(k, k2), max(k, k2)))
+        for i, j in sorted(pairs):
+            a, b = landing[i], landing[j]
+            ga, gb = gates.get(a.gate or ""), gates.get(b.gate or "")
+            if ga is None or gb is None or ga.id == gb.id:
+                continue   # unknown gate: nothing to swap
+            fa, fb = _flight(wave, a.callsign), _flight(wave, b.callsign)
+            if (fa.gate_size == "wide" and gb.size != "wide" and not gb.remote) or \
+               (fb.gate_size == "wide" and ga.size != "wide" and not ga.remote):
+                continue
+            ta, tb = _taxi(wave, a.callsign, a.runway, b.gate), _taxi(wave, b.callsign, b.runway, a.gate)
+            m = _move("GROUND", "swap_gates", [a.callsign, b.callsign], {}, "")
+            wt = _wait_txt(wave, plan, m, [a.callsign, b.callsign], True)
+            lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min{wt})"
+            if len(lab) > LABEL_MAX:     # keep the menu line short: the waits stay in the move's evaluation
+                lab = f"Swap gates {a.callsign} ({a.gate}) ↔ {b.callsign} ({b.gate}) (taxi {ta:.0f}/{tb:.0f} min)"
+            mv.append(replace(m, label=lab))
     else:
         own = [agent_id.split(":", 1)[1]] if role == "PILOT" else _own_flights(wave, agent_id)
         for cs in own:
