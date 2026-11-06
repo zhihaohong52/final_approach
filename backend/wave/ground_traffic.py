@@ -6,8 +6,10 @@ vetoed). Pure and deterministic; no model decides anything here.
 
 - Queue arrival: lands at `slot_min` on its runway (a landing runway event), exits by `surface.choose_exit` after its
   ROT (`t_start` = exit time) and taxis to a seeded stand.
-- Departure: pushback at WHEELS_OFF - TAXI_OUT (`t_start`), from a seeded stand (simulated) in the carrier's most-used
-  pier, to the holding point of its departure runway; takeoff (a runway event) at WHEELS_OFF, or later if the taxi
+- Departure: real gate-out at WHEELS_OFF - TAXI_OUT (`t_start`), from a seeded stand (simulated) in the carrier's
+  most-used pier, to the holding point of its departure runway. Gate hold (GATE_HOLD, assumption): it pushes back no
+  earlier than that and late enough to reach the holding point GATE_HOLD_BUFFER_MIN before WHEELS_OFF on an unimpeded
+  taxi (`FixedMover.pushback`), so a long real TAXI_OUT is spent at the stand, not queued on the taxiways; takeoff (a runway event) at WHEELS_OFF, or later if the taxi
   waits made it reach the holding point after that, or takeoff spacing (from takeoffs already settled, and 1 min from
   every landing on the strip) or a scheduled crossing holds it. It waits for its takeoff in the holding bay at the
   holding point until it lines up 30 s before takeoff (HOLD_UNTIL_TAKEOFF): off the taxiway, so a departure with an
@@ -41,6 +43,10 @@ PARALLEL_DEG = 10.0
 # other free ends within this of the arrival flow also take departures (assumption, LIMITS)
 DEPARTURE_SPREAD_DEG = 60.0
 TAKEOFF_SPACING_MIN = 1.0     # expected takeoffs per departure runway end: one a minute (assumption, LIMITS)
+# gate hold (assumption, LIMITS): a departure leaves its stand just in time to reach the holding point this long before
+# its real WHEELS_OFF on an unimpeded taxi (never before its real gate-out); False: it pushes back at the real gate-out
+GATE_HOLD = True
+GATE_HOLD_BUFFER_MIN = 5.0
 # a takeoff stays this far from every landing on its strip (mixed mode; assumption, LIMITS)
 LANDING_TAKEOFF_GAP_MIN = 1.0
 HOLD_UNTIL_TAKEOFF = True     # a departure waits in the holding bay until it lines up (False: it leaves the holding
@@ -73,9 +79,21 @@ class FixedMover:
     # departures with several candidate runway ends: [(end, entry node, strip, distance stand -> threshold)]; the end
     # is settled by trial scheduling in FCFS order (`_compute`)
     options: list = field(default_factory=list, repr=False, compare=False)
+    # FCFS scheduling order: the start on the provisional path (`pushback()` when the movers are built); a departure
+    # whose end is then settled to another candidate keeps its place
+    order_min: float = field(default=0.0, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.label = self.label or self.callsign
+
+    def pushback(self, path: TaxiPath | None = None) -> float:
+        """When the movement starts on the graph. Arrivals: `t_start_min` (the runway exit). Departures with GATE_HOLD:
+        the metered pushback for `path` (default its own): the real gate-out, or later so that an unimpeded taxi
+        reaches the holding point GATE_HOLD_BUFFER_MIN before WHEELS_OFF."""
+        p = path or self.path
+        if self.kind != "departure" or not GATE_HOLD or p is None:
+            return self.t_start_min
+        return max(self.t_start_min, self.event_min - sum(p.seg_s[:-1]) / 60.0 - GATE_HOLD_BUFFER_MIN)
 
 
 @dataclass
@@ -396,6 +414,8 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
                 continue
             opts.append((rid, ent, _strip_key(g, rid), dist(rid)))
             push = ev - (float(m.taxi_min) if m.taxi_min is not None else taxi_u)
+            if GATE_HOLD:
+                push = max(push, ev - taxi_u - GATE_HOLD_BUFFER_MIN)
             ready = push + taxi_u
             wait = max(0.0, last_to.get(rid, -math.inf) + TAKEOFF_SPACING_MIN - ready)
             rows.append(((ready + wait, dist(rid), rid), rid, ent, ready + wait))
@@ -426,7 +446,9 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
         label = f"{cs} (dep)" if cs in wave_cs else cs
         out.append(FixedMover(cs, "departure", rwy or "", snode, ev - taxi, path, ev, strip, skey, why, label,
                               opts if path is not None and len(opts) > 1 else []))
-    out.sort(key=lambda m: (m.t_start_min, m.callsign))
+    for m in out:
+        m.order_min = m.pushback()
+    out.sort(key=lambda m: (m.order_min, m.callsign))     # FCFS by when each starts moving (gate holds included)
     return out, mode, mv is not None, stats
 
 
@@ -576,10 +598,10 @@ def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
             continue
         travel = sum(path.seg_s[:-1]) / 60.0
         if best is not None and not best[0][0] and \
-                (False, takeoff(strip, max(m.event_min, m.t_start_min + travel)), d, rid) > best[0]:
+                (False, takeoff(strip, max(m.event_min, m.pushback(path) + travel)), d, rid) > best[0]:
             continue
         view = Reservations(_CowTable(res.node_busy), _CowTable(res.edge_dir), events)
-        s = surface.schedule(g, path, m.t_start_min, view, m.label)
+        s = surface.schedule(g, path, m.pushback(path), view, m.label)
         t = takeoff(strip, max(m.event_min, s.points[-1]["t_min"]))
         key = (not s.ok, t, d, rid)
         if best is None or key < best[0]:
@@ -610,7 +632,7 @@ def _compute(wave: Wave) -> FixedTraffic:
     shifted = 0
     spans: dict[str, list[tuple[float, float]]] = {}      # strip -> crossing windows of scheduled movers
     occupancy: dict[str, list[tuple[float, float, str, str]]] = {}
-    stats["hold_point_min"], stats["queue_wait_min"] = [], []
+    stats["hold_point_min"], stats["queue_wait_min"], stats["gate_hold_min"] = [], [], []
     # takeoffs whose time is final: unrouted departures keep WHEELS_OFF; the others settle as they are scheduled
     settled: set[str] = {m.label for m in movers if m.kind == "departure" and (m.path is None or g is None)}
     bays: dict[int, list[tuple[float, float, str]]] = {}
@@ -625,7 +647,7 @@ def _compute(wave: Wave) -> FixedTraffic:
         last = m.path.nodes[-1]
         fifo_ok, blocks = False, []
         for _attempt in range(HOLD_QUEUE_MAX_RETRY):
-            s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
+            s = surface.schedule(g, m.path, m.pushback(), view, m.label)
             if m.kind != "departure" or not HOLD_UNTIL_TAKEOFF or s.reason == "hold-short search did not converge":
                 fifo_ok = True
                 break
@@ -650,7 +672,7 @@ def _compute(wave: Wave) -> FixedTraffic:
         if not fifo_ok:
             # retries exhausted (its reservations were dropped): schedule once without the queue blocks, keep it,
             # and report the unresolved order as a fixed failure
-            s = surface.schedule(g, m.path, m.t_start_min, view, m.label)
+            s = surface.schedule(g, m.path, m.pushback(), view, m.label)
         scheduled[m.label] = s
         if not s.ok:
             failures.append((m.label, s.reason or "not scheduled"))
@@ -696,9 +718,17 @@ def _compute(wave: Wave) -> FixedTraffic:
             for strip in surface.runway_strips_at(g, m.path.nodes[0]):
                 occupancy.setdefault(strip, []).append((m.event_min, s.exit_clear_min, m.label, "arrival",
                                                         m.path.nodes[0]))
+        push = m.pushback()
+        if push > m.t_start_min + _TOL:
+            # gate hold: at the stand from the real gate-out to the metered pushback (off the graph: nothing reserved)
+            stats["gate_hold_min"].append((push - m.t_start_min, m.label))
+            p0 = s.points[0]
+            waits = [{"node": m.stand_node, "lat": p0["lat"], "lon": p0["lon"], "from_min": m.t_start_min,
+                      "to_min": push, "reason": f"gate hold: pushback metered to the {m.runway} takeoff",
+                      "strip": None, "kind": None, "for": None}] + waits
         names = [n for i, n in enumerate(m.path.names) if n and (i == 0 or m.path.names[i - 1] != n)]
         tracks.append(GroundTrack(m.label, m.kind, False, m.runway, m.stand, names, points, waits,
-                                  m.path.unimpeded_min, points[-1]["t_min"] - m.t_start_min, m.path.src))
+                                  m.path.unimpeded_min, points[-1]["t_min"] - push, m.path.src))
     # Safety net: re-check every track's runway gaps against the final events with the independent verifier (one
     # track at a time: checks 3 and 4 only). Takeoffs are held clear of scheduled crossings above, so a broken
     # crossing gap should not occur; if one does it is a failure; an arrival still vacating at another fixed

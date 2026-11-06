@@ -244,6 +244,14 @@ LIMITS = [
              "are v2's FCFS choice "
              "(queue on the two best-wind ends), so e.g. ATL east flow lands on 08L/08R in this model, whereas real "
              "ATL lands on the outboard runways (08L, 09R, 10) and departs from 08R/09L"},
+    {"limit": "gate hold", "value": "push back to reach the holding point 5 min before the real wheels-off "
+     "(unimpeded taxi), never before the real gate-out", "source": "assumption",
+     "note": "fixed departures: BTS TAXI_OUT includes queues and ground stops (up to 161 min at ORD on 4 Jun 2024); "
+             "pushing back at the real gate-out stacked them on the taxiways. The metered pushback (the TSAT idea of "
+             "A-CDM and surface metering, with the real wheels-off as the target) keeps that time at the stand, shown "
+             "as a 'gate hold' wait on the track; the stand is not a wave gate and is not reserved before pushback "
+             "either way. Buffer sweep on 10 reference waves (fixed-traffic taxi waits / takeoffs after the real "
+             "wheels-off): 3 min 2,068 min / 137, 5 min 2,731 / 119, 8 min 3,984 / 94; without holds 18,949 / 271."},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
      "note": "a departure's recorded takeoff is the earliest time >= max(WHEELS_OFF, leaving the holding point) "
              "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "

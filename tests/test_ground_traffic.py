@@ -68,9 +68,10 @@ def test_departures_use_real_times_and_window():
     assert len(deps) >= 20
     for m in deps:
         assert -30 - 1e-9 <= m.event_min <= 120 + 1e-9          # wheels-off inside [T0 - 30, T0 + 120]
-        assert m.t_start_min < m.event_min                      # pushback = WHEELS_OFF - TAXI_OUT
+        assert m.t_start_min < m.event_min                      # real gate-out = WHEELS_OFF - TAXI_OUT
+        assert m.t_start_min - 1e-9 <= m.pushback() < m.event_min   # gate hold: never before the real gate-out
     ft = fixed_traffic(w)
-    assert [(m.t_start_min, m.callsign) for m in ft] == sorted((m.t_start_min, m.callsign) for m in ft)
+    assert [(m.order_min, m.callsign) for m in ft] == sorted((m.order_min, m.callsign) for m in ft)
 
 
 def test_departure_paths_run_stand_to_holding_point():
@@ -415,3 +416,38 @@ def test_atlanta_west_flow_lands_outboard_and_departs_inboard():
     mixed, arr_rw, cands = departure_mode(w)
     assert {q.runway for q in w.queue} == {"26R", "27L", "28"}
     assert not mixed and arr_rw in {"26R", "27L", "28"} and set(cands) == {"26L", "27R"}
+
+
+# ---------------------------------------------------------------- gate holds (metered pushback)
+
+def test_pushback_is_metered_to_the_takeoff(monkeypatch):
+    from backend.wave import ground_traffic as GT
+    path = surface.TaxiPath([1, 2, 3], [120.0, 180.0, 0.0], ["A", "A"], [], 5.0, "osm")   # 5 min to the holding point
+    dep = GT.FixedMover("DL1", "departure", "26L", 1, -60.0, path, 30.0)
+    assert dep.pushback() == 30.0 - 5.0 - GT.GATE_HOLD_BUFFER_MIN       # a 90 min real taxi-out: held at the stand
+    tight = GT.FixedMover("DL2", "departure", "26L", 1, 22.0, path, 30.0)
+    assert tight.pushback() == 22.0                                       # never before the real gate-out
+    arr = GT.FixedMover("DL3", "arrival", "26R", 1, -60.0, path, -61.0)
+    assert arr.pushback() == -60.0
+    monkeypatch.setattr(GT, "GATE_HOLD", False)
+    assert dep.pushback() == -60.0
+
+
+def test_held_departures_start_at_the_metered_pushback_and_show_the_hold():
+    from backend.wave import ground_traffic as GT
+    w = build.build_wave("ORD-2024-06-04-21")                             # ground-stop evening: real taxi-outs to 161 min
+    ft = GT._get(w)
+    held = [m for m in ft.movers if m.kind == "departure" and m.path is not None
+            and m.pushback() > m.t_start_min + 1e-9]
+    assert len(held) > 50 and ft.stats["gate_hold_min"]
+    tracks = {t.callsign: t for t in ft.tracks}
+    for m in held:
+        t = tracks.get(m.label)
+        if t is None:
+            continue
+        assert abs(t.points[0]["t_min"] - m.pushback()) < 1e-9 or t.points[0]["t_min"] > m.pushback()
+        hold = t.waits[0]
+        assert hold["reason"].startswith("gate hold") and hold["node"] == m.stand_node
+        assert hold["from_min"] == m.t_start_min and abs(hold["to_min"] - m.pushback()) < 1e-9
+        assert abs(t.taxi_min - (t.points[-1]["t_min"] - m.pushback())) < 1e-9
+    assert not [f for f in ft.failures if "search horizon" in f[1]]      # was 115 queued past the 30 min horizon
