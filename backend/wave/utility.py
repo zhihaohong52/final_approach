@@ -5,6 +5,7 @@ extended to joint plans (ATC scores the whole wave, each Pilot its own flight, G
 """
 from __future__ import annotations
 
+import copy
 import math
 
 from backend.wave import airlines, surface
@@ -203,12 +204,22 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
     route term, path fields left at their defaults. Taxi fields (`exit`, `rot_s`, `taxi_unimpeded_min`,
     `taxi_wait_min`, `taxi_min` = unimpeded + waits, `hold_short_strip`) come from `surface.taxi_info` and the plan's
     hold-short pass (`TrajectorySet.outcomes`), unrounded; unset in the no-geometry taxi tier."""
-    from backend.wave import trajectory   # lazy: build / rules / moves import this module (import cycle)
+    from backend.wave import route, trajectory   # lazy: build / rules / moves import this module (import cycle)
+    k = (route.wave_key(wave), plan.id)       # memoised like trajectory.build; the map is shared, treat it read-only
+    hit = _MM.get(k)
+    if hit is not None:
+        return hit
     ts = trajectory.build(wave, plan)
     tracks = {t.callsign: t for t in ts.air if t.wave}
-    return {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None,
-                                        ts.outcomes.get(a.callsign) if a.action == "land" else None)
-            for a in plan.assignments}
+    hit = {a.callsign: _flight_metrics(wave, a, tracks.get(a.callsign) if a.action == "land" else None,
+                                       ts.outcomes.get(a.callsign) if a.action == "land" else None)
+           for a in plan.assignments}
+    trajectory._put(_MM, k, hit, MM_CACHE_MAX)
+    return hit
+
+
+MM_CACHE_MAX = 4096
+_MM: dict[tuple, dict[str, FlightMetrics]] = {}
 
 
 def _clip(x: float) -> float:
@@ -327,7 +338,7 @@ def evaluate(wave: Wave, plan: JointPlan) -> dict:
                            "overtime_min": 0.0, "diversions": 0}}
     mm = metrics_map(wave, plan)
     for a in plan.assignments:
-        a.metrics = mm[a.callsign]
+        a.metrics = copy.copy(mm[a.callsign])   # the map is shared between plans; the plan gets its own
     checks = rules.check(wave, plan, mm)
     ms = list(mm.values())
     pax_total = sum(m.pax_total for m in ms)

@@ -53,6 +53,7 @@ Choices made here (documented for review):
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import threading
@@ -113,7 +114,7 @@ def _code(agent: str) -> str:
 def _plan_dict(wave: Wave, plan: JointPlan) -> dict:
     mm = metrics_map(wave, plan)
     for a in plan.assignments:
-        a.metrics = mm[a.callsign]
+        a.metrics = copy.copy(mm[a.callsign])   # the map is shared between plans; the plan gets its own
     return plan.to_dict()
 
 

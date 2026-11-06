@@ -597,7 +597,17 @@ def _earliest_in_block(wave: Wave, f, gate: str | None) -> tuple[float, str | No
     """Earliest possible in-block (no speed reduction, no ground delay) minimised over open runways:
     min over open r of trajectory.earliest(f, r) + ROT + unimpeded taxi from r to `gate`
     (`surface.min_unimpeded_taxi`; v2 near/far taxi without runway geometry). Returns (in-block, runway, the
-    minimum over open runways of ROT + unimpeded taxi). Without an open runway: ETA + far taxi."""
+    minimum over open runways of ROT + unimpeded taxi). Without an open runway: ETA + far taxi. Plan-independent:
+    memoised on the wave object (like its key and routes) on (flight, gate)."""
+    memo = wave.__dict__.setdefault("_earliest_in_block", {})
+    k = (f.callsign, f.eta_earliest_min, gate)
+    hit = memo.get(k)
+    if hit is None:
+        hit = memo[k] = _earliest_in_block_calc(wave, f, gate)
+    return hit
+
+
+def _earliest_in_block_calc(wave: Wave, f, gate: str | None) -> tuple[float, str | None, float]:
     best = (f.eta_earliest_min + TAXI_FAR_MIN, None)
     taxi = math.inf
     for r in wave.airport.runways:
@@ -613,7 +623,17 @@ def _earliest_in_block(wave: Wave, f, gate: str | None) -> tuple[float, str | No
 def _taxi_route_check(wave: Wave, a, f, g, cs: str) -> RuleCheck:
     """ATC-TAXI-ROUTE (spec §6.6): a connected taxi route from an exit of the assigned runway end to the gate's stand.
     Fails iff the surface tier is real and no exit of the end reaches the stand. Generic tier (end missing from OSM,
-    generic wave, synth gate) and the no-geometry tier pass and say which estimate applies."""
+    generic wave, synth gate) and the no-geometry tier pass and say which estimate applies. Plan-independent: memoised
+    on the wave object on (flight, runway, gate); the check is shared, treat it as read-only."""
+    memo = wave.__dict__.setdefault("_taxi_route_check", {})
+    k = (cs, a.runway, a.gate)
+    hit = memo.get(k)
+    if hit is None:
+        hit = memo[k] = _taxi_route_calc(wave, a, f, g, cs)
+    return hit
+
+
+def _taxi_route_calc(wave: Wave, a, f, g, cs: str) -> RuleCheck:
     tx = surface.taxi_info(wave, a.runway, a.gate, f.gate_size)
     p = tx.path
     route_s = " ".join(dict.fromkeys(n for n in p.names if n)) if p is not None else ""
