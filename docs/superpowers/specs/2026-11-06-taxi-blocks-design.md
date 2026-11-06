@@ -138,8 +138,11 @@ wheels-off / share of waits in junctions):
 | + stop lines | 2,944 | 3 | 130 | ~0 (OSM holds only) |
 | + crossing gap 1 min / 15 s | 2,049 | 0 | 116 | ~0 |
 
-Separation breaches: 1 throughout (ORD AA2881, pre-existing), no overtaking. Wave-flight FCFS waits: ORD-2024-06-04-21
-205 -> 123 min, ATL-2024-06-07-20 25 -> 17. Fragility (share of movements whose 30 s lateness touches another's
+Separation breaches: 1 throughout (ORD AA2881, pre-existing), no overtaking. Wave-flight FCFS taxi waits rose from
+almost none at baseline (ORD-2024-06-04-21 0.3 min, ATL-2024-06-07-20 2.7) to 123 and 17 min: they now land on the
+queue's runways and taxi through realistic traffic (205 and 25 right after the runway change). Their modelled
+ROT + taxi against the real BTS TAXI_IN moved from a median -6.1 min to -3.8 min (n 10): closer to the real day,
+still short. Fragility (share of movements whose 30 s lateness touches another's
 reservation): 82% at baseline, 41-78% per wave now; a timetable property, not robustness.
 
 Formulas benchmark (BTS 2024, n 50, seed 7, firm, formula arm only; free): FCFS breaks a rule in 29 of 50 hours (26
