@@ -251,7 +251,10 @@ LIMITS = [
              "A-CDM and surface metering, with the real wheels-off as the target) keeps that time at the stand, shown "
              "as a 'gate hold' wait on the track; the stand is not a wave gate and is not reserved before pushback "
              "either way. Buffer sweep on 10 reference waves (fixed-traffic taxi waits / takeoffs after the real "
-             "wheels-off): 3 min 2,068 min / 137, 5 min 2,731 / 119, 8 min 3,984 / 94; without holds 18,949 / 271."},
+             "wheels-off): 3 min 2,068 min / 137, 5 min 2,731 / 119, 8 min 3,984 / 94; without holds 18,949 / 271. "
+             "Known trade-off: uniform metering brings a bank to its holding point together, so a departure that "
+             "must cross another departure runway (ATL-2024-07-05-21: three to 26L across 27R) can wait past the "
+             "30 min horizon behind that runway's takeoffs."},
     {"limit": "departure takeoff spacing", "value": "1 takeoff per minute per runway end", "source": "assumption",
      "note": "a departure's recorded takeoff is the earliest time >= max(WHEELS_OFF, leaving the holding point) "
              "that is 1 min from every other takeoff on the strip and outside every scheduled crossing's gap window "
