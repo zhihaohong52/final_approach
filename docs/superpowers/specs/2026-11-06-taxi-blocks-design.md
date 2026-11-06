@@ -97,14 +97,20 @@ holds about two crossers: at ATL east side and ORD 09R/27L, crossers of the depa
 exit (ATL-2024-06-07-20 still-vacating flags 11 -> 20) and ORD wave flights wait 87 -> 137 min. That is the crossing
 bottleneck made visible; section 4 addresses it.
 
-## 4. Runway crossing batching
+## 4. Runway crossing batching (built twice, parked twice)
 
-- Fixed traffic only (`ground_traffic._compute`): when a crosser's zone traversal on a strip does not overlap any
-  scheduled crossing of that strip but one starts within `CROSSING_BATCH_MIN` after it would start, it waits to cross
-  with that one (the node headway still separates them). Passed to `schedule` as `Reservations.crossings` (default
-  empty, so wave flights and every other caller are unchanged: for a wave flight batching only adds wait, because the
-  fixed takeoffs it would help are already placed).
-- LIMITS: "runway crossing batching" (assumption).
+1. Join a scheduled crossing starting within `CROSSING_BATCH_MIN` (branch `taxi/crossing-batching`): fires 1-3 times
+   a wave and changes nothing (waits 2,731 -> 2,750 min, late takeoffs 119 -> 118). Sequential FCFS scheduling lets a
+   crosser join only a crossing of a mover scheduled before it; the common case needs the earlier crosser held.
+2. Crossing windows, as a tower does it (branch `taxi/crossing-windows`): a first pass finds when each crosser reaches
+   its hold, batches open windows, a second pass keeps takeoffs clear of them. Six waves: waits 2,782 -> 2,336 min,
+   failures 3 -> 0, but takeoffs after the real wheels-off 88 -> 212; more passes do not converge. The day looks less
+   like the real one, so it is not merged.
+
+The lever is the crossing gap assumption (LIMITS "runway crossing gap": no takeoff within 1 min either side of the
+time in the zone), which makes every crossing cost ~2.5 min of departure runway. With 1 min before entry and 0.25
+min after exit, waits drop about a third with no windows (verifier window not updated in that experiment, so its
+failure count is not valid). Changing it is the user's call: it is the rule engine's assumption too.
 
 ## Testing
 
