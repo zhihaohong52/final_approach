@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import heapq
 import math
+from bisect import bisect_left
 import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -72,6 +73,7 @@ class TaxiPath:
     src: Literal["osm", "synth"]
     _ref: object = field(default=None, repr=False, compare=False)      # `refine` cache (per graph)
     _keys: object = field(default=None, repr=False, compare=False)     # `read_keys` cache (per graph)
+    _holds: object = field(default=None, repr=False, compare=False)    # `_route_holds` cache (per graph)
 
 
 def _components(g: TaxiGraph) -> dict[int, int]:
@@ -667,6 +669,19 @@ class Scheduled:
     # what this call added to `res`, in order: ("node", node, interval) / ("edge", (u, v), interval); lets a caller
     # that reuses the result add the same reservations (`trajectory._ground`)
     reserved: tuple = field(default=(), repr=False, compare=False)
+    _reads: dict = field(default_factory=dict, repr=False, compare=False)
+
+    def reads(self, g: "TaxiGraph", path: "TaxiPath", t0_min: float) -> tuple:
+        """`reads(g, path, t0_min, self.reserved)`, memoised on this (cached, shared) schedule."""
+        k = (id(path), t0_min)
+        hit = self._reads.get(k)
+        if hit is not None and hit[0] is path:
+            return hit[1]
+        out = reads(g, path, t0_min, self.reserved)
+        if len(self._reads) >= 256:
+            self._reads.clear()
+        self._reads[k] = (path, out)
+        return out
 
 
 @dataclass
@@ -780,6 +795,45 @@ def _crossing_zones(g: TaxiGraph, nodes: list[int], crossings: list[tuple[int, s
     return hold, [tuple(z) for z in zones], vacate
 
 
+@dataclass(frozen=True)
+class _RouteHolds:
+    """What `schedule` derives from the route alone (refined path, protected zones, stop points): the same for every
+    call on the path, so built once."""
+    zones: list
+    vacate: int
+    hold: list
+    nxt_real: list                 # index of the next graph node after each index (head-on: whole edges)
+    prev_real: list                # the graph node an index's edge starts at (a stop-line wait rescans from it)
+    zones_at: dict                 # crossing index -> [(strip, h, ze, starts inside another strip's zone)]
+
+
+def _route_holds(g: TaxiGraph, path: TaxiPath) -> _RouteHolds:
+    hit = path._holds
+    if hit is not None and hit[0] is g:
+        return hit[1]
+    ref = refine(g, path)
+    nodes, real = ref.nodes, ref.real
+    n = len(nodes)
+    hold0, zones, vacate = _crossing_zones(g, nodes, path.crossings, real)
+    hold = _stop_holds(g, ref, hold0, zones, vacate)
+    nxt_real = [0] * n
+    j = n - 1
+    for i in range(n - 1, -1, -1):
+        nxt_real[i] = j
+        if real[i]:
+            j = i
+    prev_real = [0] * n
+    for i in range(n):
+        prev_real[i] = i if real[i] else prev_real[i - 1]
+    vacating = runway_strips_at(g, nodes[0]) if n else set()
+    zones_at: dict[int, list[tuple[str, int, int, bool]]] = {}
+    for c, strip, h, ze, start_in in zones:
+        zones_at.setdefault(c, []).append((strip, h, ze, start_in and strip not in vacating))
+    out = _RouteHolds(zones, vacate, hold, nxt_real, prev_real, zones_at)
+    path._holds = (g, out)
+    return out
+
+
 def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, callsign: str,
              horizon_min: float = HORIZON_MIN, headway_s: float = HEADWAY_S, commit: bool = True) -> Scheduled:
     """Move along the fixed route from `t0_min`, with the stop lines of its edges inserted (`refine`), waiting at the
@@ -808,28 +862,15 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
     nodes, seg, park, real = ref.nodes, ref.seg, ref.park, ref.real
     n = len(nodes)
     hw = headway_s / 60.0
-    hold0, zones, vacate = _crossing_zones(g, nodes, path.crossings, real)
-    hold = _stop_holds(g, ref, hold0, zones, vacate)
-    nxt_real = [0] * n                     # index of the next graph node after each index (head-on: whole edges)
-    j = n - 1
-    for i in range(n - 1, -1, -1):
-        nxt_real[i] = j
-        if real[i]:
-            j = i
-    # a wait on a stop line lengthens its whole edge: rescan from the edge's first node, so (b) sees it
-    prev_real = [0] * n
-    for i in range(n):
-        prev_real[i] = i if real[i] else prev_real[i - 1]
-    vacating = runway_strips_at(g, nodes[0]) if n else set()
+    rh = _route_holds(g, path)
+    zones, vacate, hold, nxt_real, prev_real, zones_at = (rh.zones, rh.vacate, rh.hold, rh.nxt_real, rh.prev_real,
+                                                          rh.zones_at)
     # an Overlay table: its base and its own lists, both sorted (the checks take a max, or the smallest match)
     busy, edir = res.node_busy, res.edge_dir
     busy_own = busy.own if isinstance(busy, Overlay) else {}
     edir_own = edir.own if isinstance(edir, Overlay) else {}
     busy = busy.base if isinstance(busy, Overlay) else busy
     edir = edir.base if isinstance(edir, Overlay) else edir
-    zones_at: dict[int, list[tuple[str, int, int, bool]]] = {}
-    for c, strip, h, ze, start_in in zones:
-        zones_at.setdefault(c, []).append((strip, h, ze, start_in and strip not in vacating))
     events = {z[1]: sorted(res.runway_events.get(z[1], ())) for z in zones}
     free_arr_last = t0_min + sum(seg)
 
@@ -890,8 +931,9 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
                 break
         # (a) the node is clear of other reservations by the headway, over the whole dwell
         if restart is None and not only_b:
-            hit = [(e + hw, cs) for s, e, cs in busy.get(node, ())
-                   if s < dep[i] + hw - _TOL and arr[i] < e + hw - _TOL]
+            lst = busy.get(node, ())                # sorted: only intervals starting before the dwell ends
+            hit = [(e + hw, cs) for s, e, cs in lst[:bisect_left(lst, (dep[i] + hw - _TOL,))]
+                   if arr[i] < e + hw - _TOL]
             if busy_own:
                 hit += [(e + hw, cs) for s, e, cs in busy_own.get(node, ())
                         if s < dep[i] + hw - _TOL and arr[i] < e + hw - _TOL]
@@ -902,8 +944,9 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         # opposite direction: wait before entering it
         if restart is None and i + 1 < n and real[i]:
             j = nxt_real[i]
-            hit = [(e + seg[i], cs) for s, e, cs in edir.get((nodes[j], node), ())
-                   if s < arr[j] - _TOL and dep[i] < e - _TOL]
+            lst = edir.get((nodes[j], node), ())
+            hit = [(e + seg[i], cs) for s, e, cs in lst[:bisect_left(lst, (arr[j] - _TOL,))]
+                   if dep[i] < e - _TOL]
             if edir_own:
                 hit += [(e + seg[i], cs) for s, e, cs in edir_own.get((nodes[j], node), ())
                         if s < arr[j] - _TOL and dep[i] < e - _TOL]

@@ -47,7 +47,15 @@ def _r(x: float) -> float:
 
 
 def _fresh(a: Assignment, **kw) -> Assignment:
-    return replace(a, metrics=FlightMetrics(), **kw)
+    """A copy of `a` with fresh metrics and the fields in `kw` changed (`dataclasses.replace`, minus its generic
+    overhead)."""
+    f = {"callsign": a.callsign, "action": a.action, "runway": a.runway, "slot_min": a.slot_min, "gate": a.gate,
+         "speed_reduction_min": a.speed_reduction_min, "ground_delay_min": a.ground_delay_min}
+    if kw:
+        if not kw.keys() <= f.keys():
+            raise TypeError(f"_fresh: unknown fields {sorted(kw.keys() - f.keys())}")
+        f.update(kw)
+    return Assignment(**f)
 
 
 def _copy(plan: JointPlan) -> JointPlan:

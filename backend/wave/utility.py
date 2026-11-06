@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import math
+from collections import OrderedDict
 
 from backend.wave import airlines, surface
 from backend.wave.model import Assignment, FlightMetrics, JointPlan, Wave, WaveFlight
@@ -219,7 +220,7 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
 
 
 MM_CACHE_MAX = 4096   # ~2.4 KB a plan (tracemalloc, 20-flight waves): ~10 MB full
-_MM: dict[tuple, dict[str, FlightMetrics]] = {}
+_MM: dict[tuple, dict[str, FlightMetrics]] = OrderedDict()   # FIFO through trajectory._put
 
 
 def _clip(x: float) -> float:

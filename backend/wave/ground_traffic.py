@@ -566,7 +566,7 @@ def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[st
             dep[i] = pts[k + 1]["t_min"]
             k += 1
         k += 1
-    _, zones, _ = surface._crossing_zones(g, nodes, path.crossings, ref.real)
+    zones = surface._route_holds(g, path).zones
     return [(strip, dep[h], arr[ze], nodes[h]) for _, strip, h, ze, _ in zones]
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import functools
 import math
 import re
-from collections import Counter
+from collections import Counter, OrderedDict
 
 from backend.wave import ground_traffic, holding, route, surface, trajectory, wind
 from backend.wave.model import FlightMetrics, JointPlan, RuleCheck, Wave
@@ -788,7 +788,7 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
 
 
 CHECK_CACHE_MAX = 512   # ~35 KB a plan (~18 MB); a plan is re-checked soon after its first check
-_CHECKS: dict[tuple, list[RuleCheck]] = {}
+_CHECKS: dict[tuple, list[RuleCheck]] = OrderedDict()   # FIFO through trajectory._put
 
 
 def _check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics]) -> list[RuleCheck]:

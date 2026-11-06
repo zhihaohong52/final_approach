@@ -41,6 +41,7 @@ from __future__ import annotations
 import math
 import os
 import threading
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -220,10 +221,15 @@ _LOCK = threading.Lock()   # FIFO eviction of the shared caches (the benchmark n
 
 
 def _put(cache: dict, k, v, cap: int = WAVE_CACHE_MAX) -> None:
-    """Insert into a shared FIFO cache of at most `cap` entries, thread-safely."""
+    """Insert into a shared FIFO cache of at most `cap` entries, thread-safely. The busy caches are OrderedDicts:
+    evicting the oldest entry of a plain dict rescans the slots its earlier evictions emptied."""
     with _LOCK:
-        while len(cache) >= cap:
-            cache.pop(next(iter(cache)), None)
+        if isinstance(cache, OrderedDict):
+            while len(cache) >= cap:
+                cache.popitem(last=False)
+        else:
+            while len(cache) >= cap:
+                cache.pop(next(iter(cache)), None)
         cache[k] = v
 
 
@@ -463,12 +469,18 @@ def wave_holds(wave: Wave) -> dict[tuple, holding.HoldSpec]:
 
 
 def hold_for(wave: Wave, r: route.Route) -> holding.HoldSpec:
-    """The wave's shared hold at route `r`'s hold fix."""
-    return wave_holds(wave)[stack_key(r.hold)]
+    """The wave's shared hold at route `r`'s hold fix (memoised on the route, per wave's hold table and hold)."""
+    holds = wave_holds(wave)
+    hit = r.__dict__.get("_hold_for")
+    if hit is not None and hit[0] is holds and hit[1] is r.hold:
+        return hit[2]
+    spec = holds[stack_key(r.hold)]
+    r.__dict__["_hold_for"] = (holds, r.hold, spec)
+    return spec
 
 
-_PATHS: dict[tuple, tuple[float, list[dict], str | None]] = {}
-_SCHED: dict[tuple, "surface.Scheduled"] = {}
+_PATHS: dict[tuple, tuple[float, list[dict], str | None]] = OrderedDict()
+_SCHED: dict[tuple, "surface.Scheduled"] = OrderedDict()
 
 
 def _path(wave: Wave, cs: str, rwy: str, r: route.Route, slot: float, laps: int, lap, vec: float,
@@ -628,7 +640,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
     wkey = route.wave_key(wave)
     # reservations of the landings scheduled so far: added to the plan's view only when a later landing has to be
     # scheduled, and part of a landing's cache key only where its route can read them (`surface.reads`)
-    done: list[tuple] = []
+    done: list = []
     pending: list[tuple] = []
     for t_exit, cs, slot, tx, rwy in landings:
         strip = _strip_key(g, rwy)
@@ -668,7 +680,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
         zs = sorted({st for _, st in p.crossings})
         key = (wkey, t_exit, cs, rwy, tx.gate,
                tuple((st, tuple(e for e in events.get(st, ()) if e[2] != cs)) for st in zs),
-               tuple(surface.reads(g, p, t_exit, added) for added in done))
+               tuple(prev.reads(g, p, t_exit) for prev in done))
         s = _SCHED.get(key)
         if s is None:
             for added in pending:
@@ -677,7 +689,7 @@ def _ground(wave: Wave, plan: JointPlan, ts: TrajectorySet) -> None:
             view = surface.Reservations(nodes, edges, {k: [e for e in v if e[2] != cs] for k, v in events.items()})
             s = surface.schedule(g, p, t_exit, view, cs, commit=False)
             _put(_SCHED, key, s, SCHED_CACHE_MAX)
-        done.append(s.reserved)
+        done.append(s)
         pending.append(s.reserved)
         names = [n for i, n in enumerate(p.names) if n and (i == 0 or p.names[i - 1] != n)]
         # = last point - exit - unimpeded; exactly 0 unimpeded
@@ -766,7 +778,7 @@ def detail(o: GroundOutcome) -> str:
             + (f"; crosses {', '.join(o.crossings)}" if o.crossings else "") + fh)
 
 
-_CACHE: dict[tuple[str, str], TrajectorySet] = {}
+_CACHE: dict[tuple[str, str], TrajectorySet] = OrderedDict()
 _TLS = threading.local()
 
 

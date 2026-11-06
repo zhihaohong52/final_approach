@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import operator
+import weakref
 from dataclasses import asdict, dataclass, field, replace
 from typing import Literal
 
@@ -233,6 +235,9 @@ class Assignment(_Dict):
         return d
 
 
+_PLAN_IDS: dict[int, tuple] = {}   # id(plan) -> (weakref to it, its assignment objects, JointPlan.id)
+
+
 @dataclass
 class JointPlan(_Dict):
     assignments: list[Assignment]
@@ -240,8 +245,17 @@ class JointPlan(_Dict):
 
     @property
     def id(self) -> str:
+        # memoised per plan object in a side table (not the instance dict, so copies of the fields stay clean),
+        # valid while the plan holds the same assignment objects (assignments are never changed in place)
+        objs = tuple(self.assignments)
+        hit = _PLAN_IDS.get(id(self))
+        if hit is not None and hit[0]() is self and len(hit[1]) == len(objs) and all(map(operator.is_, hit[1], objs)):
+            return hit[2]
         keys = sorted(repr(a.key()) for a in self.assignments)
-        return hashlib.sha1("|".join(keys).encode()).hexdigest()[:10]
+        out = hashlib.sha1("|".join(keys).encode()).hexdigest()[:10]
+        k = id(self)
+        _PLAN_IDS[k] = (weakref.ref(self, lambda _r, k=k: _PLAN_IDS.pop(k, None)), objs, out)
+        return out
 
     def get(self, callsign: str) -> Assignment:
         return next(a for a in self.assignments if a.callsign == callsign)
