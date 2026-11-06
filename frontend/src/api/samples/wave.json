@@ -1097,12 +1097,12 @@
       "layer": "ground_traffic",
       "status": "real",
       "source": "BTS 2015 movements",
-      "detail": "117 real departures (wheels-off T-30..T+120 min; stands simulated, seeded in the carrier's most-used pier) and 15 queue arrivals; departure runway 27R/28C/28R: parallel to arrival runway 32R; scheduled over the 30-min horizon or with an unresolved conflict (still reserved): 1 (OO5580); not routed on the OSM taxi graph (runway events only): 15 (EV5957, OO5406, EV5932, MQ3061, AA1435, MQ2863, EV6053, UA1194, MQ3627, AA1063, EV6052, MQ3356, OO5319, AA1679, MQ3339); 6 takeoffs after WHEELS_OFF because of taxi waits; takeoffs later than WHEELS_OFF: 7 of 117; 7 takeoffs held at the holding point for takeoff spacing, a landing or a crossing; departures waiting for takeoff in the holding bay (at most 3, then queued upstream): median 7.0, p95 30.7, max 48.3 min, 6 over 30 min (at most 6 at one node); upstream queue waits median 8.5, max 43.4 min"
+      "detail": "117 real departures (wheels-off T-30..T+120 min; stands simulated, seeded in the carrier's most-used pier) and 15 queue arrivals; departure runway 27R/28C/28R: parallel to arrival runway 32R; scheduled over the 30-min horizon or with an unresolved conflict (still reserved): 0; not routed on the OSM taxi graph (runway events only): 15 (EV5957, OO5406, EV5932, MQ3061, AA1435, MQ2863, EV6053, UA1194, MQ3627, AA1063, EV6052, MQ3356, OO5319, AA1679, MQ3339); 1 takeoffs after WHEELS_OFF because of taxi waits; takeoffs later than WHEELS_OFF: 1 of 117; departures waiting for takeoff in the holding bay (at most 3, then queued upstream): median 3.9, p95 5.0, max 5.0 min, 0 over 30 min (at most 0 at one node); upstream queue waits median 1.1, max 4.8 min"
     }
   ],
   "severity": null,
   "focus": "MQ3269",
-  "engine_version": "v4-airlines",
+  "engine_version": "v5-taxi",
   "geo_available": true,
   "airlines": [
     {
