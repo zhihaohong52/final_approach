@@ -648,7 +648,7 @@ class Overlay:
 
 
 _SPANS: dict[int, tuple] = {}   # id(list) -> (list, its length, its longest interval)
-_SPANS_MAX = 200_000
+_SPANS_MAX = 20_000                 # each entry keeps its list alive: cleared when full (recomputing is cheap)
 _WIN = 1e-6                      # margin on a window bound (minutes; float error on these times is ~1e-13)
 _WIN_MIN = 4                     # lists this short are scanned whole
 
