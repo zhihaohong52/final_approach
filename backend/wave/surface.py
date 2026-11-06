@@ -951,10 +951,13 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         """Arrival and departure at each index from `start` on (earlier ones do not depend on a later wait)."""
         if start == 0:
             arr[0] = max(t0_min, arr0_nb)
-        for i in range(start, n):
-            dep[i] = max(arr[i], nb[i]) if i < n - 1 else arr[i] + park
-            if i + 1 < n:
-                arr[i + 1] = dep[i] + seg[i]
+        last = n - 1
+        for i in range(start, last):
+            a, b = arr[i], nb[i]
+            d = dep[i] = a if a >= b else b        # max(a, b), ties keep a
+            arr[i + 1] = d + seg[i]
+        if start <= last:
+            dep[last] = arr[last] + park
 
     def push(i: int, target: float, reason: tuple[str, str | None, str | None, str]) -> int:
         """Make the arrival at index i no earlier than `target`; returns the index to rescan from. `reason` is
