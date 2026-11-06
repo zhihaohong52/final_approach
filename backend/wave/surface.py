@@ -209,7 +209,7 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     return out
 
 
-MAX_TREES = 12   # Dijkstra trees kept in total, over every graph (FIFO): ~1.9 MB each at ORD (tracemalloc)
+MAX_TREES = 24   # Dijkstra trees kept in total, over every graph (FIFO): ~1.9 MB each at ORD (tracemalloc); an ORD wave build uses 24
 _TREE_ORDER: list[tuple[TaxiGraph, tuple]] = []
 _TREE_LOCK = threading.Lock()
 
