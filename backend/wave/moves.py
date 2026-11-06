@@ -316,7 +316,9 @@ def _check_agent(wave: Wave, plan: JointPlan, agent_id: str) -> str:
     raise ValueError(f"unknown agent {agent_id!r}")
 
 
-def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
+def _candidates(wave: Wave, plan: JointPlan, agent_id: str, holds: bool = True) -> list[Move]:
+    """Every move within the agent's authority from `plan`; `holds=False` leaves out ATC holds (`legal_moves` drops
+    every hold when the plan has no ATC-* / PLT-* violation for one to reduce)."""
     role = _check_agent(wave, plan, agent_id)
     mv: list[Move] = []
     landing = [a for a in plan.assignments if a.action == "land"]
@@ -348,7 +350,7 @@ def _candidates(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
                 for d in SHIFT_STEPS:
                     mv.append(_move("ATC", "shift_slot", [a.callsign], {"minutes": d},
                                     f"Vector {a.callsign} {d:+g} min (path stretch)"))
-                h = hold_spec(wave, a)
+                h = hold_spec(wave, a) if holds else None
                 if h is not None:
                     for n in HOLD_LAPS:
                         if n == mm[a.callsign].hold_laps:
@@ -455,7 +457,11 @@ def legal_moves(wave: Wave, plan: JointPlan, agent_id: str) -> list[Move]:
     pid = plan.id
     scored = []
     own_now = None
-    for m in _candidates(wave, plan, agent_id):
+    holds = True
+    if agent_id == "ATC":   # a hold is kept only if it strictly reduces these: none to reduce, none kept
+        own_now = _own_violations(rules.check(wave, plan, metrics_map(wave, plan)))
+        holds = own_now > 0
+    for m in _candidates(wave, plan, agent_id, holds):
         p2 = apply(wave, plan, m)
         if m.kind != "accept" and p2.id == pid:
             continue
