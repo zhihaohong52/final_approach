@@ -748,9 +748,8 @@ def check(wave: Wave, plan: JointPlan, mm: dict[str, FlightMetrics] | None = Non
     k = (route.wave_key(wave), plan.id)
     hit = _CHECKS.get(k)
     if hit is None:
-        hit = _CHECKS[k] = _check(wave, plan, own)
-        while len(_CHECKS) > CHECK_CACHE_MAX:
-            _CHECKS.pop(next(iter(_CHECKS)), None)
+        hit = _check(wave, plan, own)
+        trajectory._put(_CHECKS, k, hit, CHECK_CACHE_MAX)   # FIFO eviction under the shared lock (worker threads)
     return list(hit)
 
 

@@ -218,7 +218,7 @@ def metrics_map(wave: Wave, plan: JointPlan) -> dict[str, FlightMetrics]:
     return hit
 
 
-MM_CACHE_MAX = 4096
+MM_CACHE_MAX = 4096   # ~2.4 KB a plan (tracemalloc, 20-flight waves): ~10 MB full
 _MM: dict[tuple, dict[str, FlightMetrics]] = {}
 
 
