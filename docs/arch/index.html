@@ -21,45 +21,90 @@ svg { position:absolute; inset:0; }
 .q p { font-size:16px; color:var(--muted); line-height:1.4; margin-top:4px; }
 .q i { font-style:normal; color:var(--ink); font-weight:700; }
 </style></head><body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="1920" data-height="1080">
-<div id="d" class="clip" data-start="0" data-duration="2" data-track-index="0" data-layout-allow-overlap>
-<h1>Final Approach<span>system architecture · FastAPI + SSE on Render · React UI · every limit returned with its source</span></h1>
+<!-- An animated build of the architecture: each part appears in data-flow order, then the full diagram holds.
+     docs/architecture.png is the last frame (npx hyperframes snapshot --at 22.5). -->
+<div id="root" data-composition-id="main" data-start="0" data-duration="23" data-width="1920" data-height="1080">
+<div id="d" class="clip" data-start="0" data-duration="23" data-track-index="0" data-track-kind="graphics" data-layout-allow-overlap>
+<div id="cam" style="position:absolute;inset:0">
+<h1 id="title">Final Approach<span>system architecture · FastAPI + SSE on Render · Neon Postgres · React UI · every limit returned with its source</span></h1>
 <svg viewBox="0 0 1920 1080"><defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7d8f"/></marker></defs>
 <g stroke="#6b7d8f" stroke-width="2.5" fill="none" marker-end="url(#a)">
-<path d="M400 330 L470 330"/><path d="M400 560 L470 400"/>
-<path d="M760 360 L830 360"/>
-<path d="M1170 250 L1190 250"/><path d="M1170 520 L1190 460"/>
-<path d="M1335 300 L1335 370"/>
-<path d="M1480 420 L1550 420"/><path d="M1480 520 L1550 640"/>
-<path d="M1700 500 L1700 590"/>
-<path d="M1700 732 L1700 785"/>
-<path d="M1000 650 L1000 618"/><path d="M830 620 L700 770" stroke="#b48cff" stroke-dasharray="6 6"/>
+<path id="a-data1" d="M400 330 L470 330"/><path id="a-data2" d="M400 560 L470 400"/>
+<path id="a-model" d="M615 425 L615 452"/>
+<path id="a-neg" d="M760 360 L830 360"/><path id="a-neg2" d="M760 560 L830 560"/>
+<path id="a-rules" d="M1170 250 L1190 250"/><path id="a-dec" d="M1170 520 L1190 460"/>
+<path id="a-cons" d="M1335 380 L1335 396"/>
+<path id="a-ok" d="M1480 420 L1550 420"/><path id="a-no" d="M1480 520 L1550 640"/>
+<path id="a-dm1" d="M1700 500 L1700 590"/>
+<path id="a-dm2" d="M1700 732 L1700 785"/>
+<path id="a-bench" d="M1000 650 L1000 618"/><path id="a-ask" d="M830 620 L700 770" stroke="#b48cff" stroke-dasharray="6 6"/>
 </g></svg>
 
-<div class="grp" style="left:60px;top:150px;width:350px;height:510px"><div class="k" style="color:var(--blue)">Real data in</div></div>
-<div class="b" style="left:85px;top:185px;width:300px"><b>flights.csv row</b><p>DOT 2015 disrupted arrival: weather or late-aircraft delay</p></div>
-<div class="b" style="left:85px;top:345px;width:300px"><b>Airport world</b><p>OurAirports runways · OSM gates · IEM METAR at that hour</p></div>
-<div class="b" style="left:85px;top:505px;width:300px"><b>Workbook limits</b><p>wake, capacity, fuel, crew duty, gates · FAA crosswind</p></div>
+<div id="g-data" class="grp" style="left:60px;top:150px;width:350px;height:510px"><div class="k" style="color:var(--blue)">Real data in</div></div>
+<div id="b-traffic" class="b" style="left:85px;top:185px;width:300px"><b>Real traffic</b><p>BTS 2024: 36,881 busy hours at 30 hubs · DOT 2015 flights.csv delays</p></div>
+<div id="b-world" class="b" style="left:85px;top:345px;width:300px"><b>Airport world</b><p>OurAirports runways · OSM taxiways and stands · IEM METAR · FAA CIFP routes</p></div>
+<div id="b-limits" class="b" style="left:85px;top:505px;width:300px"><b>Workbook limits</b><p>wake, capacity, fuel, crew duty, gates · FAA crosswind</p></div>
 
-<div class="b" style="left:475px;top:270px;width:280px"><b>Wave builder</b><p>focus flight + the other arrivals in the window, triage severity</p></div>
+<div id="b-build" class="b" style="left:475px;top:270px;width:280px"><b>Wave builder</b><p>the hour the flights really land, with its real ground traffic · triage severity</p></div>
+<div id="b-model" class="b" style="left:475px;top:457px;width:280px;padding:14px 20px"><b style="font-size:21px">Flight and taxi model</b><p style="font-size:17px">CIFP arrival routes · OSM taxi routing with hold-shorts · hot paths in Rust, byte-identical to Python</p></div>
 
-<div class="grp" style="left:820px;top:150px;width:680px;height:495px"><div class="k" style="color:var(--green)">LangGraph negotiation · max 3 turns</div></div>
-<div class="b" style="left:840px;top:180px;width:325px;padding:12px 20px"><b style="font-size:18px;margin-bottom:6px;white-space:nowrap">ATC · AIRLINE:AA … · GROUND</b><p style="font-size:17px">voters: ATC, one AIRLINE agent per airline in the wave, GROUND; one message each per turn</p></div>
-<div class="b" style="left:840px;top:333px;width:325px;padding:12px 20px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">PILOT:callsign · formula</div><p style="font-size:17px">one per aircraft, never votes; only says UNABLE (PLT-* and wind rules)</p></div>
-<div class="b" style="left:840px;top:462px;width:325px;border-color:var(--violet);padding:14px 20px"><div class="k" style="color:var(--violet)">Decision layer</div><p style="font-size:17px">code computes verdicts → <b style="display:inline;font-size:17px;color:var(--ink)">d1&#8209;ultra</b> picks a move and votes · chain d1&#8209;ultra → elephant&#8209;1 → jev&#8209;1.14 → formula</p></div>
-<div class="b" style="left:1195px;top:185px;width:285px;border-color:var(--green)"><div class="k" style="color:var(--green)">Rule engine</div><p>14 deterministic rules CHECK every move and plan; vetoes cite rule, source, values</p></div>
-<div class="b" style="left:1195px;top:375px;width:285px"><b>Consensus?</b><p>one legal plan accepted by all voters (ATC, airlines, GROUND)</p></div>
+<div id="g-neg" class="grp" style="left:820px;top:150px;width:680px;height:495px"><div class="k" style="color:var(--green)">LangGraph negotiation · max 3 turns</div></div>
+<div id="b-voters" class="b" style="left:840px;top:180px;width:325px;padding:12px 20px"><b style="font-size:18px;margin-bottom:6px;white-space:nowrap">ATC · AIRLINE:AA … · GROUND</b><p style="font-size:17px">voters; each airline vetoes plans that leave its own flights worse off; one message each per turn</p></div>
+<div id="b-pilot" class="b" style="left:840px;top:333px;width:325px;padding:12px 20px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">PILOT:callsign · formula</div><p style="font-size:17px">one per aircraft, never votes; only says UNABLE (PLT-* and wind rules)</p></div>
+<div id="b-dec" class="b" style="left:840px;top:462px;width:325px;border-color:var(--violet);padding:14px 20px"><div class="k" style="color:var(--violet)">Decision layer</div><p style="font-size:17px">code computes verdicts → <b style="display:inline;font-size:17px;color:var(--ink)">jev&#8209;1.14</b> picks a move and votes · chain jev&#8209;1.14 → d1&#8209;ultra → elephant&#8209;1 → Jev → formula</p></div>
+<div id="b-rules" class="b" style="left:1195px;top:185px;width:285px;border-color:var(--green)"><div class="k" style="color:var(--green)">Rule engine</div><p>14 deterministic rules, taxi conflicts included, CHECK every move and plan; vetoes cite rule, source, values</p></div>
+<div id="b-cons" class="b" style="left:1195px;top:400px;width:285px"><b>Consensus?</b><p>one legal plan accepted by all voters (ATC, airlines, GROUND)</p></div>
 
-<div class="b" style="left:1555px;top:370px;width:300px;border-color:var(--green)"><b>Agreed plan</b><p>revised arrival time, runway, gate</p></div>
-<div class="b" style="left:1555px;top:595px;width:300px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">No consensus after 3 turns</div><p>deterministic solver decides; reason logged</p></div>
-<div class="b" style="left:1555px;top:790px;width:300px;padding:14px 22px"><b>Duty manager</b><p>approve or override (reason required) in the web UI</p></div>
-<div class="b" style="left:1555px;top:940px;width:300px;padding:12px 18px;border-color:var(--blue)"><div class="k" style="color:var(--blue)">Claude Haiku 5.5</div><p>writes the brief from the log; decides nothing</p></div>
+<div id="b-ok" class="b" style="left:1555px;top:370px;width:300px;border-color:var(--green)"><b>Agreed plan</b><p>revised arrival time, runway, gate, taxi route</p></div>
+<div id="b-no" class="b" style="left:1555px;top:595px;width:300px;border-color:var(--amber)"><div class="k" style="color:var(--amber)">No consensus after 3 turns</div><p>deterministic solver decides; reason logged</p></div>
+<div id="b-dm" class="b" style="left:1555px;top:790px;width:300px;padding:14px 22px"><b>Duty manager</b><p>approve, edit or override, with a reason, in the UI</p></div>
+<div id="b-brief" class="b" style="left:1555px;top:940px;width:300px;padding:12px 18px;border-color:var(--blue)"><div class="k" style="color:var(--blue)">Claude Haiku 5.5</div><p>writes the brief from the log; decides nothing</p></div>
 
-<div class="b" style="left:820px;top:655px;width:620px;padding:8px 22px"><div class="k" style="color:var(--muted)">Benchmark · picks the default</div><p>50 seeded rows (+1,000-row scale run): status quo, optimiser, formulas, 3 models · outage and engine-off tests</p></div>
-<div class="grp" style="left:60px;top:775px;width:1440px;height:270px;border-color:var(--violet)"><div class="k" style="color:var(--violet)">What the decision model is asked · code does the maths, the model judges</div></div>
-<div class="q" style="left:85px"><div class="k" style="color:var(--violet)">1 · Triage · Score</div><b>“How severe is this wave?”</b><p><i>Given:</i> closures, wind, queue, delays</p><p><i>Out:</i> level 0–3 + probability → sets moves per turn</p></div>
-<div class="q" style="left:560px"><div class="k" style="color:var(--violet)">2 · Move · Choice</div><b>“Pick ONE move for your authority, or no move”</b><p><i>Given per option:</i> fixes / adds rule breaches · better / worse for you · engine rank</p><p><i>Out:</i> option key + probabilities → engine CHECK, veto if it adds a breach</p></div>
-<div class="q" style="left:1035px"><div class="k" style="color:var(--violet)">3 · Vote · Noul (yes/no)</div><b>“Do you accept plan P?”</b><p><i>Given:</i> passes every rule · meets your minimum (yes, clearly / just; no) · best for you?</p><p><i>Out:</i> P(accept) ≥ 0.7 ACCEPT · ≤ 0.3 REJECT · in between the formula decides; code tallies all voters</p></div>
-</div></div>
-<script>const tl = gsap.timeline({ paused: true }); window.__timelines["main"] = tl; tl.seek(0);</script>
+<div id="b-bench" class="b" style="left:820px;top:655px;width:620px;padding:8px 22px"><div class="k" style="color:var(--muted)">Benchmark · picks the default</div><p>2 × 50 real waves (2024, 2015): models vs formulas, status quo, optimiser · outage and engine-off tests</p></div>
+<div id="g-ask" class="grp" style="left:60px;top:775px;width:1440px;height:270px;border-color:var(--violet)"><div class="k" style="color:var(--violet)">What the decision model is asked · code does the maths, the model judges</div></div>
+<div id="q1" class="q" style="left:85px"><div class="k" style="color:var(--violet)">1 · Triage · Score</div><b>“How severe is this wave?”</b><p><i>Given:</i> closures, wind, queue, delays</p><p><i>Out:</i> level 0–3 + probability → sets moves per turn</p></div>
+<div id="q2" class="q" style="left:560px"><div class="k" style="color:var(--violet)">2 · Move · Choice</div><b>“Pick ONE move for your authority, or no move”</b><p><i>Given per option:</i> fixes / adds rule breaches · better / worse for you · engine rank</p><p><i>Out:</i> option key + probabilities → engine CHECK, veto if it adds a breach</p></div>
+<div id="q3" class="q" style="left:1035px"><div class="k" style="color:var(--violet)">3 · Vote · Noul (yes/no)</div><b>“Do you accept plan P?”</b><p><i>Given:</i> passes every rule · meets your minimum (yes, clearly / just; no) · best for you?</p><p><i>Out:</i> P(accept) ≥ 0.7 ACCEPT · ≤ 0.3 REJECT · in between the formula decides; code tallies all voters</p></div>
+</div></div></div>
+<script>
+const tl = gsap.timeline({ paused: true });
+const box = (sel, at) => tl.from(sel, { opacity: 0, y: 18, duration: 0.55, ease: "power2.out", stagger: 0.18 }, at);
+const grp = (sel, at) => tl.from(sel, { opacity: 0, duration: 0.5, ease: "power1.out" }, at);
+// an arrow draws from its tail; the dashed one (its own dash pattern) fades in instead
+const arrow = (ids, at) => ids.split(" ").forEach((id, i) => {
+  const p = document.getElementById(id);
+  if (p.getAttribute("stroke-dasharray")) { tl.from(p, { opacity: 0, duration: 0.5 }, at + i * 0.1); return; }
+  const len = p.getTotalLength();
+  tl.fromTo(p, { strokeDasharray: len, strokeDashoffset: len, opacity: 0 }, { strokeDashoffset: 0, opacity: 1, duration: 0.45, ease: "power1.inOut" }, at + i * 0.1);
+});
+// the camera frames each part as it is built (text stays readable on a phone), then pulls back to the whole diagram
+gsap.set("#cam", { transformOrigin: "0 0", x: 0, y: 0, scale: 1 });
+const cam = (cx, cy, s, at, d = 0.8) => tl.to("#cam", { x: 960 - cx * s, y: 540 - cy * s, scale: s, duration: d, ease: "power2.inOut" }, at);
+tl.to("#title", { opacity: 0, duration: 0.4 }, 0.9);   // the close-ups would crop the title
+cam(235, 405, 1.75, 0.9);      // real data in
+cam(615, 420, 1.85, 2.5);      // wave builder, flight and taxi model
+cam(1160, 400, 1.45, 4.5);     // negotiation
+cam(1705, 705, 1.3, 8.8);      // outcomes, duty manager, brief
+cam(1130, 690, 1.6, 13.1);     // benchmark
+cam(780, 910, 1.25, 15.2);     // what the model is asked
+cam(960, 540, 1, 17.6, 1.0);   // the whole diagram
+tl.to("#title", { opacity: 1, duration: 0.5 }, 18.1);
+tl.from("#title", { opacity: 0, y: -14, duration: 0.7, ease: "power2.out" }, 0.2);
+grp("#g-data", 1.0);  box("#b-traffic, #b-world, #b-limits", 1.2);       // real data in
+arrow("a-data1 a-data2", 2.6); box("#b-build", 2.9);                       // wave builder
+arrow("a-model", 3.6); box("#b-model", 3.8);                               // flight and taxi model
+arrow("a-neg a-neg2", 4.8); grp("#g-neg", 5.0);                            // negotiation
+box("#b-voters, #b-pilot, #b-dec", 5.3);
+arrow("a-rules a-dec", 6.8); box("#b-rules", 7.0);                         // rule engine
+arrow("a-cons", 7.9); box("#b-cons", 8.1);                                 // consensus
+arrow("a-ok", 9.1); box("#b-ok", 9.3);                                     // outcomes
+arrow("a-no", 10.0); box("#b-no", 10.2);
+arrow("a-dm1 a-dm2", 11.1); box("#b-dm", 11.4); box("#b-brief", 12.0);     // the human, the brief
+box("#b-bench", 13.4); arrow("a-bench", 13.9);                             // benchmark
+arrow("a-ask", 15.4); grp("#g-ask", 15.5); box("#q1, #q2, #q3", 15.8);     // what the model is asked
+// once everything is on screen, a brief green pulse runs down the agreed-plan path
+tl.to("#b-rules, #b-cons, #b-ok", { borderColor: "#3ecf8e", boxShadow: "0 0 26px rgba(62,207,142,.45)", duration: 0.35, stagger: 0.3, yoyo: true, repeat: 1, ease: "sine.inOut" }, 18.8);
+tl.set({}, {}, 23);
+window.__timelines["main"] = tl;
+</script>
 </body></html>
