@@ -1,0 +1,21 @@
+[package]
+name = "taxi_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Rust port of the wait-search loop of backend.wave.surface.schedule (bit-identical to the Python loop)"
+
+[lib]
+name = "_taxi_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30.1", features = ["extension-module", "abi3-py312"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+# the default (strip debuginfo with the system `strip`) leaves a dylib dyld rejects on macOS 27
+# ("mis-aligned LINKEDIT string pool")
+strip = false

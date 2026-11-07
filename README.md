@@ -54,6 +54,8 @@ docker build -t disruption-negotiator .
 docker run -p 7860:7860 disruption-negotiator
 ```
 
+The taxi scheduler's main loop has an optional Rust extension (`native/taxi`, built by `scripts/build_native.sh` into `backend/wave/_taxi_native.abi3.so`, and included in the Docker image). Results are identical to the Python loop; without the built file, or with `ATM_NATIVE=0`, the pure Python loop runs.
+
 Keys are optional and live in `.env` (gitignored): `OPENROUTER_API_KEY`, `TYPESAFE_API_KEY`, `ANTHROPIC_API_KEY`. With none set, negotiation runs on the local formulas and narration uses a deterministic template. The Docker image sets `ATM_REQUIRE_REAL=1`.
 
 ## 3. Architecture

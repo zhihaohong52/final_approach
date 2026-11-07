@@ -1,0 +1,3 @@
+# a Python extension resolves the interpreter's symbols when it is loaded
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

@@ -1,11 +1,16 @@
 """Runtime taxi graph over an OSM surface document: runway exit choice, runway occupancy time (ROT) and
 unimpeded taxi routes. Pure and deterministic; the model never decides routes. Built at wave-build time only
 (rules, utility and negotiation never call the store).
+
+The wait-search loop of `schedule` runs in the optional Rust extension `_taxi_native` (native/taxi, built by
+scripts/build_native.sh) when it is built, with bit-identical results; otherwise, or with ATM_NATIVE=0, in Python
+(`_run_loop_py`, see `_NATIVE`).
 """
 from __future__ import annotations
 
 import heapq
 import math
+import os
 from bisect import bisect_left
 import threading
 from dataclasses import dataclass, field
@@ -887,58 +892,71 @@ def _base_lists(path: TaxiPath, rh: _RouteHolds, nodes: list, busy: dict, edir: 
     nl, rl, sl = _lists_at(rh, nodes, busy, edir)
     sp = [[max((x[1] - x[0] for x in lst), default=0.0) if len(lst) > _WIN_MIN else 0.0 for lst in col]
           for col in (nl, rl, sl)]
-    out = (nl, sp[0], rl, sp[1], sl, sp[2])
+    # the slot for the Rust-side copy of the same lists (`_run_loop_native` converts them once per memo entry)
+    out = (nl, sp[0], rl, sp[1], sl, sp[2], _NativeSlot())
     if len(memo) >= 2:
         memo.clear()
     memo[id(busy)] = (busy, edir, out)
     return out
 
 
-def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, callsign: str,
-             horizon_min: float = HORIZON_MIN, headway_s: float = HEADWAY_S, commit: bool = True) -> Scheduled:
-    """Move along the fixed route from `t0_min`, with the stop lines of its edges inserted (`refine`), waiting at the
-    last stop point before an index (`_stop_holds`: never in a junction, a queue spacing behind an occupied position,
-    at the hold before a runway's protected zone) until (a) the position is clear of reservations by the headway,
-    (b) the next edge is not in use in the opposite direction, (c) for a runway crossing, the whole time inside the
-    strip's protected zone (from leaving the hold to reaching the first node outside the zone) meets the
-    landing/takeoff gap and (d) it neither overtakes nor is overtaken on a step (entry and exit order match every
-    other traversal of the same step in the same direction). Waits only grow, so the search is monotone and
-    deterministic. A wait on a stop line has the line's position; points on a stop line carry `line: True`.
+# The main wait-search loop of `schedule` runs in an optional Rust extension (native/taxi, built by
+# scripts/build_native.sh into backend/wave/_taxi_native.abi3.so). It is a line-for-line port of `_run_loop_py`
+# with the same float operations in the same order (CPython 3.12's compensated `sum` included), so its results are
+# bit-identical. Without the built module, or with ATM_NATIVE=0, the pure-Python loop runs: the repo never needs it.
+try:
+    if os.environ.get("ATM_NATIVE") == "0":
+        raise ImportError("ATM_NATIVE=0")
+    from backend.wave import _taxi_native as _NATIVE
+except ImportError:
+    _NATIVE = None
 
-    It runs to a complete conflict-free schedule; `ok` is False when the total wait exceeds `horizon_min`, and the
-    flight's intervals are still added to `res` so later flights give way to it. If the iteration guard trips (no
-    convergence), `ok` is False and nothing is reserved, since the times may still conflict. With `commit=False`
-    nothing is added to `res`: the caller adds `Scheduled.reserved` when a later schedule needs it.
 
-    If the first node itself is blocked, its arrival is delayed: the aircraft is still upstream and off the graph
-    (rolling out on the runway, or at the stand before pushback) during `waits[0]`, which runs from `t0_min` to the
-    first point; `points` start at the delayed arrival.
+class _NativeSlot:
+    """Holds a Rust-side object (`_taxi_native.Route` / `.Lists`) in a path's caches. It copies and pickles empty
+    (a wave pickles its pinned paths with their caches), and is refilled on the next native call."""
+    __slots__ = ("obj",)
 
-    A route that starts inside a crossed strip's zone: on the runway the aircraft is vacating (the strip whose runway
-    edges touch the first node), the dwell at the first node is left to the runway-vacate check (`exit_clear_min`);
-    for any other strip the aircraft cannot back out, so if its time in that zone from the first point meets a
-    landing/takeoff window the result is `ok=False`."""
-    ref = refine(g, path)
-    nodes, seg, park, real = ref.nodes, ref.seg, ref.park, ref.real
-    n = len(nodes)
-    hw = headway_s / 60.0
-    rh = _route_holds(g, path)
-    zones, vacate, hold, nxt_real, prev_real, zones_at = (rh.zones, rh.vacate, rh.hold, rh.nxt_real, rh.prev_real,
-                                                          rh.zones_at)
-    steps, revs = rh.steps, rh.revs
-    # an Overlay table: its base and its own lists, both sorted (the checks take a max, or the smallest match)
-    busy, edir = res.node_busy, res.edge_dir
-    busy_own = busy.own if isinstance(busy, Overlay) else {}
-    edir_own = edir.own if isinstance(edir, Overlay) else {}
-    if isinstance(res.node_busy, Overlay) and isinstance(res.edge_dir, Overlay):
-        busy, edir = busy.base, edir.base
-        nl, nsp, rl, rsp, sl, ssp = _base_lists(path, rh, nodes, busy, edir)
-    else:
-        busy = busy.base if isinstance(busy, Overlay) else busy
-        edir = edir.base if isinstance(edir, Overlay) else edir
-        (nl, rl, sl), nsp, rsp, ssp = _lists_at(rh, nodes, busy, edir), None, None, None
-    events = {z[1]: sorted(res.runway_events.get(z[1], ())) for z in zones}
-    free_arr_last = t0_min + sum(seg)
+    def __init__(self):
+        self.obj = None
+
+    def __reduce__(self):
+        return (_NativeSlot, ())
+
+
+class _LoopIn:
+    """Everything the wait-search loop of `schedule` reads (route constants, the reservation lists per index, the
+    runway events of the crossed strips)."""
+    __slots__ = ("n", "seg", "park", "real", "t0_min", "hw", "hold", "nxt_real", "prev_real", "zones_at", "events",
+                 "nodes", "steps", "revs", "nl", "nsp", "rl", "rsp", "sl", "ssp", "busy_own", "edir_own",
+                 "g", "path", "rh", "base")
+
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+class _LoopOut:
+    """The loop's result: arrival / departure per index, the earliest first arrival, the binding wait per index
+    (-1 = before the first node: (text, strip or None, kind or None, callsign)) and whether it converged."""
+    __slots__ = ("arr", "dep", "arr0_nb", "why", "converged")
+
+    def __init__(self, arr: list, dep: list, arr0_nb: float, why: dict, converged: bool):
+        self.arr, self.dep, self.arr0_nb, self.why, self.converged = arr, dep, arr0_nb, why, converged
+
+
+def _gap_hits(events: dict, strip: str, t_in: float, t_out: float) -> list[tuple[float, str, str]]:
+    return [(ev + GAP_MIN[kind][0] + _EPS, kind, cs) for ev, kind, cs in events[strip]
+            if kind in GAP_MIN and t_in <= ev + GAP_MIN[kind][0] + _TOL and t_out >= ev - GAP_MIN[kind][1] - _TOL]
+
+
+def _run_loop_py(li: _LoopIn) -> _LoopOut:
+    """The wait search of `schedule` (checks (a)-(d)), in Python."""
+    n, seg, park, real, t0_min, hw = li.n, li.seg, li.park, li.real, li.t0_min, li.hw
+    hold, nxt_real, prev_real, zones_at, events = li.hold, li.nxt_real, li.prev_real, li.zones_at, li.events
+    nodes, steps, revs = li.nodes, li.steps, li.revs
+    nl, nsp, rl, rsp, sl, ssp = li.nl, li.nsp, li.rl, li.rsp, li.sl, li.ssp
+    busy_own, edir_own = li.busy_own, li.edir_own
 
     arr0_nb = t0_min                       # earliest arrival at the first node
     nb = [-math.inf] * n                   # earliest departure from each node
@@ -974,8 +992,7 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         return h
 
     def gap_hits(strip: str, t_in: float, t_out: float) -> list[tuple[float, str, str]]:
-        return [(ev + GAP_MIN[kind][0] + _EPS, kind, cs) for ev, kind, cs in events[strip]
-                if kind in GAP_MIN and t_in <= ev + GAP_MIN[kind][0] + _TOL and t_out >= ev - GAP_MIN[kind][1] - _TOL]
+        return _gap_hits(events, strip, t_in, t_out)
 
     times()
     # after a wait at index h, indices before h keep their times and still pass: only the head-on check (b) of the
@@ -1058,6 +1075,102 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         else:
             times(restart)
             i, recheck = prev_real[restart], restart
+    return _LoopOut(arr, dep, arr0_nb, why, converged)
+
+
+def _native_route(li: _LoopIn):
+    """The Rust-side copy of the route constants, built once per path (kept in its `_route_holds` cache entry)."""
+    hit = li.path._holds
+    if len(hit) > 2 and hit[1] is li.rh:
+        slot = hit[2]
+        if slot.obj is not None:
+            return slot.obj
+    else:
+        slot = _NativeSlot()
+        li.path._holds = (hit[0], li.rh, slot)
+    zones_at = {c: [(strip, h, ze, bool(stuck)) for strip, h, ze, stuck in zs] for c, zs in li.zones_at.items()}
+    slot.obj = _NATIVE.Route(li.seg, li.park, li.real, li.hold, li.nxt_real, li.prev_real, zones_at, li.nodes,
+                             li.steps, li.revs)
+    return slot.obj
+
+
+def _run_loop_native(li: _LoopIn) -> _LoopOut:
+    """`_run_loop_py` in Rust (bit-identical results). The Python loop runs where the Rust types would not keep
+    Python's semantics (an int start time stays an int in the Python loop) and on an empty route (it raises)."""
+    if li.n == 0 or type(li.t0_min) is not float:
+        return _run_loop_py(li)
+    if li.base is None:                     # plain tables: their lists change between calls (cached per list)
+        base = _NATIVE.Lists(li.nl, li.rl, li.sl)
+    else:                                   # an Overlay's fixed base: converted once per `_base_lists` memo entry
+        base = li.base.obj
+        if base is None:
+            base = li.base.obj = _NATIVE.Lists(li.nl, li.rl, li.sl)
+    arr, dep, arr0_nb, why0, converged = _NATIVE.run_loop(
+        _native_route(li), base, li.t0_min, li.hw, li.events, GAP_MIN, li.busy_own, li.edir_own,
+        _TOL, _EPS, _WIN, _WIN_MIN, _MAX_ITER)
+    why = {k: ((f"hold short {strip} for {kind} {cs}" if strip is not None else f"give way to {cs}"), strip, kind, cs)
+           for k, (strip, kind, cs) in why0.items()}
+    return _LoopOut(arr, dep, arr0_nb, why, converged)
+
+
+_LOOP = _run_loop_native if _NATIVE is not None else _run_loop_py
+
+
+def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, callsign: str,
+             horizon_min: float = HORIZON_MIN, headway_s: float = HEADWAY_S, commit: bool = True) -> Scheduled:
+    """Move along the fixed route from `t0_min`, with the stop lines of its edges inserted (`refine`), waiting at the
+    last stop point before an index (`_stop_holds`: never in a junction, a queue spacing behind an occupied position,
+    at the hold before a runway's protected zone) until (a) the position is clear of reservations by the headway,
+    (b) the next edge is not in use in the opposite direction, (c) for a runway crossing, the whole time inside the
+    strip's protected zone (from leaving the hold to reaching the first node outside the zone) meets the
+    landing/takeoff gap and (d) it neither overtakes nor is overtaken on a step (entry and exit order match every
+    other traversal of the same step in the same direction). Waits only grow, so the search is monotone and
+    deterministic. A wait on a stop line has the line's position; points on a stop line carry `line: True`.
+
+    It runs to a complete conflict-free schedule; `ok` is False when the total wait exceeds `horizon_min`, and the
+    flight's intervals are still added to `res` so later flights give way to it. If the iteration guard trips (no
+    convergence), `ok` is False and nothing is reserved, since the times may still conflict. With `commit=False`
+    nothing is added to `res`: the caller adds `Scheduled.reserved` when a later schedule needs it.
+
+    If the first node itself is blocked, its arrival is delayed: the aircraft is still upstream and off the graph
+    (rolling out on the runway, or at the stand before pushback) during `waits[0]`, which runs from `t0_min` to the
+    first point; `points` start at the delayed arrival.
+
+    A route that starts inside a crossed strip's zone: on the runway the aircraft is vacating (the strip whose runway
+    edges touch the first node), the dwell at the first node is left to the runway-vacate check (`exit_clear_min`);
+    for any other strip the aircraft cannot back out, so if its time in that zone from the first point meets a
+    landing/takeoff window the result is `ok=False`."""
+    ref = refine(g, path)
+    nodes, seg, park, real = ref.nodes, ref.seg, ref.park, ref.real
+    n = len(nodes)
+    hw = headway_s / 60.0
+    rh = _route_holds(g, path)
+    zones, vacate, hold, nxt_real, prev_real, zones_at = (rh.zones, rh.vacate, rh.hold, rh.nxt_real, rh.prev_real,
+                                                          rh.zones_at)
+    steps, revs = rh.steps, rh.revs
+    # an Overlay table: its base and its own lists, both sorted (the checks take a max, or the smallest match)
+    busy, edir = res.node_busy, res.edge_dir
+    busy_own = busy.own if isinstance(busy, Overlay) else {}
+    edir_own = edir.own if isinstance(edir, Overlay) else {}
+    if isinstance(res.node_busy, Overlay) and isinstance(res.edge_dir, Overlay):
+        busy, edir = busy.base, edir.base
+        nl, nsp, rl, rsp, sl, ssp, base = _base_lists(path, rh, nodes, busy, edir)
+    else:
+        busy = busy.base if isinstance(busy, Overlay) else busy
+        edir = edir.base if isinstance(edir, Overlay) else edir
+        (nl, rl, sl), nsp, rsp, ssp, base = _lists_at(rh, nodes, busy, edir), None, None, None, None
+    events = {z[1]: sorted(res.runway_events.get(z[1], ())) for z in zones}
+    free_arr_last = t0_min + sum(seg)
+
+    li = _LoopIn(n=n, seg=seg, park=park, real=real, t0_min=t0_min, hw=hw, hold=hold, nxt_real=nxt_real,
+                 prev_real=prev_real, zones_at=zones_at, events=events, nodes=nodes, steps=steps, revs=revs,
+                 nl=nl, nsp=nsp, rl=rl, rsp=rsp, sl=sl, ssp=ssp, busy_own=busy_own, edir_own=edir_own,
+                 g=g, path=path, rh=rh, base=base)
+    lo = _LOOP(li)
+    arr, dep, why, converged = lo.arr, lo.dep, lo.why, lo.converged
+
+    def gap_hits(strip: str, t_in: float, t_out: float) -> list[tuple[float, str, str]]:
+        return _gap_hits(events, strip, t_in, t_out)
 
     total_wait = arr[-1] - free_arr_last
     ok, fail = True, None

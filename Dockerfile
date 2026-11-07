@@ -7,12 +7,23 @@ RUN if [ -f /src/frontend/package.json ]; then \
       mkdir -p /dist; \
     fi
 
+# Optional native stage: Rust taxi-loop extension (abi3), copied into the image below. A failed build leaves /out
+# empty and the image runs the pure-Python loop (the server logs which loop is active at startup).
+FROM rust:1-slim AS native
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+COPY native/taxi /src/native/taxi
+WORKDIR /src/native/taxi
+RUN mkdir -p /out && \
+    (cargo build --release && cp target/release/lib_taxi_native.so /out/_taxi_native.abi3.so \
+     || echo "native taxi loop not built: the image runs the pure-Python loop")
+
 # Stage 2: Python API + built frontend
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
+COPY --from=native /out/ /app/backend/wave/
 COPY data/ ./data/
 COPY eval/ ./eval/
 COPY web/ ./web/

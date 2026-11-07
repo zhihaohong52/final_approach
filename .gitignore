@@ -25,3 +25,7 @@ data/ref/movements2024
 
 # scratch benchmark runs and analysis
 eval/runs/
+
+# optional Rust taxi-loop extension (scripts/build_native.sh)
+native/taxi/target/
+backend/wave/_taxi_native*.so
