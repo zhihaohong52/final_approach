@@ -641,6 +641,8 @@ def build_wave(wave_id: str) -> Wave:
         from backend.wave import surface
         surface.precompute(w)        # taxi graph + gate binding pinned, per-wave taxi table filled (spec §6.8); after
                                      # annotate (which sets wave_key) so the table is keyed on the final wave
+        if surface.TREES_KEEP < surface.MAX_TREES:
+            surface.trim_trees(surface.TREES_KEEP)   # the table holds the routes: trees only cost a rebuild
     if not (wave_id.startswith("F2015-") and w.metar is None):
         with _WAVES_LOCK:
             _WAVES[wave_id] = w

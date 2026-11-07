@@ -171,10 +171,10 @@ def test_trial_scheduling_does_not_leak(monkeypatch):
     real = GT._settle_runway
     calls = []
 
-    def checked(g, m, res, spans, settled=None):
+    def checked(g, m, res, spans, settled=None, dep_memo=None):
         before = copy.deepcopy((res.node_busy, res.edge_dir, spans))
         ev = copy.deepcopy(res.runway_events)
-        real(g, m, res, spans, settled)
+        real(g, m, res, spans, settled, dep_memo)
         assert (res.node_busy, res.edge_dir, spans) == before          # trials wrote only to their views
         mine = lambda evs: sorted((s, e) for s, l in evs.items() for e in l if e[2] == m.label)
         others = lambda evs: {s: [e for e in l if e[2] != m.label] for s, l in evs.items()}

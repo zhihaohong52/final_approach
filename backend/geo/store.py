@@ -37,11 +37,36 @@ def load_procedures(icao: str) -> dict | None:
     return None if blob is None else json.loads(gzip.decompress(blob))
 
 
-@lru_cache(maxsize=4)
+# Surface documents parse to 2.4-3.9 MB each but are read only a few times per airport: once to build the taxi graph
+# (`surface.load_graph`, cached) and the gate binding (`surface.gate_geo`, cached), then once per wave by the stand
+# piers of ground traffic and once per geo body (cached by wave key). So keep the gzipped bytes of many airports
+# (~100 KB each; under PgStore a miss is a query) and the parsed document of the last airport only: the readers of
+# one build or geo body all hit that slot, and a switch of airport costs one parse (~20-35 ms locally). The parsed
+# document is shared between readers as before (none of them mutates it). Procedures stay parsed (lru 4, ~0.5 MB
+# each): `route.build_route` reads them once per flight and runway.
+@lru_cache(maxsize=32)
+def _surface_blob(icao: str) -> bytes | None:
+    return get_store().surface(icao)
+
+
+@lru_cache(maxsize=1)
+def _surface_doc(icao: str) -> dict | None:
+    blob = _surface_blob(icao)
+    return None if blob is None else json.loads(gzip.decompress(blob))
+
+
 def load_surface(icao: str) -> dict | None:
     """OSM surface document for `icao` (header, nodes, edges, exits, stands, gates, holding_positions, ...), or None."""
-    blob = get_store().surface(icao)
-    return None if blob is None else json.loads(gzip.decompress(blob))
+    return _surface_doc(icao)
+
+
+def _surface_cache_clear() -> None:
+    _surface_doc.cache_clear()
+    _surface_blob.cache_clear()
+
+
+load_surface.cache_clear = _surface_cache_clear   # type: ignore[attr-defined]
+load_surface.cache_info = _surface_doc.cache_info  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -70,7 +95,7 @@ def _day_rows(blob: bytes | None, day: str, shift: int) -> list[Movement]:
     return out
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=4)            # read again only for variant waves (the built wave pins its fixed traffic)
 def load_movements(iata: str, date: str, from_abs: int, to_abs: int) -> list[Movement] | None:
     """Movements at `iata` with scheduled time in [from_abs, to_abs) local minutes since midnight of `date`
     (a window past 1440 also reads the next day, one before 0 the previous day), or None when there is no data."""

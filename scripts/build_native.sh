@@ -25,5 +25,8 @@ esac
 (cd native/taxi && cargo build --release)
 
 DST="$ROOT/backend/wave/_taxi_native.abi3.so"
-cp "$ROOT/native/taxi/target/release/$LIB" "$DST"
+# copy then rename: a running interpreter keeps the old file it mapped (cp over it in place could crash it)
+trap 'rm -f "$DST.tmp"' EXIT   # a failed cp leaves no .tmp behind (.gitignore / .dockerignore do not cover it)
+cp "$ROOT/native/taxi/target/release/$LIB" "$DST.tmp"
+mv -f "$DST.tmp" "$DST"
 echo "wrote $DST"

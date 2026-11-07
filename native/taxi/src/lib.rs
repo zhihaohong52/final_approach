@@ -7,6 +7,8 @@
 //! passed in by the caller at each call, from the Python module's globals.
 //!
 //! The taxi-route Dijkstra tree builder (`_tree_py`) is ported in `tree.rs`, under the same rules.
+//!
+//! CACHE is cleared by `lists_cache_clear` after each fixed-traffic build.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
@@ -131,6 +133,26 @@ fn cached(obj: &Bound<'_, PyAny>, cache: &mut Cache, evicted: &mut Vec<Cache>) -
     }
     cache.insert(key, CacheEntry { obj: list.clone().into_any().unbind(), items, lst: lst.clone() });
     Ok(lst)
+}
+
+/// Drop every converted list (and the Python lists / item tuples each entry pins). A pure memo: a later
+/// conversion of the same list gives the same `Lst`. Lists objects already built hold their own Arc clones.
+#[pyfunction]
+fn lists_cache_clear() -> usize {
+    let taken: Cache = {
+        let mut c = CACHE.lock().unwrap();
+        std::mem::take(&mut *c)
+    };
+    let n = taken.len();
+    drop(taken); // decref outside the lock; the GIL is held (pyfunction), as Lists::new drops `evicted`
+    n
+}
+
+/// (entries, pinned items) of the identity cache, for tests and memtable.
+#[pyfunction]
+fn lists_cache_stats() -> (usize, usize) {
+    let c = CACHE.lock().unwrap();
+    (c.len(), c.values().map(|e| e.items.len()).sum())
 }
 
 /// Per-call conversion (own lists: small, and appended to between calls), deduplicated by identity within the call.
@@ -709,6 +731,8 @@ fn _taxi_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Lists>()?;
     m.add_function(wrap_pyfunction!(run_loop, m)?)?;
     m.add_function(wrap_pyfunction!(fsum_compat, m)?)?;
+    m.add_function(wrap_pyfunction!(lists_cache_clear, m)?)?;
+    m.add_function(wrap_pyfunction!(lists_cache_stats, m)?)?;
     m.add_class::<tree::TreeGraph>()?;
     m.add_class::<tree::Tree>()?;
     m.add_function(wrap_pyfunction!(tree::build_tree, m)?)?;

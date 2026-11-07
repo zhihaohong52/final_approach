@@ -25,6 +25,7 @@ vetoed). Pure and deterministic; no model decides anything here.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 import threading
 from collections import Counter
@@ -54,6 +55,8 @@ HOLD_UNTIL_TAKEOFF = True     # a departure waits in the holding bay until it li
 SRC_REAL = "BTS {year} movements"   # .format(year=) the wave date's year
 SRC_PARTIAL = "challenge flights.csv subset"
 _TOL = 1e-9
+_RELEASE = True          # drop build-only caches and reservation records once the fixed traffic is final
+_PACK_POINTS = True      # store fixed track points as PackedPoints
 
 
 @dataclass
@@ -246,14 +249,25 @@ def _forward(g: TaxiGraph, nodes: list[int]) -> TaxiPath:
     return TaxiPath(list(nodes), seg, names, surface.merge_crossings(g, list(nodes), tagged), sum(seg) / 60.0, "osm")
 
 
-def departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> TaxiPath:
-    """Memoised on the graph per (stand, entry, strip): `_departure_path`. Shared and read-only."""
-    memo = g._trees.setdefault("dep_paths", {})
+def departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str, memo: dict | None = None) -> TaxiPath:
+    """A private copy of the graph-memoised core (`_departure_path`, per (stand, entry, strip)): the core in
+    g._trees["dep_paths"] never carries caches (refine, read keys, route holds, base lists), so `_release` can drop
+    a copy's caches without touching another wave's. `memo` (one per `_compute`) shares one copy within a compute;
+    without it every call returns a fresh copy. Copies share the core's node / time / name / crossing lists, which
+    nothing mutates."""
     k = (stand_node, entry, strip)
-    hit = memo.get(k)
-    if hit is None:
-        hit = memo[k] = _departure_path(g, stand_node, entry, strip)
-    return hit
+    if memo is not None:
+        hit = memo.get(k)
+        if hit is not None:
+            return hit
+    core_memo = g._trees.setdefault("dep_paths", {})
+    core = core_memo.get(k)
+    if core is None:
+        core = core_memo[k] = _departure_path(g, stand_node, entry, strip)
+    p = dataclasses.replace(core, _ref=None, _holds=None, _keys=None, _lists=None)
+    if memo is not None:
+        memo[k] = p
+    return p
 
 
 def _departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> TaxiPath:
@@ -320,7 +334,10 @@ def _carrier(cs: str) -> str:
 
 # ---------------------------------------------------------------- fixed traffic
 
-def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tuple, bool, dict]:
+def _build_movers(wave: Wave, g: TaxiGraph | None, dep_memo: dict | None = None
+                  ) -> tuple[list[FixedMover], tuple, bool, dict]:
+    if dep_memo is None:
+        dep_memo = {}
     from backend.wave.build import _rng
     from backend.wave.route import IAS_FINAL, MIN_GS_KT
     date, t0 = _t0(wave)
@@ -432,7 +449,7 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
             why = f"runway end {rwy} not in OSM"
         else:
             try:
-                path = departure_path(g, snode, entry, strip)
+                path = departure_path(g, snode, entry, strip, dep_memo)
             except NoPath as e:
                 why = f"no taxi path ({e})"
         if m.taxi_min is not None:
@@ -568,7 +585,8 @@ def _crossing_spans(g: TaxiGraph, path: TaxiPath, s: Scheduled) -> list[tuple[st
 
 
 def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
-                   spans: dict[str, list[tuple[float, float]]], settled: set[str] | None = None) -> None:
+                   spans: dict[str, list[tuple[float, float]]], settled: set[str] | None = None,
+                   dep_memo: dict | None = None) -> None:
     """Trial-schedule the departure to each candidate end against a copy-on-write view of the current reservations
     and keep the end with the earliest takeoff, ok=True first; ties to the threshold nearest the stand, then the
     runway id. The takeoff is the one `_compute` will record: `_takeoff_time` from the time it leaves the holding
@@ -590,7 +608,7 @@ def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
         if best is not None and not best[0][0] and (False, t0, d, rid) > best[0]:
             continue
         try:
-            path = m.path if rid == m.runway else departure_path(g, m.stand_node, entry, strip)
+            path = m.path if rid == m.runway else departure_path(g, m.stand_node, entry, strip, dep_memo)
         except NoPath:
             continue
         travel = sum(path.seg_s[:-1]) / 60.0
@@ -615,7 +633,8 @@ def _settle_runway(g: TaxiGraph, m: FixedMover, res: Reservations,
 
 def _compute(wave: Wave) -> FixedTraffic:
     g = surface.load_graph(wave.airport.icao)
-    movers, mode, real, stats = _build_movers(wave, g)
+    dep_memo: dict = {}          # (stand, entry, strip) -> this compute's private departure path
+    movers, mode, real, stats = _build_movers(wave, g, dep_memo)
     res = Reservations({}, {}, {})
     for m in movers:
         if m.strip:
@@ -637,7 +656,7 @@ def _compute(wave: Wave) -> FixedTraffic:
         if m.path is None or g is None:
             continue
         if m.options:
-            _settle_runway(g, m, res, spans, settled)
+            _settle_runway(g, m, res, spans, settled, dep_memo)
         # schedule() does not skip the mover's own runway event: hide it (shared node/edge tables, filtered events)
         view = Reservations(res.node_busy, res.edge_dir,
                             {s: [e for e in lst if e[2] != m.label] for s, lst in res.runway_events.items()})
@@ -741,7 +760,46 @@ def _compute(wave: Wave) -> FixedTraffic:
                     failed.add(tr.callsign)
                 elif "still vacating" in msg:
                     stats["vacating"].append(msg)
+    if _RELEASE:
+        _release(movers, scheduled, tracks)
     return FixedTraffic(movers, res, scheduled, tracks, failures, mode, real, shifted, stats, occupancy)
+
+
+def _release(movers: list[FixedMover], scheduled: dict[str, Scheduled], tracks: list[GroundTrack]) -> None:
+    """Drop what only the build reads, once the fixed traffic is final (after the safety net, before it is cached or
+    pinned): each schedule's reservation record (`reserved`: read only by `_unreserve` here; trajectory reads its
+    own landing schedules') and read memo, the mover paths' caches (private to this compute: arrival paths are
+    fresh `unimpeded` objects, departures `departure_path` copies), the `_span` memo and the Rust list cache (both
+    identity-checked memos: clearing only turns a hit into a miss). With `_PACK_POINTS`, track and schedule points
+    are stored as `surface.PackedPoints` (equal items, same key order; points that do not fit stay lists)."""
+    if _PACK_POINTS:
+        for tr in tracks:
+            s = scheduled.get(tr.callsign)   # the track's callsign is the mover label, as the schedule's key
+            same = s is not None and s.points is tr.points
+            n = len(s.points) if s is not None else 0
+            tr.points = surface.PackedPoints.of(tr.points)
+            if s is None:
+                continue
+            if same:
+                s.points = tr.points
+            elif isinstance(tr.points, surface.PackedPoints) and len(tr.points) == n + 1 and \
+                    (view := tr.points[:n]) == s.points:
+                s.points = view              # holding-bay departure: the track is the schedule's points + line-up
+            else:
+                s.points = surface.PackedPoints.of(s.points)
+        tracked = {tr.callsign for tr in tracks}
+        for lab, s in scheduled.items():
+            if lab not in tracked:           # did not converge: no track
+                s.points = surface.PackedPoints.of(s.points)
+    for s in scheduled.values():
+        s.reserved = ()
+        s._reads.clear()
+    for m in movers:
+        p = m.path
+        if p is not None:
+            p._ref = p._holds = p._keys = p._lists = None
+    surface._SPANS.clear()
+    surface.lists_cache_clear()
 
 
 _CACHE: dict[str, FixedTraffic] = {}
@@ -795,6 +853,7 @@ def _cache_clear() -> None:
     with _LOCK:
         _CACHE.clear()
         _GEN[0] += 1
+    surface.lists_cache_clear()
 
 
 reservations.cache_clear = _cache_clear        # type: ignore[attr-defined]

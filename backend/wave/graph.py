@@ -62,8 +62,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, TypedDict
 
-from langgraph.graph import END, START, StateGraph
-
 from backend.decide import DEFAULT_CHAIN, Decider, DecisionResult
 from backend.wave import airlines as airlines_mod
 from backend.wave import baseline, fallback, moves, route, rules, surface, trajectory, unable, wind
@@ -972,6 +970,8 @@ def _finalize(st: S) -> dict:
 
 
 def build_graph():
+    from langgraph.graph import END, START, StateGraph   # lazy: langgraph loads on the first negotiation, not at server start
+
     g = StateGraph(S)
     for name, fn in [("triage", _triage), ("open", _open), ("atc", _atc), ("airlines", _airlines),
                      ("ground", _ground), ("decide_turn", _decide_turn), ("fallback", _fallback),

@@ -8,10 +8,13 @@ or with ATM_NATIVE=0, in Python (`_run_loop_py` / `_tree_py`, see `_NATIVE` / `_
 """
 from __future__ import annotations
 
+import collections.abc
 import heapq
 import logging
+from array import array
 from collections import OrderedDict
 import math
+import operator
 import os
 from bisect import bisect_left
 import threading
@@ -386,6 +389,18 @@ def _keep_tree(g: TaxiGraph, key: tuple, tree) -> None:   # tree: _tree_py dict 
         while len(_TREE_ORDER) > MAX_TREES:
             _, (og, ok) = _TREE_ORDER.popitem(last=False)
             og._trees.pop(ok, None)
+
+
+def trim_trees(keep: int) -> int:
+    """Drop the oldest cached Dijkstra trees (of any graph) until at most `keep` remain; the number dropped. Trees are
+    deterministic, so a dropped one only costs a rebuild (a thread inside `tree_path` holds its own reference)."""
+    n = 0
+    with _TREE_LOCK:
+        while len(_TREE_ORDER) > max(keep, 0):
+            _, (og, ok) = _TREE_ORDER.popitem(last=False)
+            og._trees.pop(ok, None)
+            n += 1
+    return n
 
 
 def unimpeded(g: TaxiGraph, exit_node: int, stand_node: int) -> TaxiPath:
@@ -849,6 +864,143 @@ class Scheduled:
         return out
 
 
+_PT_KEYS = ("t_min", "lat", "lon", "node")
+_PT_KEYS_LINE = ("t_min", "lat", "lon", "node", "line")
+_NODE_MAX = 2 ** 63
+
+
+def _packed_load(t: bytes, la: bytes, lo: bytes, nd: bytes, ln: bytes) -> "PackedPoints":
+    p = object.__new__(PackedPoints)
+    p._t, p._la, p._lo, p._nd = array("d"), array("d"), array("d"), array("q")
+    p._t.frombytes(t)
+    p._la.frombytes(la)
+    p._lo.frombytes(lo)
+    p._nd.frombytes(nd)
+    p._ln = bytes(ln)
+    p._a, p._b = 0, len(p._t)
+    return p
+
+
+class PackedPoints(collections.abc.Sequence):
+    """A fixed track's (or schedule's) points stored as arrays: each item is rebuilt on access as the dict it was
+    packed from ({t_min, lat, lon, node}, plus `line: True` on a stop line), with the same key order and equal
+    values. Immutable; a slice with step 1 is a view over the same arrays. Built only by `of`, which returns its
+    input unchanged when any point does not fit (non-float times or coordinates, other keys, a non-int node)."""
+    __slots__ = ("_t", "_la", "_lo", "_nd", "_ln", "_a", "_b")
+    # _t / _la / _lo: array('d'); _nd: array('q'), -1 = None; _ln: bytes, 1 = "line": True;
+    # _a, _b: the view's range over the shared arrays
+
+    @classmethod
+    def of(cls, points):
+        """`points` (a list of point dicts) packed, or `points` itself if it is already packed or any point does
+        not fit exactly."""
+        if isinstance(points, PackedPoints):
+            return points
+        if not isinstance(points, list):
+            return points
+        t, la, lo, nd = array("d"), array("d"), array("d"), array("q")
+        ln = bytearray()
+        for q in points:
+            if type(q) is not dict:
+                return points
+            n = len(q)
+            if n == 4:
+                if tuple(q) != _PT_KEYS:
+                    return points
+                line = False
+            elif n == 5:
+                if tuple(q) != _PT_KEYS_LINE or q["line"] is not True:
+                    return points
+                line = True
+            else:
+                return points
+            tv, lav, lov, x = q["t_min"], q["lat"], q["lon"], q["node"]
+            if type(tv) is not float or type(lav) is not float or type(lov) is not float:
+                return points
+            if x is None:
+                if line:
+                    return points
+                x = -1
+            elif type(x) is not int or not 0 <= x < _NODE_MAX:
+                return points
+            t.append(tv)
+            la.append(lav)
+            lo.append(lov)
+            nd.append(x)
+            ln.append(1 if line else 0)
+        p = object.__new__(cls)
+        p._t, p._la, p._lo, p._nd, p._ln = t, la, lo, nd, bytes(ln)
+        p._a, p._b = 0, len(t)
+        return p
+
+    def __len__(self) -> int:
+        return self._b - self._a
+
+    def _item(self, k: int) -> dict:
+        x = self._nd[k]
+        d = {"t_min": self._t[k], "lat": self._la[k], "lon": self._lo[k], "node": None if x < 0 else x}
+        if self._ln[k]:
+            d["line"] = True
+        return d
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            if i.step is None or i.step == 1:
+                a, b, _ = i.indices(len(self))
+                p = object.__new__(PackedPoints)
+                p._t, p._la, p._lo, p._nd, p._ln = self._t, self._la, self._lo, self._nd, self._ln
+                p._a, p._b = self._a + a, self._a + max(a, b)
+                return p
+            return list(self)[i]
+        i = operator.index(i)
+        n = self._b - self._a
+        if i < 0:
+            i += n
+        if not 0 <= i < n:
+            raise IndexError("PackedPoints index out of range")
+        return self._item(self._a + i)
+
+    def __iter__(self):
+        for k in range(self._a, self._b):
+            yield self._item(k)
+
+    def __reversed__(self):
+        for k in range(self._b - 1, self._a - 1, -1):
+            yield self._item(k)
+
+    def __eq__(self, other):
+        if isinstance(other, PackedPoints):
+            a, b, c, d = self._a, self._b, other._a, other._b
+            return (b - a == d - c and self._t[a:b] == other._t[c:d] and self._la[a:b] == other._la[c:d]
+                    and self._lo[a:b] == other._lo[c:d] and self._nd[a:b] == other._nd[c:d]
+                    and self._ln[a:b] == other._ln[c:d])
+        if isinstance(other, (list, tuple)):
+            return len(self) == len(other) and all(x == y for x, y in zip(self, other))
+        return NotImplemented
+
+    __hash__ = None
+
+    def __repr__(self) -> str:
+        return repr(list(self))
+
+    def __add__(self, other):
+        return list(self) + list(other)
+
+    def __radd__(self, other):
+        return list(other) + list(self)
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def __reduce__(self):
+        a, b = self._a, self._b
+        return (_packed_load, (self._t[a:b].tobytes(), self._la[a:b].tobytes(), self._lo[a:b].tobytes(),
+                               self._nd[a:b].tobytes(), bytes(self._ln[a:b])))
+
+
 @dataclass
 class GroundTrack:
     callsign: str
@@ -973,7 +1125,6 @@ class _RouteHolds:
     steps: list                    # index -> (node, next node), the step's edge key (None at the last index)
     revs: list                     # index -> (next graph node, node), the reversed whole edge (None off graph nodes)
     fwds: list                     # index -> (node, next graph node) where that whole edge is longer than the step
-    pts: list                      # index -> the point dict without its time (node, lat, lon; line on stop lines)
 
 
 def _route_holds(g: TaxiGraph, path: TaxiPath) -> _RouteHolds:
@@ -1002,9 +1153,7 @@ def _route_holds(g: TaxiGraph, path: TaxiPath) -> _RouteHolds:
     revs = [(nodes[nxt_real[i]], nodes[i]) if i + 1 < n and real[i] else None for i in range(n)]
     fwds = [(nodes[i], nodes[nxt_real[i]]) if i + 1 < n and real[i] and nxt_real[i] != i + 1 else None
             for i in range(n)]
-    pts = [{"lat": g.nodes[x][0], "lon": g.nodes[x][1], "node": x, **({} if real[i] else {"line": True})}
-           for i, x in enumerate(nodes)]
-    out = _RouteHolds(zones, vacate, hold, nxt_real, prev_real, zones_at, steps, revs, fwds, pts)
+    out = _RouteHolds(zones, vacate, hold, nxt_real, prev_real, zones_at, steps, revs, fwds)
     path._holds = (g, out)
     return out
 
@@ -1060,6 +1209,13 @@ if _TREE_NATIVE:   # the Rust math.hypot port must match CPython's on this platf
         log.warning("native math.hypot port differs from CPython's on this platform: taxi trees built in Python")
         _TREE_NATIVE = False
     del _r, _pairs
+
+
+def lists_cache_clear() -> int:
+    """Drop the Rust identity cache of converted reservation lists (and the Python lists it pins); the number of
+    entries dropped. A no-op (0) without the native module or with an older build that lacks it."""
+    f = getattr(_NATIVE, "lists_cache_clear", None) if _NATIVE is not None else None
+    return f() if f is not None else 0
 
 
 class _NativeSlot:
@@ -1231,13 +1387,13 @@ def _run_loop_py(li: _LoopIn) -> _LoopOut:
 def _native_route(li: _LoopIn):
     """The Rust-side copy of the route constants, built once per path (kept in its `_route_holds` cache entry)."""
     hit = li.path._holds
-    if len(hit) > 2 and hit[1] is li.rh:
+    if hit is not None and len(hit) > 2 and hit[1] is li.rh:
         slot = hit[2]
         if slot.obj is not None:
             return slot.obj
     else:
         slot = _NativeSlot()
-        li.path._holds = (hit[0], li.rh, slot)
+        li.path._holds = (hit[0] if hit is not None else li.g, li.rh, slot)
     zones_at = {c: [(strip, h, ze, bool(stuck)) for strip, h, ze, stuck in zs] for c, zs in li.zones_at.items()}
     slot.obj = _NATIVE.Route(li.seg, li.park, li.real, li.hold, li.nxt_real, li.prev_real, zones_at, li.nodes,
                              li.steps, li.revs)
@@ -1264,6 +1420,16 @@ def _run_loop_native(li: _LoopIn) -> _LoopOut:
 
 
 _LOOP = _run_loop_native if _NATIVE is not None else _run_loop_py
+
+
+def _point(gn: list, nodes: list, real: list, t: float, i: int) -> dict:
+    """A `schedule` point: time, then the refined path's index `i` (lat, lon, node; `line: True` on a stop line).
+    The lat / lon objects are the graph's own (`g.nodes` is only appended to, so indices stay stable)."""
+    x = nodes[i]
+    q = gn[x]
+    if real[i]:
+        return {"t_min": t, "lat": q[0], "lon": q[1], "node": x}
+    return {"t_min": t, "lat": q[0], "lon": q[1], "node": x, "line": True}
 
 
 def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, callsign: str,
@@ -1337,10 +1503,10 @@ def schedule(g: TaxiGraph, path: TaxiPath, t0_min: float, res: Reservations, cal
         if ok and total_wait > horizon_min + _TOL:
             ok, fail = False, f"taxi wait {total_wait:.1f} min exceeds the {horizon_min:.0f} min search horizon"
 
-    base_pts = rh.pts
+    gn = g.nodes
 
     def pt(t: float, i: int) -> dict:
-        return {"t_min": t, **base_pts[i]}
+        return _point(gn, nodes, real, t, i)
 
     def wait(node: int, a: float, b: float, reason: tuple) -> dict:
         # contract keys (lat, lon, from_min, to_min, reason) plus structured ones for the rule and the labels:
@@ -1618,6 +1784,20 @@ def _env_cap(name: str, default: int) -> int:
 # waves kept in every per-wave cache (built waves, fixed traffic, tier / taxi tables, geo bodies; FIFO): each hub wave
 # holds ~20-30 MB, so a 512 MB instance sets ATM_WAVE_CACHE lower (the Docker image: 8)
 WAVE_CACHE_MAX = _env_cap("ATM_WAVE_CACHE", 32)
+# Dijkstra trees kept after each wave build (`build.build_wave` trims to this when below MAX_TREES; ATM_TREES_KEEP,
+# 0 allowed): the per-wave taxi table holds what the hot path reads, so a trimmed tree only costs a rebuild. Native
+# trees live on the Rust heap (untraced; ~9 MB for 40, an estimate), but trimming to 0 made each later build at the same airport ~15 %
+# slower (it rebuilds the ~27 exit / entry trees, ~60-90 ms at ORD), so the default keeps MAX_TREES; the Python
+# builder is slow to rebuild, so the fallback always keeps MAX_TREES
+def _trees_keep() -> int:
+    try:
+        v = int(os.environ.get("ATM_TREES_KEEP", ""))
+    except ValueError:
+        return MAX_TREES
+    return v if v >= 0 else MAX_TREES
+
+
+TREES_KEEP = _trees_keep() if _TREE_NATIVE else MAX_TREES
 _PIN = "_surface"             # wave.__dict__ slot: (wave_key, GateGeo) pinned at build time (not a dataclass field)
 
 
@@ -1923,6 +2103,7 @@ def cache_clear() -> None:
             og._trees.pop(ok, None)
         _TREE_ORDER.clear()
     load_graph.cache_clear()
+    lists_cache_clear()
 
 
 def arrival_track(wave, callsign: str, info: TaxiInfo, slot_min: float) -> GroundTrack | None:

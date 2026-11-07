@@ -1,12 +1,18 @@
 """File-backed store: the repo's data/ and eval/ files."""
 from __future__ import annotations
 
+import bisect
 import csv
 import functools
+import gzip
+import io
 import json
 import os
 import re
+import threading
 import uuid
+import zlib
+from collections import OrderedDict
 from datetime import datetime, timezone
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
@@ -46,18 +52,159 @@ def _waves_index() -> pd.DataFrame:
     return df
 
 
-@functools.lru_cache(maxsize=4)
-def _arrivals(iata: str):
-    """(frame, {date: row positions}) for one destination hub, from the per-airport files written by
-    scripts/split_arrivals.py (the 1.2M-row arrivals.csv.gz is never loaded at runtime: 512 MB host)."""
+class _DayIndex:
+    """What one per-airport CSV keeps resident so that a day can be read without the whole-file frame: the frame's
+    row count, per-day row counts, column dtypes (categories included), an empty slice, and the last few day
+    slices. Built once from today's whole-file parse, which is kept only until the first `day` call (that call
+    selects from it, so the first day costs no second parse) and then dropped. `safe` is False when the file text may
+    not map one line to one frame row (a quote, a "\r", a blank line, a header that is not the frame's columns):
+    every read then takes the whole-file path."""
+
+    KEEP = 4      # day slices kept per file (callers ask the day and its neighbours, prefetch then build)
+
+    def __init__(self, path: Path, df: pd.DataFrame, day_col: str, raw: bytes | None = None):
+        self.path, self.day_col, self.n = path, day_col, len(df)
+        self._seed: pd.DataFrame | None = df     # the whole-file frame, until the first `day` call takes it
+        self.dtypes = df.dtypes
+        self.counts = {k: v for k, v in df[day_col].value_counts(dropna=True).items() if v}
+        self.empty = df[np.zeros(len(df), dtype=bool)]
+        if raw is None:
+            raw = gzip.decompress(path.read_bytes())
+        self.size = len(raw)
+        nl = raw.find(b"\n")
+        try:
+            header = (raw if nl < 0 else raw[:nl]).decode().split(",")
+        except UnicodeDecodeError:
+            header = []
+        lines = raw.count(b"\n") + (0 if raw.endswith(b"\n") else 1)
+        self.safe = (header == list(df.columns) and lines - 1 == self.n and b'"' not in raw and b"\r" not in raw
+                     and b"\n\n" not in raw and not raw.startswith(b"\n") and day_col in header[:-1])
+        self.col = header.index(day_col) if self.safe else -1
+        self.days: OrderedDict = OrderedDict()
+        self.lock = threading.Lock()
+
+    def day(self, key: str, full) -> pd.DataFrame | None:
+        """A fresh copy of the rows whose `day_col` equals `key`, exactly as `full()[full()[day_col] == key]` (same
+        dtypes, categories, column order, row order and int64 row-position index); None when there are none."""
+        with self.lock:
+            seed, self._seed = self._seed, None              # dropped on the first call, whatever it asks
+        if key not in self.counts:
+            return None
+        with self.lock:
+            hit = self.days.get(key)
+            if hit is not None:
+                self.days.move_to_end(key)
+                return hit.copy()
+        got = None if seed is not None else self._read(key)
+        if got is None:                                      # the text did not reproduce the frame: whole file
+            got = self.select(full() if seed is None else seed, key)
+        del seed
+        with self.lock:
+            self.days[key] = got
+            while len(self.days) > self.KEEP:
+                self.days.popitem(last=False)
+        return got.copy()
+
+    def _read(self, key: str) -> pd.DataFrame | None:
+        if not self.safe:
+            return None
+        raw = gzip.decompress(self.path.read_bytes())
+        if len(raw) != self.size:
+            return None
+        want, c = key.encode(), self.col
+        # every line holding `,key,` (or starting `key,`): kept when its field c is the key; the count must match
+        needle = (b"\n" if c == 0 else b",") + want + b","
+        pos, lines, lineno, last, i = [], [], 0, 0, raw.find(needle)
+        while i >= 0:
+            start = i + 1 if c == 0 else raw.rfind(b"\n", 0, i) + 1
+            end = raw.find(b"\n", start)
+            end = len(raw) if end < 0 else end
+            line = raw[start:end]
+            f = line.split(b",", c + 1)
+            if start and len(f) > c and f[c] == want:
+                lineno += raw.count(b"\n", last, start)
+                last = start
+                pos.append(lineno - 1)
+                lines.append(line)
+            i = raw.find(needle, end)
+        if len(pos) != self.counts[key]:
+            return None
+        body = raw[:raw.find(b"\n")] + b"\n" + b"\n".join(lines) + b"\n"
+        del raw, lines
+        df = pd.read_csv(io.BytesIO(body), **self.kwargs())
+        for col, dt in self.dtypes.items():
+            if df[col].dtype == dt:
+                continue
+            if isinstance(dt, pd.CategoricalDtype) or (dt == np.float64 and df[col].dtype == np.int64):
+                df[col] = df[col].astype(dt)                  # categories of the whole file; int -> float is exact
+            else:
+                return None
+        if not df.dtypes.equals(self.dtypes) or list(df.columns) != list(self.dtypes.index) \
+                or not df[self.day_col].eq(key).all():
+            return None
+        df.index = self.index_of(np.asarray(pos, dtype=np.intp))
+        return df
+
+    def kwargs(self) -> dict:
+        raise NotImplementedError
+
+    def index_of(self, pos: np.ndarray) -> pd.Index:
+        """The index the whole-file selection of rows `pos` carries (taken the way `select` takes it)."""
+        raise NotImplementedError
+
+    def select(self, df: pd.DataFrame, key: str) -> pd.DataFrame:
+        """The rows of `key` from the whole-file frame (the reader before the day index)."""
+        raise NotImplementedError
+
+
+class _ArrivalsIndex(_DayIndex):
+    def kwargs(self) -> dict:
+        return ARRIVALS_KWARGS
+
+    def index_of(self, pos: np.ndarray) -> pd.Index:
+        return pd.DataFrame(index=pd.RangeIndex(self.n)).iloc[pos].index
+
+    def select(self, df: pd.DataFrame, key: str) -> pd.DataFrame:
+        return df.iloc[np.flatnonzero((df[self.day_col] == key).to_numpy())]
+
+
+class _FlightsIndex(_DayIndex):
+    def kwargs(self) -> dict:
+        return FLIGHTS2015_DAY_KWARGS
+
+    def index_of(self, pos: np.ndarray) -> pd.Index:
+        mask = np.zeros(self.n, dtype=bool)
+        mask[pos] = True
+        return pd.DataFrame(index=pd.RangeIndex(self.n))[mask].index        # all rows selected -> RangeIndex
+
+    def select(self, df: pd.DataFrame, key: str) -> pd.DataFrame:
+        return df[df[self.day_col] == key]
+
+
+def _arrivals_frame(iata: str, raw: bytes | None = None) -> pd.DataFrame | None:
+    """The whole frame of one destination hub, from the per-airport files written by scripts/split_arrivals.py (the
+    1.2M-row arrivals.csv.gz is never loaded at runtime: 512 MB host). Not kept: `_arrivals` keeps what a day needs.
+    `raw` is the file already decompressed (the same bytes the gzip path would stream to the parser)."""
     p = WAVES / "arrivals" / f"{iata}.csv.gz"
-    if not p.exists():
-        return None, {}
+    if raw is None and not p.exists():
+        return None
     # streamed in chunks (low parse peak), then categoricals rebuilt over the whole airport
-    df = pd.concat(pd.read_csv(p, chunksize=20000, **ARRIVALS_KWARGS), ignore_index=True)
+    src = p if raw is None else io.BytesIO(raw)
+    df = pd.concat(pd.read_csv(src, chunksize=20000, **ARRIVALS_KWARGS), ignore_index=True)
     for c in ("date", "carrier", "origin", "tail"):
         df[c] = df[c].astype("category")
-    return df, df.groupby("date", observed=True).indices
+    return df
+
+
+@functools.lru_cache(maxsize=8)
+def _arrivals(iata: str) -> _ArrivalsIndex | None:
+    """The day index of one hub's arrivals file (None without one): a few hundred KB (the airport-wide categories)
+    where the whole frame was ~3-4 MB, plus the last few day slices. `cache_clear` drops those too."""
+    p = WAVES / "arrivals" / f"{iata}.csv.gz"
+    if not p.exists():
+        return None
+    raw = gzip.decompress(p.read_bytes())                    # decompressed once, for the parse and the index
+    return _ArrivalsIndex(p, _arrivals_frame(iata, raw), "date", raw)
 
 
 REF = ROOT / "data/ref"
@@ -79,8 +226,8 @@ _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _movements_text(iata: str, year: str = "2015") -> str | None:
-    """The decompressed text of one airport's movements file (None without one), memoised on its path, size and
-    mtime. ~30 ms for ORD where parsing it into a frame of strings takes ~250 ms (and ~10x the memory)."""
+    """The decompressed text of one airport's movements file (None without one). Not kept: `movements_day` reads a
+    day through `_movements_index`; this is the seam tests replace (None forces the frame path)."""
     p = REF / f"movements{year}" / f"{iata}.csv.gz"
     try:
         st = p.stat()
@@ -89,10 +236,115 @@ def _movements_text(iata: str, year: str = "2015") -> str | None:
     return _read_text(p, st.st_size, st.st_mtime_ns)
 
 
-@functools.lru_cache(maxsize=4)
 def _read_text(p: Path, size: int, mtime_ns: int) -> str:
-    import gzip
     return gzip.decompress(p.read_bytes()).decode()
+
+
+_GZ_CHUNK = 1 << 16          # compressed bytes fed to the decompressor at a time
+_CKPT_EVERY = 4 << 20        # decompressed bytes between two resume points (~40 KB of zlib state each)
+
+
+class _MovementsIndex:
+    """Where each day's rows sit in one movements file's decompressed text, and zlib resume points every ~4 MB of
+    text, so a day is cut by decompressing at most ~4 MB plus its own rows. `days[date]` is (start, end) of the rows
+    when `_day_block` would cut them, False when it would step aside; `safe` False means it steps aside for every
+    date. Built in one pass over the text, which is then dropped (the text was kept before: 5-37 MB a file)."""
+
+    def __init__(self, p: Path, head: bytes, safe: bool, days: dict, ckpts: list, commas: int):
+        self.p, self.head, self.safe, self.days, self.ckpts, self.commas = p, head, safe, days, ckpts, commas
+        self.ckpt_out = [c[1] for c in ckpts]
+
+    def day_block(self, date: str) -> bytes | None | bool:
+        """Exactly `_day_block(text, date)` of this file's text, encoded."""
+        if not self.safe or not _ISO_DAY.fullmatch(date):
+            return False
+        span = self.days.get(date)
+        if span is None or span is False:
+            return span
+        start, end = span
+        in_pos, out_pos, d = self.ckpts[bisect.bisect_right(self.ckpt_out, start) - 1]
+        d = d.copy()
+        buf = bytearray()
+        with open(self.p, "rb") as f:
+            f.seek(in_pos)
+            while out_pos + len(buf) < end:
+                chunk = f.read(_GZ_CHUNK)
+                if not chunk:
+                    break
+                buf += d.decompress(chunk)
+        block = bytes(buf[start - out_pos:end - out_pos])
+        if any(line.count(b",") != self.commas for line in block.rstrip(b"\n").split(b"\n")):
+            return False                          # a short or long row (the frame path pads or rejects it)
+        return self.head + b"\n" + block + (b"" if block.endswith(b"\n") else b"\n")
+
+
+@functools.lru_cache(maxsize=8)
+def _movements_index(p: Path, size: int, mtime_ns: int) -> _MovementsIndex | None:
+    """The day index of one movements file, memoised on its path, size and mtime. None when the file is not one
+    plain ASCII gzip member (the caller then cuts from the whole text, as before)."""
+    raw = p.read_bytes()
+    d = zlib.decompressobj(31)
+    out = bytearray()
+    ckpts = [(0, 0, d.copy())]
+    for i in range(0, len(raw), _GZ_CHUNK):
+        out += d.decompress(raw[i:i + _GZ_CHUNK])
+        if d.eof:
+            if d.unused_data or i + _GZ_CHUNK < len(raw):
+                return None                       # several gzip members: gzip.decompress reads them all
+            break
+        if len(out) >= ckpts[-1][1] + _CKPT_EVERY:
+            ckpts.append((i + _GZ_CHUNK, len(out), d.copy()))
+    del raw
+    if not d.eof or not out.isascii():
+        return None                               # truncated (gzip raises) or non-ASCII (str offsets != byte offsets)
+    nl0 = out.find(b"\n")
+    head = bytes(out if nl0 < 0 else out[:nl0])
+    cols = head.split(b",")
+    safe = (cols[0].decode() in pack.MOVEMENT_DATE_COLS and len(set(cols)) == len(cols) and all(cols)
+            and b'"' not in out and b"\r" not in out)
+    days = _movement_days(out) if safe else {}
+    return _MovementsIndex(p, head, safe, days, ckpts, len(cols) - 1)
+
+
+def _movement_days(text: bytearray) -> dict:
+    """{date: (start, end) | False} for every 10-character key that starts a data line followed by a comma, as
+    `_day_block` judges it: its lines must be one contiguous run (else False); (start, end) spans the run, its last
+    newline included. The comma count of each row is checked when the day is read."""
+    arr = np.frombuffer(text, dtype=np.uint8)
+    n = len(arr)
+    nl = np.concatenate([np.flatnonzero(arr[a:a + (1 << 20)] == 10) + a   # chunked: no text-sized temporaries
+                         for a in range(0, n, 1 << 20)] or [np.zeros(0, np.int64)])
+    if len(nl) == 0:
+        return {}
+    starts = nl + 1                                # data line j starts after newline j
+    ends = np.append(nl[1:] + 1, n)                # end of line j, its newline included
+    ok = starts + 11 <= n
+    key = np.zeros((len(starts), 16), dtype=np.uint8)   # the line's first 10 bytes, padded: two uint64 per line
+    idx = np.flatnonzero(ok)
+    cand = np.zeros(len(starts), dtype=bool)
+    if len(idx):
+        cand[idx] = arr[starts[idx] + 10] == 44
+        idx = np.flatnonzero(cand)
+        for k in range(10):                        # column by column: no (lines x 10) int64 index temporary
+            key[idx, k] = arr[starts[idx] + k]
+    if not len(idx):
+        return {}
+    k64 = key.view(np.uint64)
+    # runs of consecutive lines with one key (lines with no key end a run)
+    change = np.ones(len(starts), dtype=bool)
+    change[1:] = (cand[1:] != cand[:-1]) | (k64[1:] != k64[:-1]).any(axis=1)
+    run_lo = np.flatnonzero(change)
+    run_hi = np.append(run_lo[1:], len(starts))    # exclusive
+    keep = cand[run_lo]
+    run_lo, run_hi = run_lo[keep], run_hi[keep]
+    out: dict = {}
+    for lo, hi in zip(run_lo.tolist(), run_hi.tolist()):
+        day = key[lo, :10].tobytes().decode()
+        if day in out:
+            out[day] = False                       # a second run: not sorted by date
+        else:
+            out[day] = (int(starts[lo]), int(ends[hi - 1]))
+    return out
 
 
 def _day_block(text: str, date: str) -> bytes | None | bool:
@@ -123,12 +375,22 @@ def _day_block(text: str, date: str) -> bytes | None | bool:
     return (head + "\n" + block + ("" if block.endswith("\n") else "\n")).encode()
 
 
-@functools.lru_cache(maxsize=2)
-def _dest_frame(dest: str) -> pd.DataFrame | None:
+def _dest_frame(dest: str, raw: bytes | None = None) -> pd.DataFrame | None:
+    """The whole 2015 flights frame of one destination (not kept: `_dest_index` keeps what a day needs). `raw` is
+    the file already decompressed."""
+    p = CH2 / "flights" / f"{dest}.csv.gz"
+    if raw is None and not p.exists():
+        return None
+    return pd.read_csv(p if raw is None else io.BytesIO(raw), **FLIGHTS2015_DAY_KWARGS)
+
+
+@functools.lru_cache(maxsize=8)
+def _dest_index(dest: str) -> _FlightsIndex | None:
     p = CH2 / "flights" / f"{dest}.csv.gz"
     if not p.exists():
         return None
-    return pd.read_csv(p, **FLIGHTS2015_DAY_KWARGS)
+    raw = gzip.decompress(p.read_bytes())                    # decompressed once, for the parse and the index
+    return _FlightsIndex(p, _dest_frame(dest, raw), "arr_date", raw)
 
 
 @functools.lru_cache(maxsize=1)
@@ -141,6 +403,26 @@ def _flights2015_index() -> pd.DataFrame:
     rw = pd.read_csv(DATASETS["runways"].path, **DATASETS["runways"].read_kwargs).dropna(subset=["heading_true"])
     df["supported"] = df["dest"].isin(set(rw["airport"]))
     return df
+
+
+_MOVEMENTS_TEXT = _movements_text
+
+
+def _movements_cut(iata: str, year: str, date: str) -> bytes | None | bool:
+    """`_day_block` of the airport's movements text for `date` (False: take the frame path), read through the day
+    index. When a test has replaced `_movements_text` (the fixture seam), its text is used as before."""
+    if _movements_text is not _MOVEMENTS_TEXT:
+        text = _movements_text(iata, year)
+        return False if text is None else _day_block(text, date)
+    p = REF / f"movements{year}" / f"{iata}.csv.gz"
+    try:
+        st = p.stat()
+    except OSError:
+        return False
+    ix = _movements_index(p, st.st_size, st.st_mtime_ns)
+    if ix is None:
+        return _day_block(_read_text(p, st.st_size, st.st_mtime_ns), date)
+    return ix.day_block(date)
 
 
 class FileStore:
@@ -208,9 +490,8 @@ class FileStore:
         return None   # FileStore summaries are computed by build._summary
 
     def arrivals_day(self, iata: str, date: str) -> pd.DataFrame | None:
-        df, groups = _arrivals(iata)
-        pos = groups.get(date)
-        return None if pos is None else df.iloc[pos]
+        ix = _arrivals(iata)
+        return None if ix is None else ix.day(date, lambda: _arrivals_frame(iata))
 
     # ------------------------------------------------------------ geometry (empty until the flight-path M0)
 
@@ -227,11 +508,9 @@ class FileStore:
 
     def movements_day(self, iata: str, date: str) -> bytes | None:
         year = date[:4] if date[:4].isdigit() else "2015"
-        text = _movements_text(iata.upper(), year)
-        if text is not None:
-            got = _day_block(text, date)
-            if got is not False:
-                return None if got is None else pack.gzip_bytes(got)
+        got = _movements_cut(iata.upper(), year, date)
+        if got is not False:
+            return None if got is None else pack.gzip_bytes(got)
         df, col = _movements(iata.upper(), year)
         if df is None or col is None:
             return None
@@ -255,10 +534,11 @@ class FileStore:
                 for k in _FLIGHT_KEYS}
 
     def flights2015_day(self, dest: str, arr_date: str) -> pd.DataFrame | None:
-        df = _dest_frame(dest)
-        if df is None:
+        ix = _dest_index(dest)
+        if ix is None:
             return None
-        return df[df["arr_date"] == arr_date]
+        got = ix.day(arr_date, lambda: _dest_frame(dest))
+        return ix.empty.copy() if got is None else got
 
     def search_flights2015(self, airport: str | None, q: str | None, limit: int, offset: int) -> tuple[list[dict], int]:
         from backend.wave import flights2015 as F   # lazy: flights2015 imports the store

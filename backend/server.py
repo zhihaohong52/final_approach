@@ -28,7 +28,25 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import baseline, decide, jev, negotiation, scenario
 from .datastore import FileStore, get_store
-from .mcp_server import mcp_asgi_app
+
+
+def _configure_logging() -> None:
+    """The root logging setup the server had when it imported backend.mcp_server here at start: FastMCP(...) ran
+    mcp.server.fastmcp.utilities.logging.configure_logging("INFO"). The mcp import is now deferred to the first /mcp
+    request (_LazyMCP below), so the same basicConfig runs here: INFO level, one Rich handler on stderr (a plain
+    StreamHandler without rich). FastMCP's own call later is then a no-op, as it was."""
+    handlers: list[logging.Handler] = []
+    try:
+        from rich.console import Console
+        from rich.logging import RichHandler
+        handlers.append(RichHandler(console=Console(stderr=True), rich_tracebacks=True))
+    except ImportError:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(level="INFO", format="%(message)s", handlers=handlers)
+
+
+_configure_logging()
+
 from .wave import replay
 from .wave.rules import RULE_IDS
 from .wave.version import ENGINE_VERSION
@@ -999,7 +1017,32 @@ async def trajectories(request: Request, body: dict = Body(...)):
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")
-app.mount("/mcp", mcp_asgi_app)  # before the "/" catch-all below, or that mount would shadow it
+class _LazyMCP:
+    """ASGI stand-in for backend.mcp_server.mcp_asgi_app that imports it (and the mcp SDK, ~13 MB) on the first
+    /mcp request instead of at server start. The SSE app needs no lifespan (a Mount never forwards lifespan
+    events to its sub-app anyway), so forwarding each scope unchanged keeps /mcp/sse and /mcp/messages/ as they
+    were. The import runs in a worker thread so the event loop is not stalled while it loads. Trade-off: a broken
+    mcp install no longer stops the server at start; each /mcp request then fails (500) with the import error."""
+
+    def __init__(self) -> None:
+        self._app = None
+        self._lock = threading.Lock()
+
+    def _load(self):
+        with self._lock:
+            if self._app is None:
+                from .mcp_server import mcp_asgi_app
+                self._app = mcp_asgi_app
+        return self._app
+
+    async def __call__(self, scope, receive, send):
+        inner = self._app
+        if inner is None:
+            inner = await asyncio.to_thread(self._load)
+        await inner(scope, receive, send)
+
+
+app.mount("/mcp", _LazyMCP())  # before the "/" catch-all below, or that mount would shadow it
 
 
 FRONTEND_DIST = ROOT / "frontend" / "dist"
