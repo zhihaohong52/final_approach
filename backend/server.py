@@ -103,7 +103,8 @@ def _kick_warm() -> None:
 async def _lifespan(_app: FastAPI):
     store = get_store()   # opens the Postgres pool without waiting for a connection
     from backend.wave import surface
-    log.warning("taxi scheduler loop: %s", "native (Rust)" if surface._NATIVE else "pure Python")
+    log.warning("taxi scheduler loop: %s; taxi trees: %s", "native (Rust)" if surface._NATIVE else "pure Python",
+                "native (Rust)" if surface._TREE_NATIVE else "pure Python")
     if isinstance(store, FileStore):   # under Postgres the warmer would query at startup (design 8.3)
         _warm()
     yield

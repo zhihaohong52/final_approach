@@ -262,13 +262,10 @@ def _departure_path(g: TaxiGraph, stand_node: int, entry: int, strip: str) -> Ta
     strip's protected zone or on any runway's pavement. The final 30 s (PARK_S) is kept as a line-up buffer: the
     departure holds the holding-point node for 30 s, then lines up; it is not drawn queueing there until WHEELS_OFF
     (a long TAXI_OUT would block the node and reorder every later takeoff)."""
-    tr = surface._tree(g, entry)                 # the entry-rooted Dijkstra (cached on the graph), nodes only
-    if stand_node not in tr["best"]:
+    path = surface.tree_path(surface._tree(g, entry), stand_node)   # the entry-rooted Dijkstra (cached on the graph)
+    if path is None:
         raise NoPath(f"stand node {stand_node} is not reachable from runway entry {entry}")
-    nodes, st = [], tr["best"][stand_node][1]
-    while st is not None:                        # parent chain runs stand -> entry: already the departure order
-        nodes.append(st[0])
-        st = tr["parent"][st]
+    nodes = [s[0] for s in reversed(path)]       # entry -> stand reversed: stand -> entry, the departure order
     strips = surface.runway_strips(g)
     k = len(nodes) - 1
     while k > 0 and (surface._in_zone(g, nodes[k], strip) or any(surface.on_runway(g, nodes[k], st) for st in strips)):
@@ -407,8 +404,8 @@ def _build_movers(wave: Wave, g: TaxiGraph | None) -> tuple[list[FixedMover], tu
             ent = _entry_node(g, rid, main) if g is not None and st is not None else None
             taxi_u = None
             if ent is not None:
-                hit = surface._tree(g, ent)["best"].get(snode)
-                taxi_u = hit[0] / 60.0 + surface.PARK_S / 60.0 if hit is not None else None
+                hit = surface.tree_best(surface._tree(g, ent), snode)
+                taxi_u = hit / 60.0 + surface.PARK_S / 60.0 if hit is not None else None
             if taxi_u is None:
                 rows.append(((math.inf, dist(rid), rid), rid, ent, None))
                 continue

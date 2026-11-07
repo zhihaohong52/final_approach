@@ -2,13 +2,14 @@
 unimpeded taxi routes. Pure and deterministic; the model never decides routes. Built at wave-build time only
 (rules, utility and negotiation never call the store).
 
-The wait-search loop of `schedule` runs in the optional Rust extension `_taxi_native` (native/taxi, built by
-scripts/build_native.sh) when it is built, with bit-identical results; otherwise, or with ATM_NATIVE=0, in Python
-(`_run_loop_py`, see `_NATIVE`).
+The wait-search loop of `schedule` and the Dijkstra tree builder (`_tree`) run in the optional Rust extension
+`_taxi_native` (native/taxi, built by scripts/build_native.sh) when it is built, with bit-identical results; otherwise,
+or with ATM_NATIVE=0, in Python (`_run_loop_py` / `_tree_py`, see `_NATIVE` / `_TREE_NATIVE`).
 """
 from __future__ import annotations
 
 import heapq
+import logging
 from collections import OrderedDict
 import math
 import os
@@ -19,6 +20,8 @@ from functools import lru_cache
 from typing import Literal
 
 from backend.geo.store import load_surface
+
+log = logging.getLogger(__name__)
 
 KT = 0.514444                 # m/s per knot
 TAXI_KT = 20.0
@@ -170,15 +173,28 @@ def _heading_turn(g: TaxiGraph, p: int, u: int, v: int) -> float:
     return math.degrees(math.acos(max(-1.0, min(1.0, c))))
 
 
-def _tree(g: TaxiGraph, root: int) -> dict:
-    """Dijkstra on time from `root` over states (node, previous node), since the speed depends on the turn.
-    Runway edges are never traversed. Returns {node: (time_s, state)} and the parent map."""
+def _tree(g: TaxiGraph, root: int):
+    """Dijkstra on time from `root` over states (node, previous node), since the speed depends on the turn. Runway
+    edges are never traversed. Cached per graph (least recently used of MAX_TREES over every graph). Built by the Rust
+    extension when it has the tree builder (`_tree_native`, bit-identical), else in Python (`_tree_py`); read it with
+    `tree_best` / `tree_path`, which work on both."""
     key = (g.icao, root)
     hit = g._trees.get(key)
     if hit is not None:
         with _TREE_LOCK:                 # least recently used goes first: a hub wave reuses its exit and entry trees
             _TREE_ORDER.move_to_end((id(g), key), last=True) if (id(g), key) in _TREE_ORDER else None
         return hit
+    if _TREE_NATIVE and isinstance(root, int) and 0 <= root < len(g.nodes) and _native_graph(g) is not None:
+        out = _tree_native(g, root)
+    else:
+        out = _tree_py(g, root)
+    _keep_tree(g, key, out)
+    return out
+
+
+def _tree_py(g: TaxiGraph, root: int) -> dict:
+    """The pure-Python tree (uncached): {"best": {node: (time_s, state)}, "parent": {state: state | None},
+    "via": {state: (name, strip)}, "dist": {state: time_s}}."""
     best: dict[int, tuple[float, tuple]] = {}
     parent: dict[tuple, tuple | None] = {}
     via: dict[tuple, tuple[str | None, str | None]] = {}   # state -> (name, strip) of the edge entered by
@@ -224,9 +240,133 @@ def _tree(g: TaxiGraph, root: int) -> dict:
             parent[ns] = st
             via[ns] = names.setdefault(nm, nm)
             heapq.heappush(heap, (nt, v, u))
-    out = {"best": best, "parent": parent, "via": via, "dist": dist}
-    _keep_tree(g, key, out)
+    return {"best": best, "parent": parent, "via": via, "dist": dist}
+
+
+def _tree_native(g: TaxiGraph, root: int):
+    """The Rust tree (`_taxi_native.Tree`, uncached), bit-identical to `_tree_py`. Raises ValueError when the
+    extension has no tree builder or the graph cannot be converted (edges to nodes without coordinates)."""
+    ng = _native_graph(g) if _TREE_NATIVE else None
+    if ng is None:
+        raise ValueError("native tree builder unavailable for this graph")
+    return _NATIVE.build_tree(ng, root)
+
+
+_NATIVE_GRAPH_LOCK = threading.Lock()
+
+
+def _native_graph(g: TaxiGraph):
+    """The Rust-side graph of `g` (`_taxi_native.TreeGraph`), built once and kept in g._trees["native_graph"] (False
+    when `g` cannot be converted, so `_tree` uses the Python tree for it from then on). Rebuilt if `stop_lines`
+    appended nodes since (they have no edges)."""
+    hit = g._trees.get("native_graph")
+    if hit is not None and (hit is False or hit.n == len(g.nodes)):
+        return hit or None
+    with _NATIVE_GRAPH_LOCK:
+        hit = g._trees.get("native_graph")
+        if hit is not None and (hit is False or hit.n == len(g.nodes)):
+            return hit or None
+        try:
+            built = _native_graph_build(g)
+        except (TypeError, ValueError, OverflowError) as e:   # bad coordinates / lengths, a graph too large for u32
+            log.warning("%s: native taxi tree unavailable, using Python: %s: %s", g.icao, type(e).__name__, e)
+            built = None
+        if built and not _turns_agree(g, built):
+            log.warning("%s: native turn angles differ from Python's on this platform: using the Python tree", g.icao)
+            built = None
+        hit = g._trees["native_graph"] = built or False
+    return hit or None
+
+
+_TURN_CHECK = 400   # (p, u, v) triples compared per graph: a few ms, once per graph
+
+
+def _turns_agree(g: TaxiGraph, ng) -> bool:
+    """Run-time guard for bit-identity off the machine it was proven on: the Rust turn angle (its port of CPython's
+    math.hypot, with the platform's cos / acos) must equal `_heading_turn` exactly on a fixed sample of the triples
+    Dijkstra visits, else the graph uses the Python tree. Identity was checked on every triple of every graph on
+    arm64 macOS; Linux (Render) relies on this check."""
+    seen = 0
+    for u in range(0, len(g.adj), max(1, len(g.adj) // _TURN_CHECK)):
+        nb = [v for v, _, kind, _, _ in g.adj.get(u, ()) if kind != "runway"]
+        for p in nb[:2]:
+            for v in nb[:3]:
+                if ng.turn_deg(p, u, v) != _heading_turn(g, p, u, v):
+                    return False
+                seen += 1
+        if seen >= _TURN_CHECK:
+            break
+    return True
+
+
+def _native_graph_build(g: TaxiGraph):
+    # stop_lines may append nodes (edgeless, keys >= n in g.adj) meanwhile: convert the first n, and _native_graph
+    # rebuilds once it sees the new count
+    n = len(g.nodes)
+    nodes = g.nodes[:n]
+    if any(not isinstance(u, int) or u < 0 or (u >= n and g.adj.get(u)) for u in list(g.adj)):
+        return None
+    lat = [float(x[0]) for x in nodes]
+    lon = [float(x[1]) for x in nodes]
+    row, to, length, lane, via = [0], [], [], [], []
+    names: dict[tuple, int] = {}
+    table: list[tuple] = []
+    for u in range(n):
+        for v, ln, kind, name, strip in g.adj.get(u, ()):
+            if kind == "runway":
+                continue
+            if not isinstance(v, int) or not 0 <= v < n:
+                return None
+            nm = (name, strip)
+            k = names.get(nm)
+            if k is None:
+                k = names[nm] = len(table)
+                table.append(nm)
+            ln = float(ln)
+            if not math.isfinite(ln):   # heapq orders NaN / inf times differently from the Rust heap
+                return None
+            to.append(v)
+            length.append(ln)
+            lane.append(kind == "taxilane")
+            via.append(k)
+        row.append(len(to))
+    return _NATIVE.TreeGraph(lat, lon, row, to, length, lane, via, table, SLOW_KT * KT, TAXI_KT * KT, TURN_SLOW_DEG,
+                             math.radians(1.0) * EARTH_R, math.radians(1.0), math.degrees(1.0))
+
+
+def tree_best(tr, node: int) -> float | None:
+    """Fastest time in seconds from the tree's root to `node`, None if unreachable (either tree kind)."""
+    if isinstance(tr, dict):
+        hit = tr["best"].get(node)
+        return hit[0] if hit is not None else None
+    return tr.best(_node_key(node))
+
+
+def tree_path(tr, node: int) -> list[tuple[int, float, str | None, str | None]] | None:
+    """The states from the root to `node`'s best state, each (node, dist_s, via name, via strip), the root first as
+    (root, 0.0, None, None); None if unreachable (either tree kind)."""
+    if not isinstance(tr, dict):
+        return tr.path(_node_key(node))
+    hit = tr["best"].get(node)
+    if hit is None:
+        return None
+    parent, dist, via = tr["parent"], tr["dist"], tr["via"]
+    out = []
+    st = hit[1]
+    while st is not None:
+        nm = via.get(st, (None, None))
+        out.append((st[0], dist[st], nm[0], nm[1]))
+        st = parent[st]
+    out.reverse()
     return out
+
+
+def _node_key(node):
+    """`node` as the Rust tree indexes it: ints (and __index__ types) as is, an integral float as its int, as a dict
+    lookup would match it; anything else finds nothing."""
+    if isinstance(node, float) and node.is_integer():
+        return int(node)
+    return node
 
 
 MAX_TREES = 40   # Dijkstra trees kept in total, over every graph (least recently used first): ~1.9 MB each at ORD
@@ -235,7 +375,7 @@ _TREE_ORDER: OrderedDict[tuple[int, tuple], tuple[TaxiGraph, tuple]] = OrderedDi
 _TREE_LOCK = threading.Lock()
 
 
-def _keep_tree(g: TaxiGraph, key: tuple, tree: dict) -> None:
+def _keep_tree(g: TaxiGraph, key: tuple, tree) -> None:   # tree: _tree_py dict or _taxi_native.Tree
     """Cache a Dijkstra tree on its graph, evicting the oldest tree of ANY graph beyond MAX_TREES: graphs are pinned
     on live waves (one object per load), so a per-graph cap would let tree memory grow with the number of waves. The
     per-wave taxi table holds the routes the hot path reads, so an evicted tree only costs a recompute."""
@@ -252,23 +392,17 @@ def unimpeded(g: TaxiGraph, exit_node: int, stand_node: int) -> TaxiPath:
     """Fastest taxi from the runway exit node to the stand over taxi edges, plus 30 s to park."""
     if exit_node is None or not 0 <= exit_node < len(g.nodes):
         raise NoPath(f"exit node {exit_node} is not in the graph")
-    tr = _tree(g, exit_node)
-    if stand_node not in tr["best"]:
+    states = tree_path(_tree(g, exit_node), stand_node)
+    if states is None:
         raise NoPath(f"stand node {stand_node} is not reachable from exit node {exit_node}")
-    states = []
-    st = tr["best"][stand_node][1]
-    while st is not None:
-        states.append(st)
-        st = tr["parent"][st]
-    states.reverse()
     nodes = [s[0] for s in states]
     seg_s, names, crossings = [], [], []
     for i in range(1, len(states)):
-        seg_s.append(tr["dist"][states[i]] - tr["dist"][states[i - 1]])
-        names.append(tr["via"][states[i]][0] or "")
+        seg_s.append(states[i][1] - states[i - 1][1])
+        names.append(states[i][2] or "")
         # taxi -> runway node -> taxi: both taxi edges carry the strip, count the node once
         if i >= 2:
-            a, b = tr["via"][states[i - 1]][1], tr["via"][states[i]][1]
+            a, b = states[i - 1][3], states[i][3]
             if a is not None and a == b:
                 crossings.append((nodes[i - 1], a))
     seg_s.append(PARK_S)
@@ -915,6 +1049,17 @@ try:
     from backend.wave import _taxi_native as _NATIVE
 except ImportError:
     _NATIVE = None
+# the tree builder (`_tree_native`) came after the loop: an older built module without it builds trees in Python
+_TREE_NATIVE = _NATIVE is not None and hasattr(_NATIVE, "build_tree") and hasattr(_NATIVE, "TreeGraph")
+if _TREE_NATIVE:   # the Rust math.hypot port must match CPython's on this platform (seeded sample, edge values)
+    import random as _random
+    _r = _random.Random(7)
+    _pairs = [(_r.uniform(-1e4, 1e4), _r.uniform(-1e4, 1e4)) for _ in range(2000)]
+    _pairs += [(0.0, 0.0), (-0.0, 3.0), (1e308, 1e308), (5e-324, 5e-324), (2.2250738585072014e-308, 1.0), (3.0, 4.0)]
+    if any(_NATIVE.hypot_compat(x, y) != math.hypot(x, y) for x, y in _pairs):
+        log.warning("native math.hypot port differs from CPython's on this platform: taxi trees built in Python")
+        _TREE_NATIVE = False
+    del _r, _pairs
 
 
 class _NativeSlot:

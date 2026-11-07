@@ -5,12 +5,16 @@
 //! tuples, strings by code point), so the results are bit-identical to the Python loop. `sum(seg[h:i])` follows
 //! CPython 3.12's compensated (Neumaier) float sum. Constants (_TOL, _EPS, _WIN, _WIN_MIN, _MAX_ITER, GAP_MIN) are
 //! passed in by the caller at each call, from the Python module's globals.
+//!
+//! The taxi-route Dijkstra tree builder (`_tree_py`) is ported in `tree.rs`, under the same rules.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
+
+mod tree;
 
 /// One reservation interval `(from, to, callsign)`.
 struct Iv {
@@ -705,5 +709,9 @@ fn _taxi_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Lists>()?;
     m.add_function(wrap_pyfunction!(run_loop, m)?)?;
     m.add_function(wrap_pyfunction!(fsum_compat, m)?)?;
+    m.add_class::<tree::TreeGraph>()?;
+    m.add_class::<tree::Tree>()?;
+    m.add_function(wrap_pyfunction!(tree::build_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(tree::hypot_compat, m)?)?;
     Ok(())
 }
