@@ -31,10 +31,8 @@ from .datastore import FileStore, get_store
 
 
 def _configure_logging() -> None:
-    """The root logging setup the server had when it imported backend.mcp_server here at start: FastMCP(...) ran
-    mcp.server.fastmcp.utilities.logging.configure_logging("INFO"). The mcp import is now deferred to the first /mcp
-    request (_LazyMCP below), so the same basicConfig runs here: INFO level, one Rich handler on stderr (a plain
-    StreamHandler without rich). FastMCP's own call later is then a no-op, as it was."""
+    """Root logging: INFO level, one Rich handler on stderr (a plain StreamHandler without rich). Set here since the
+    MCP server, whose FastMCP(...) used to do it at import, was removed."""
     handlers: list[logging.Handler] = []
     try:
         from rich.console import Console
@@ -744,7 +742,7 @@ def _etag_match(request: Request, etags: tuple[str, ...]) -> bool:
 
 def _json_response(request: Request, obj=None, body: bytes | None = None, etag: bool = False) -> Response:
     """Compact JSON, gzipped here when the client accepts it (no app-wide GZipMiddleware: Starlette 0.40
-    would buffer the SSE streams of /api/negotiate-wave and /mcp). With `etag`: a strong ETag on the body
+    would buffer the SSE streams of /api/negotiate-wave). With `etag`: a strong ETag on the body
     bytes, `-gz` suffixed for the gzip variant, and 304 on If-None-Match."""
     if body is None:
         body = json.dumps(obj, separators=(",", ":")).encode()
@@ -1017,32 +1015,6 @@ async def trajectories(request: Request, body: dict = Body(...)):
 
 
 app.mount("/static", StaticFiles(directory=WEB), name="static")
-class _LazyMCP:
-    """ASGI stand-in for backend.mcp_server.mcp_asgi_app that imports it (and the mcp SDK, ~13 MB) on the first
-    /mcp request instead of at server start. The SSE app needs no lifespan (a Mount never forwards lifespan
-    events to its sub-app anyway), so forwarding each scope unchanged keeps /mcp/sse and /mcp/messages/ as they
-    were. The import runs in a worker thread so the event loop is not stalled while it loads. Trade-off: a broken
-    mcp install no longer stops the server at start; each /mcp request then fails (500) with the import error."""
-
-    def __init__(self) -> None:
-        self._app = None
-        self._lock = threading.Lock()
-
-    def _load(self):
-        with self._lock:
-            if self._app is None:
-                from .mcp_server import mcp_asgi_app
-                self._app = mcp_asgi_app
-        return self._app
-
-    async def __call__(self, scope, receive, send):
-        inner = self._app
-        if inner is None:
-            inner = await asyncio.to_thread(self._load)
-        await inner(scope, receive, send)
-
-
-app.mount("/mcp", _LazyMCP())  # before the "/" catch-all below, or that mount would shadow it
 
 
 FRONTEND_DIST = ROOT / "frontend" / "dist"

@@ -45,7 +45,7 @@ def test_airline_utility_is_own_flights_mean():
     assert 0 <= agent_utility(w, p, "AIRLINE:DL") <= 1
     # weights sum to 1, so a flight with no penalty at all scores 1
     assert sum(W_AIRLINE.values()) == pytest.approx(1.0)
-    # the PILOT branch is kept (fallback and MCP use it)
+    # the PILOT branch is kept (the fallback uses it)
     assert set(agent_terms(w, p, "PILOT:DL201")) == {"fuel", "delay", "connections", "divert"}
 
 

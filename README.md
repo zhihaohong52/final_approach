@@ -38,7 +38,7 @@ Local:
 
 ```bash
 pip install -r requirements.txt
-uvicorn backend.server:app --port 8000        # API, MCP and (if built) the dashboard at http://localhost:8000
+uvicorn backend.server:app --port 8000        # API and (if built) the dashboard at http://localhost:8000
 ```
 
 Frontend build (served at `/` from `frontend/dist` when present; without it the API still runs):
@@ -106,11 +106,9 @@ flowchart LR
   subgraph SERVE["Serving"]
     API["FastAPI + SSE<br/>/api/flights, /api/wave, /api/negotiate-wave"]
     UI["React dashboard<br/>timeline, per-turn changes, Approve / Override"]
-    MCP["MCP server /mcp/sse (read-only)"]
   end
   OUT --> API --> UI
   NAR --> API
-  API --- MCP
 
   BENCH["Benchmark (50 seeded rows)<br/>arms: formulas, 3 models, status quo,<br/>centralised optimiser; firm vs relaxing fairness; outage test; engine-off ablation"]
   BUILD -.-> BENCH
@@ -183,7 +181,6 @@ Components (all under `backend/`):
 - **Fallback solver** (`wave/fallback.py`): beam search over legal moves maximising the worst agent's utility, with a remote-stand, ground-delay or divert safety net. Legality is still decided only by the rules engine. It never raises.
 - **Narration** (`wave/narrate.py`): Claude writes the brief from the structured outcome; deterministic template on any failure.
 - **API and SSE** (`server.py`): REST under `/api` (`/api/flights`, `/api/waves`, `/api/wave/{id}`, `/api/runs/{id}`, `/api/benchmark`, `/api/config`) and `POST /api/negotiate-wave`, which streams messages as server-sent events. Output is `result.revision` plus the full log. Contract v2.0 is `docs/api-contract.md`.
-- **MCP server** (`mcp_server.py`): read-only, at `/mcp/sse`. Six tools: `list_waves`, `get_wave`, `fcfs_plan`, `legal_moves`, `check_plan`, `negotiate` (formulas only).
 
 ### Limits applied (`rules.LIMITS`, `rules.limits_for`)
 
@@ -468,10 +465,9 @@ Failure case, live (no recording): `F2015-208678` DEN (F9, UA and WN). In all th
 
 ```
 backend/             backend
-  server.py        FastAPI app, SSE, mounts /mcp and the built frontend
+  server.py        FastAPI app, SSE, mounts the built frontend
   decide.py        decision layer: model chain, timeout, breaker
   jev.py           Jev (TypeSafe) client
-  mcp_server.py    read-only MCP tools
   geo/             CIFP and OSM surface parsers, gate binding, loaders (via the datastore)
   datastore/       Postgres (Neon) store, file fallback, seed datasets
   wave/            build, flights2015 (flights.csv waves), constraints (workbook limits), rules, moves, utility,

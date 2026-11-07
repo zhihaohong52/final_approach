@@ -10,7 +10,7 @@ import httpx
 import psycopg
 import pytest
 
-from backend import datastore, mcp_server, server
+from backend import datastore, server
 from backend.datastore import pg
 from backend.datastore.fallback import FallbackStore
 from backend.wave import stub
@@ -51,14 +51,12 @@ def test_slow_store_does_not_block_the_event_loop(api_client, monkeypatch):
             assert (await c.get("/api/config")).status_code == 200          # warm imports and the threadpool
             neg = asyncio.create_task(c.post("/api/negotiate-wave", json={"wave_id": WID, "mode": "decision",
                                                                           "replay": True, "stream": False}))
-            tool = asyncio.create_task(mcp_server.mcp.call_tool("list_waves", {"limit": 1}))
             await asyncio.sleep(0.1)                                           # both are now inside a slow store call
             t0 = time.perf_counter()
             r = await c.get("/api/config")
             dt = time.perf_counter() - t0
-            pending = not neg.done() and not tool.done()                       # still waiting on the store
+            pending = not neg.done()                                           # still waiting on the store
             res = await neg
-            await tool
             return r, dt, pending, res
 
     r, dt, pending, res = asyncio.run(scenario())
