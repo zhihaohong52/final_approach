@@ -26,7 +26,7 @@ def test_startup_returns_at_once_and_warms_replay_waves(monkeypatch):
         th = server._WARM_THREAD
         assert th is not None and th.daemon
         th.join(timeout=60)
-        assert not th.is_alive() and started == [wid]
+        assert not th.is_alive() and started[0] == wid    # the default wave is built first
         assert build._WAVES.get(wid) is not None          # the replay wave is in build_wave's LRU
 
 

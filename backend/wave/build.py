@@ -632,6 +632,7 @@ def build_wave(wave_id: str) -> Wave:
         if hit is not None:
             _WAVES.move_to_end(wave_id)
             return hit
+    _prefetch(wave_id)
     with get_store().session():     # one pooled connection for all the store reads of this build
         constraints._load()         # warm the workbook limits here so rules.check / utility.evaluate never hit the store
         w = _build_wave(wave_id)
@@ -646,6 +647,56 @@ def build_wave(wave_id: str) -> Wave:
             while len(_WAVES) > _WAVES_MAX:
                 _WAVES.pop(next(iter(_WAVES)), None)
     return w
+
+
+PREFETCH_WORKERS = 3   # below the Postgres pool's 4, so a build's own session connection never waits long
+_PREFETCH = None
+_PREFETCH_LOCK = threading.Lock()
+
+
+def _prefetch(wave_id: str) -> None:
+    """Under a remote store, fill the caches a 2024 wave's build reads (the workbook, reference tables, the airport's
+    arrivals, METAR, surface and procedures) with concurrent queries, so the build pays about one round trip for
+    them instead of one per read in turn (~0.6 s each to Neon). Fills the same caches the build fills itself, so
+    the built wave is unchanged. A no-op for FileStore (local reads gain nothing from threads) and for flights.csv
+    waves; errors are left to the build's own reads to raise."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+    global _PREFETCH
+    store = get_store()
+    if isinstance(store, _files.FileStore) or not wave_id[:3].isalpha() or wave_id.startswith("F2015-"):
+        return
+    try:
+        iata, date, _hour = _parse_id(wave_id)
+    except (KeyError, ValueError):
+        return
+    from backend.geo import store as geo
+
+    def geometry():
+        ic = icao.icao_or_prefix(iata)
+        geo.load_surface(ic)
+        geo.load_procedures(ic)
+    d0 = datetime.strptime(date, "%Y-%m-%d")
+    def arrivals():
+        for k in (-1, 0):
+            store.arrivals_day(iata, (d0 + timedelta(days=k)).strftime("%Y-%m-%d"))
+    lanes = [[geometry, _runway_history, _gates_table],
+             [arrivals, constraints._load, _airports],
+             [lambda: _metar_table(iata), _runways_by_airport, _aircraft_table]][:PREFETCH_WORKERS]
+    with _PREFETCH_LOCK:
+        if _PREFETCH is None:
+            _PREFETCH = ThreadPoolExecutor(PREFETCH_WORKERS, thread_name_prefix="prefetch")
+    wait([_PREFETCH.submit(_lane, store, lane) for lane in lanes])
+
+
+def _lane(store, jobs) -> None:
+    """One connection per lane (a store session): the pool connects afresh for every read outside a session, and a
+    new connection to Neon costs more than most of these queries."""
+    with store.session():
+        for fn in jobs:
+            try:
+                fn()
+            except Exception:  # noqa: BLE001 - the build's own read of the same data raises it
+                pass
 
 
 def _waves_cache_clear() -> None:

@@ -1,0 +1,247 @@
+{
+ "ATL-2024-06-07-20": {
+  "airport": {
+   "iata": "ATL",
+   "icao": "KATL",
+   "name": "Hartsfield-Jackson Atlanta International Airport"
+  },
+  "callsigns": [
+   "WN4263",
+   "DL3026",
+   "DL2738",
+   "DL3138",
+   "DL385"
+  ],
+  "disrupted_callsigns": [
+   "WN4263",
+   "DL3026"
+  ],
+  "id": "ATL-2024-06-07-20",
+  "n_flights": 5,
+  "n_queue": 62,
+  "replay_available": true,
+  "weather_summary": "33007KT 10SM, dry",
+  "window_end": "2024-06-07T21:00:00",
+  "window_start": "2024-06-07T20:00:00"
+ },
+ "CLT-2024-06-06-19": {
+  "airport": {
+   "iata": "CLT",
+   "icao": "KCLT",
+   "name": "Charlotte Douglas International Airport"
+  },
+  "callsigns": [
+   "AA2975",
+   "AA2712",
+   "OH5379",
+   "AA2704",
+   "AA1257"
+  ],
+  "disrupted_callsigns": [
+   "AA2704"
+  ],
+  "id": "CLT-2024-06-06-19",
+  "n_flights": 5,
+  "n_queue": 49,
+  "replay_available": true,
+  "weather_summary": "27003KT 10SM, dry",
+  "window_end": "2024-06-06T20:00:00",
+  "window_start": "2024-06-06T19:00:00"
+ },
+ "DFW-2024-06-01-15": {
+  "airport": {
+   "iata": "DFW",
+   "icao": "KDFW",
+   "name": "Dallas/Fort Worth International Airport"
+  },
+  "callsigns": [
+   "MQ3653",
+   "AA2114",
+   "AA1341",
+   "AA2321",
+   "MQ3321"
+  ],
+  "disrupted_callsigns": [
+   "AA2114",
+   "AA2321"
+  ],
+  "id": "DFW-2024-06-01-15",
+  "n_flights": 5,
+  "n_queue": 46,
+  "replay_available": true,
+  "weather_summary": "10007KT 10SM, dry",
+  "window_end": "2024-06-01T16:00:00",
+  "window_start": "2024-06-01T15:00:00"
+ },
+ "F2015-152758": {
+  "airport": {
+   "iata": "ATL",
+   "icao": "KATL",
+   "name": "Hartsfield-Jackson Atlanta International Airport"
+  },
+  "callsigns": [
+   "WN2518",
+   "DL1884",
+   "DL2256",
+   "DL30",
+   "DL1810"
+  ],
+  "disrupted_callsigns": [
+   "DL2256"
+  ],
+  "id": "F2015-152758",
+  "n_flights": 5,
+  "n_queue": 1,
+  "replay_available": true,
+  "weather_summary": "00000KT 10SM, dry",
+  "window_end": "2015-05-27T02:00:00",
+  "window_start": "2015-05-27T01:00:00"
+ },
+ "F2015-292602": {
+  "airport": {
+   "iata": "MIA",
+   "icao": "KMIA",
+   "name": "Miami International Airport"
+  },
+  "callsigns": [
+   "AA943",
+   "AA1661",
+   "AA2382",
+   "AA2351",
+   "AA1389"
+  ],
+  "disrupted_callsigns": [
+   "AA943"
+  ],
+  "id": "F2015-292602",
+  "n_flights": 5,
+  "n_queue": 3,
+  "replay_available": true,
+  "weather_summary": "00000KT 10SM, dry",
+  "window_end": "2015-09-17T23:00:00",
+  "window_start": "2015-09-17T22:00:00"
+ },
+ "F2015-7053": {
+  "airport": {
+   "iata": "ORD",
+   "icao": "KORD",
+   "name": "Chicago O'Hare International Airport"
+  },
+  "callsigns": [
+   "MQ3045",
+   "MQ3269",
+   "AA302",
+   "MQ3043",
+   "MQ3541"
+  ],
+  "disrupted_callsigns": [
+   "MQ3269"
+  ],
+  "id": "F2015-7053",
+  "n_flights": 5,
+  "n_queue": 15,
+  "replay_available": true,
+  "weather_summary": "30018KT 10SM, dry",
+  "window_end": "2015-01-04T20:00:00",
+  "window_start": "2015-01-04T19:00:00"
+ },
+ "F2015-75": {
+  "airport": {
+   "iata": "DFW",
+   "icao": "KDFW",
+   "name": "Dallas/Fort Worth International Airport"
+  },
+  "callsigns": [
+   "AA2368",
+   "AA239",
+   "AA1344",
+   "AA1068",
+   "MQ3186"
+  ],
+  "disrupted_callsigns": [
+   "AA1344"
+  ],
+  "id": "F2015-75",
+  "n_flights": 5,
+  "n_queue": 5,
+  "replay_available": true,
+  "weather_summary": "36006KT 4SM, wet",
+  "window_end": "2015-01-01T23:00:00",
+  "window_start": "2015-01-01T22:00:00"
+ },
+ "F2015-77162": {
+  "airport": {
+   "iata": "DEN",
+   "icao": "KDEN",
+   "name": "Denver International Airport"
+  },
+  "callsigns": [
+   "B697",
+   "WN463",
+   "DL420",
+   "WN4570",
+   "DL927"
+  ],
+  "disrupted_callsigns": [
+   "DL927"
+  ],
+  "id": "F2015-77162",
+  "n_flights": 5,
+  "n_queue": 0,
+  "replay_available": true,
+  "weather_summary": "17010KT 10SM, dry",
+  "window_end": "2015-03-06T02:00:00",
+  "window_start": "2015-03-06T01:00:00"
+ },
+ "LGA-2024-06-14-22": {
+  "airport": {
+   "iata": "LGA",
+   "icao": "KLGA",
+   "name": "LaGuardia Airport (Marine Air Terminal)"
+  },
+  "callsigns": [
+   "DL2810",
+   "YX4761",
+   "DL2454",
+   "YX5826",
+   "YX4575"
+  ],
+  "disrupted_callsigns": [
+   "YX4761",
+   "YX5826"
+  ],
+  "id": "LGA-2024-06-14-22",
+  "n_flights": 5,
+  "n_queue": 24,
+  "replay_available": true,
+  "weather_summary": "33006KT 10SM, dry",
+  "window_end": "2024-06-14T23:00:00",
+  "window_start": "2024-06-14T22:00:00"
+ },
+ "ORD-2024-06-04-21": {
+  "airport": {
+   "iata": "ORD",
+   "icao": "KORD",
+   "name": "Chicago O'Hare International Airport"
+  },
+  "callsigns": [
+   "MQ3547",
+   "AA1359",
+   "OO4882",
+   "AA2881",
+   "WN1949"
+  ],
+  "disrupted_callsigns": [
+   "MQ3547",
+   "OO4882",
+   "AA2881"
+  ],
+  "id": "ORD-2024-06-04-21",
+  "n_flights": 5,
+  "n_queue": 35,
+  "replay_available": true,
+  "weather_summary": "14004KT 10SM, dry",
+  "window_end": "2024-06-04T22:00:00",
+  "window_start": "2024-06-04T21:00:00"
+ }
+}

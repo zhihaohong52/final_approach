@@ -51,15 +51,24 @@ _WARM_LOCK = threading.Lock()
 
 
 def _warm() -> threading.Thread | None:
-    """Load the flights.csv index and the demo list in a daemon thread so the first page load is fast: the demo list
-    builds every replay wave, which fills build_wave's LRU (each build also schedules the wave's fixed ground
-    traffic, ~0.1-1 s). Never blocks startup or requests; failures are logged, not raised. ATM_WARM=0 turns it
-    off (the test suite sets it)."""
+    """In a daemon thread, so the first page load is fast: build the default wave (with its status quo and geo layer),
+    then load the flights.csv index and the demo list (read from data/replay_summaries.json, so it builds no wave).
+    Never blocks startup or requests; failures are logged, not raised. ATM_WARM=0 turns it off (the test suite
+    sets it)."""
     global _WARM_THREAD
     if os.environ.get("ATM_WARM", "1") == "0":
         return None
 
     def run():
+        try:   # the wave the app opens first, so the first visitor does not build it (~20 s cold on Render)
+            wid = _default_wave(_replay_ids())
+            if wid is not None:
+                w = WB.build_wave(wid)
+                _wave_body(w)
+                if w.geo_available():
+                    _geo_body(w)
+        except Exception:  # noqa: BLE001 - warming is best effort
+            log.warning("default wave warm-up failed", exc_info=True)
         try:
             from .wave import flights2015
             flights2015._index()
@@ -576,6 +585,25 @@ def _f2015_summary(w: dict, replay_available: bool = False) -> dict:
             "weather_summary": _wx_summary(w.get("metar") or {}), "replay_available": replay_available}
 
 
+REPLAY_SUMMARIES_FILE = ROOT / "data/replay_summaries.json"   # written by scripts/replay_summaries.py
+
+
+@functools.lru_cache(maxsize=1)
+def _stored_replay_summaries() -> dict[str, dict]:
+    """{wave_id: WaveSummary} of the checked-in replays (data/replay), so the demo list never builds a wave: building
+    the flights.csv replays cost ~45 s on a cold Render instance against Postgres. Missing or unreadable -> {}."""
+    try:
+        return json.loads(REPLAY_SUMMARIES_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _build_replay_summary(wid: str) -> dict:
+    """A replay's summary from the store: a 2024 hour's is precomputed there, a flights.csv row's is built."""
+    pre = None if wid.startswith("F2015-") else get_store().wave_summary(wid)
+    return pre or _f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True)
+
+
 _REPLAY_SUMMARIES: list[dict] | None = None
 _REPLAY_SUMMARIES_LOCK = threading.Lock()
 
@@ -588,12 +616,12 @@ def _replay_summaries() -> list[dict]:
         return _REPLAY_SUMMARIES
     with _REPLAY_SUMMARIES_LOCK:
         if _REPLAY_SUMMARIES is None:
-            out = []
+            out, stored = [], _stored_replay_summaries()
             with get_store().session():
                 for wid in sorted(_replay_ids(live=True), key=lambda i: (i.startswith("F2015-"), i)):
-                    try:   # a 2024 hour has its summary precomputed in the store; a flights.csv row is built
-                        pre = None if wid.startswith("F2015-") else get_store().wave_summary(wid)
-                        out.append(pre or _f2015_summary(WB.build_wave(wid).to_dict(), replay_available=True))
+                    try:   # the checked-in replays have their summary on disk; any other is read or built
+                        out.append({**stored[wid], "replay_available": True} if wid in stored
+                                   else _build_replay_summary(wid))
                     except (KeyError, ValueError):
                         continue
             _REPLAY_SUMMARIES = out
@@ -634,6 +662,10 @@ def get_wave(wave_id: str):
         w = WB.build_wave(wave_id)
     except KeyError:
         return _err(404, "unknown_wave", f"unknown wave id {wave_id!r}")
+    return _wave_body(w)
+
+
+def _wave_body(w) -> dict:
     # v2.1: the status quo (first come, first served) and its rule check, so the screen shows a plan before any negotiation
     from .wave.moves import fcfs_plan
     from .wave.utility import evaluate
