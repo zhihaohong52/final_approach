@@ -649,3 +649,10 @@ tbody tr:hover { background: #18171c; }
 .map-loading span { animation: map-wait 1.4s ease-in-out infinite; }
 @keyframes map-wait { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .map-loading span { animation: none; } }
+
+/* a new wave is on its way: the previous one stays visible but dimmed and inert, and the bar says what is loading */
+.canvas.wave-loading > :not(.wavebar), .canvas.wave-loading .wavebar h1 { opacity: .4; pointer-events: none; transition: opacity .15s; }
+.wb-status { color: var(--soft); }
+.wb-status[role="status"] { animation: map-wait 1.4s ease-in-out infinite; }
+.wb-status.err { color: var(--pill-warning-ink); animation: none; }   /* red is only for rule breaches */
+@media (prefers-reduced-motion: reduce) { .wb-status[role="status"] { animation: none; } }

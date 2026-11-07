@@ -56,6 +56,14 @@ function applyEdits(p: JointPlan, edits: Edits, checked: EvaluateResponse | null
 const planKey = (p: JointPlan | null) => (p ? JSON.stringify(p.assignments.map((a) => [a.callsign, a.action, a.runway ?? null, a.slot_min ?? null, a.gate ?? null, a.speed_reduction_min, a.ground_delay_min])) : "");
 type Fetched = { key: string; set: TrajectorySet | null };
 
+/** "ORD-2024-06-02-14" -> "ORD 2024-06-02 14:00"; a flights.csv id ("F2015-75") -> "flights.csv row 75". */
+function waveLabel(id: string): string {
+  const m = /^([A-Z]{3})-(\d{4}-\d{2}-\d{2})-(\d{1,2})$/.exec(id);
+  if (m) return `${m[1]} ${m[2]} ${m[3].padStart(2, "0")}:00`;
+  const f = /^F2015-(\d+)$/.exec(id);
+  return f ? `flights.csv row ${f[1]}` : id;
+}
+
 export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home" | "details"; onScope?: (s: string) => void; onWaveId?: (id: string) => void }) {
   const home = page === "home";
   const [radarRange, setRadarRange] = useState<number | null>(null);   // scope range and map zoom live here, so they survive a visit to the details page
@@ -64,6 +72,7 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
   const [waves, setWaves] = useState<WaveSummary[]>([]);
   const [wave, setWave] = useState<WaveScenario | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);   // a wave asked for and not yet on screen: the old one is dimmed
   const [mode, setMode] = useState<Mode>("decision");
   const [model, setModel] = useState("");
   const [replay, setReplay] = useState(true);
@@ -127,18 +136,18 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
     abort.current?.abort();
     setStatus("idle"); setMessages([]); showTable(null); setResult(null); setRejection(null); setRunErr(null); setOpening(null);
     setDecision(null); setOverriding(false); setNote(""); setView("after"); setSelected(null); setT(null); setPlaying(false); resetEdits();
-    setGeo(null); setFetched(null); setMapLoading(true);
+    setGeo(null); setFetched(null); setMapLoading(true); setLoadingId(id); setLoadErr(null);
     try {
       const w = await api.wave(id);
       if (seq !== loadSeq.current) return;
-      setWave(w); setLoadErr(null);
+      setWave(w); setLoadErr(null); setLoadingId(null);
       // procedures are only served for waves the backend can place; a failure leaves the schematic radar
       if (!w.geo_available) setMapLoading(false);
       else api.getGeo(id).then((g) => { if (seq === loadSeq.current) setGeo(g); }).catch((e) => console.warn(`wave ${id}: procedures unavailable, the radar stays schematic`, e))
         .finally(() => { if (seq === loadSeq.current) setMapLoading(false); });
       // the status quo is on screen from the start; the negotiation then works from it
       if (w.status_quo) { showTable(w.status_quo.plan); setOpening(w.status_quo); }
-    } catch (e) { if (seq === loadSeq.current) { setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); setMapLoading(false); } }
+    } catch (e) { if (seq === loadSeq.current) { setLoadErr(`Couldn't load wave ${id}: ${(e as Error).message}`); setMapLoading(false); setLoadingId(null); } }
   }, []);
 
   useEffect(() => {
@@ -448,16 +457,19 @@ export function WaveScreen({ page = "home", onScope, onWaveId }: { page?: "home"
   const focusName = wave.focus ? icao(wave.focus) : null;
 
   return (
-    <main className={`canvas ops ${home ? "home" : "details"}`}>
+    <main className={`canvas ops ${home ? "home" : "details"}${loadingId ? " wave-loading" : ""}`} aria-busy={!!loadingId}>
       <header className="wavebar">
         <div className="wb-main">
           <h1>{wave.airport.iata} arrivals <span className="mono">{t0}–{t1}</span>
             {red.length + unseen.length > 0 && <a className={`pill alert-count ${red.length ? "neg" : "warn"}`} href={waveHash("details", wave.id)} title="The alerts are on the details page">{red.length + unseen.length} alert{red.length + unseen.length === 1 ? "" : "s"}</a>}</h1>
           <p className="wb-meta">
+            {loadingId ? <span className="wb-status" role="status">Loading {waveLabel(loadingId)}…</span> : <>
+            {loadErr && <span className="wb-status err" role="alert">{loadErr}</span>}
             <span>{dateLabel(wave.window_start)}</span>
             <span className="mono">{wind}{m ? `, ${m.surface}` : ""}</span>
             {closed.length > 0 && <span className="closed-rwy">{closed.map((r) => r.id).join(" ")} closed</span>}
             <span>{wave.flights.length} negotiated · {wave.queue.length} other arrival{wave.queue.length === 1 ? "" : "s"}</span>
+            </>}
           </p>
         </div>
         <div className="toolbar">
