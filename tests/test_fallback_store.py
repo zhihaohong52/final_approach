@@ -39,9 +39,10 @@ def test_retry_jitter_bounds():
 
 def test_pool_settings(monkeypatch):
     seen = {}
-    monkeypatch.setattr(pg, "NullConnectionPool", lambda *a, **k: seen.update(k) or object())
+    monkeypatch.setattr(pg.ConnectionPool, "__init__", lambda self, *a, **k: seen.update(k))
     pg.make_pool("postgresql://u:p@example-pooler.us-west-2.aws.neon.tech/db?sslmode=require")
     assert seen["max_size"] == 4 and seen["timeout"] == 10 and seen["open"] is False
+    assert seen["min_size"] == 0 and seen["max_idle"] == 20.0 and seen["check"] is not None   # no idle connection kept
     assert seen["kwargs"] == {"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach",
                               "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3}
 

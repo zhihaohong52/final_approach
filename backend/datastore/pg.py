@@ -21,7 +21,7 @@ from typing import TypeVar
 import pandas as pd
 import psycopg
 from psycopg.types.json import Jsonb
-from psycopg_pool import NullConnectionPool, PoolTimeout
+from psycopg_pool import ConnectionPool, PoolTimeout
 
 from . import pack
 from .base import DataUnavailable
@@ -84,13 +84,23 @@ STORE_METHODS = (
 )
 
 
-def make_pool(url: str) -> NullConnectionPool:
+POOL_MAX_IDLE_S = 20.0   # psycopg closes one idle connection per interval: 3 open -> all closed after ~4 intervals
+
+
+def make_pool(url: str) -> ConnectionPool:
     # Neon's pooled endpoint is pgbouncer in transaction mode: no server-side prepared statements.
     # TCP keepalives (libpq connect parameters, not SET) detect a dead peer during a long query instead of hanging;
     # statement_timeout lives on the role (migration 0006), since SET does not survive transaction pooling.
-    return NullConnectionPool(
+    # Connections are reused between requests and closed when idle (min_size=0: none kept), all of them within about
+    # 80 s of the last request, so the Neon compute still suspends after its 5 idle minutes, about a minute later
+    # than with no reuse. A new connection costs 1.3-3.9 s measured from outside the region, more than most queries;
+    # `check` replaces a connection the server closed while it sat in the pool.
+    return ConnectionPool(
         conninfo=url,
+        min_size=0,
         max_size=4,
+        max_idle=POOL_MAX_IDLE_S,
+        check=ConnectionPool.check_connection,
         timeout=10,
         open=False,
         kwargs={"prepare_threshold": None, "connect_timeout": 10, "application_name": "final-approach",

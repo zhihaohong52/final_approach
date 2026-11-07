@@ -521,12 +521,14 @@ the blob/text column) for `PgStore`.
 - Driver: `psycopg[binary]==3.3.6` and `psycopg-pool==3.3.3` (latest on PyPI, 2 Nov 2026). **Sync**, not
   async: every handler that reads data is a sync `def` in FastAPI's threadpool, and the negotiation runs in a
   worker thread. An async driver would need a second code path for no gain.
-- **`NullConnectionPool(conninfo=DATABASE_URL, max_size=4, timeout=10, open=False, kwargs={"prepare_threshold": None,
-  "connect_timeout": 10, "application_name": "final-approach", "keepalives_idle": 30, "keepalives_interval": 10,
-  "keepalives_count": 3})`.** No idle connections are held. The process
-  therefore never keeps the Neon compute (or a PgBouncer server session) busy between requests, and scale-to-zero
-  works. Connect overhead per request (one TLS handshake to the same-region pooler, roughly 20-60 ms) is
-  accepted. A request that needs several queries (a wave build) uses one connection through
+- **`ConnectionPool(conninfo=DATABASE_URL, min_size=0, max_size=4, max_idle=20, check=ConnectionPool.check_connection,
+  timeout=10, open=False, kwargs={"prepare_threshold": None, "connect_timeout": 10, "application_name":
+  "final-approach", "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 3})`.** Revised 7 Nov
+  2026 (was `NullConnectionPool`, a new connection per request): connects measured 1.3-3.9 s, not the 20-60 ms
+  assumed, and a wave build paid several. Connections are now reused between requests. psycopg closes one idle
+  connection per `max_idle` interval, so all of them close about 80 s after the last request (`min_size=0`: none
+  kept), and scale-to-zero still works, at most about a minute and a half later than before.
+  `check` replaces a connection the server closed while it sat in the pool. A request that needs several queries (a wave build) uses one connection through
   `store.session()`. A 5th concurrent request waits at most 10 s (`timeout=10`); a `PoolTimeout` falls back to
   files like a connection error.
 - `prepare_threshold=None`, as psycopg's docs require behind a transaction-mode pooler.
