@@ -72,7 +72,6 @@ interface Provenance {
 | POST | `/api/decision` | `{ ok: true, recorded_at: string, persisted?: boolean }` |
 | GET | `/api/benchmark` | `BenchmarkReport` (404 until generated) |
 | GET | `/api/eval` | v1 single-flight eval (legacy shape; not used by the React app) |
-| GET | `/mcp` | MCP server (not used by the frontend) |
 
 v1 single-flight endpoints (`/api/negotiate`, `/api/random`, …) stay as they are for `web/index.html`; the React app does not use them.
 
