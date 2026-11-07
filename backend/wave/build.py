@@ -6,6 +6,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import math
+import os
 import random
 import threading
 from collections import OrderedDict
@@ -616,7 +617,7 @@ def _queue_slot(iata: str, r: dict) -> float:
 # ---------------------------------------------------------------- public API
 
 _WAVES: OrderedDict[str, Wave] = OrderedDict()
-_WAVES_MAX = 32
+_WAVES_MAX = int(_c) if (_c := os.environ.get("ATM_WAVE_CACHE", "")).isdigit() and int(_c) > 0 else 32   # as surface.WAVE_CACHE_MAX
 _WAVES_LOCK = threading.Lock()
 
 

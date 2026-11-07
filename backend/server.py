@@ -643,7 +643,7 @@ def get_wave(wave_id: str):
     return {**w.to_dict(), "status_quo": {"plan": plan.to_dict(), "evaluation": ev}}
 
 
-GEO_CACHE_MAX = 32
+GEO_CACHE_MAX = int(_c) if (_c := os.environ.get("ATM_WAVE_CACHE", "")).isdigit() and int(_c) > 0 else 32   # as surface.WAVE_CACHE_MAX
 _GEO: OrderedDict[str, bytes] = OrderedDict()   # wave content key -> WaveGeo JSON bytes
 _GEO_LOCK = threading.Lock()
 

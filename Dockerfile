@@ -32,5 +32,8 @@ RUN useradd -m -u 1000 user && chown -R user:user /app
 USER user
 ENV PORT=7860
 ENV ATM_REQUIRE_REAL=1
+# 512 MB instance: 8 waves in the per-wave caches (~20-30 MB each at a hub), and 2 glibc malloc arenas (threads)
+ENV ATM_WAVE_CACHE=8
+ENV MALLOC_ARENA_MAX=2
 EXPOSE 7860
 CMD ["sh", "-c", "uvicorn backend.server:app --host 0.0.0.0 --port ${PORT:-7860}"]

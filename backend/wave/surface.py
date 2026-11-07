@@ -9,6 +9,7 @@ scripts/build_native.sh) when it is built, with bit-identical results; otherwise
 from __future__ import annotations
 
 import heapq
+from collections import OrderedDict
 import math
 import os
 from bisect import bisect_left
@@ -175,6 +176,8 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     key = (g.icao, root)
     hit = g._trees.get(key)
     if hit is not None:
+        with _TREE_LOCK:                 # least recently used goes first: a hub wave reuses its exit and entry trees
+            _TREE_ORDER.move_to_end((id(g), key), last=True) if (id(g), key) in _TREE_ORDER else None
         return hit
     best: dict[int, tuple[float, tuple]] = {}
     parent: dict[tuple, tuple | None] = {}
@@ -226,8 +229,9 @@ def _tree(g: TaxiGraph, root: int) -> dict:
     return out
 
 
-MAX_TREES = 24   # Dijkstra trees kept in total, over every graph (FIFO): ~1.9 MB each at ORD (tracemalloc); an ORD wave build uses 24
-_TREE_ORDER: list[tuple[TaxiGraph, tuple]] = []
+MAX_TREES = 40   # Dijkstra trees kept in total, over every graph (least recently used first): ~1.9 MB each at ORD
+                 # (tracemalloc); an ORD wave build roots ~27 (its runway exits and entries), so 24 rebuilt half of them
+_TREE_ORDER: OrderedDict[tuple[int, tuple], tuple[TaxiGraph, tuple]] = OrderedDict()   # (id(g), key) -> (g, key)
 _TREE_LOCK = threading.Lock()
 
 
@@ -237,9 +241,10 @@ def _keep_tree(g: TaxiGraph, key: tuple, tree: dict) -> None:
     per-wave taxi table holds the routes the hot path reads, so an evicted tree only costs a recompute."""
     with _TREE_LOCK:
         g._trees[key] = tree
-        _TREE_ORDER.append((g, key))
+        _TREE_ORDER[(id(g), key)] = (g, key)
+        _TREE_ORDER.move_to_end((id(g), key))
         while len(_TREE_ORDER) > MAX_TREES:
-            og, ok = _TREE_ORDER.pop(0)
+            _, (og, ok) = _TREE_ORDER.popitem(last=False)
             og._trees.pop(ok, None)
 
 
@@ -1456,7 +1461,18 @@ def source_label(header: dict | None) -> str:
 SRC_GENERIC = "generic surface (straight line x1.4 at 15 kt)"
 SRC_NO_GEOMETRY = "ops rule (no geometry)"
 TIER_REACH = 0.80             # quality gate: each open end in OSM reaches >= 80 % of the wave's bound stands
-WAVE_CACHE_MAX = 32           # waves kept in the per-wave tier / taxi-table caches (FIFO; = build_wave's LRU)
+def _env_cap(name: str, default: int) -> int:
+    """A positive int from the environment, else `default`."""
+    try:
+        v = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return v if v > 0 else default
+
+
+# waves kept in every per-wave cache (built waves, fixed traffic, tier / taxi tables, geo bodies; FIFO): each hub wave
+# holds ~20-30 MB, so a 512 MB instance sets ATM_WAVE_CACHE lower (the Docker image: 8)
+WAVE_CACHE_MAX = _env_cap("ATM_WAVE_CACHE", 32)
 _PIN = "_surface"             # wave.__dict__ slot: (wave_key, GateGeo) pinned at build time (not a dataclass field)
 
 
@@ -1758,7 +1774,7 @@ def cache_clear() -> None:
     with _LOCK:
         _GEO.clear()
     with _TREE_LOCK:
-        for og, ok in _TREE_ORDER:
+        for og, ok in _TREE_ORDER.values():
             og._trees.pop(ok, None)
         _TREE_ORDER.clear()
     load_graph.cache_clear()

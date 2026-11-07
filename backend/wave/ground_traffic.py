@@ -748,7 +748,7 @@ def _compute(wave: Wave) -> FixedTraffic:
 
 
 _CACHE: dict[str, FixedTraffic] = {}
-_CACHE_MAX = 32               # as build_wave's LRU
+_CACHE_MAX = surface.WAVE_CACHE_MAX   # as build_wave's LRU (ATM_WAVE_CACHE)
 _LOCK = threading.Lock()      # eviction from the benchmark's worker threads (as route / trajectory)
 
 
